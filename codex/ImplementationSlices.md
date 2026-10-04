@@ -8,7 +8,7 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 |---|---|---|
 | 1 | Foundation, login, users og characters | Færdig |
 | 2 | DKP-transaktioner og egen historik | Færdig |
-| 3 | Officer DKP Management | Næste |
+| 3 | Officer DKP Management | Færdig |
 | 4 | Guild Members overview | Planlagt |
 | 5 | Player details | Planlagt |
 | 6 | Officer user administration | Planlagt |
@@ -20,14 +20,22 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 
 - Blazor afhænger kun af facade-kontrakter og IoC-registrering.
 - Domain indeholder entities og domæneinvarianter uden UI- eller EF Core-afhængigheder.
-- Application indeholder business logic og commands/use cases.
-- Facade indeholder DTO’er og den offentlige backend-kontrakt til Blazor.
-- Infrastructure indeholder EF Core, PostgreSQL, migrations og query implementations.
+- Application indeholder business logic og commands/use cases og implementerer facade-command interfaces.
+- Facade indeholder kun DTO’er samt query- og command-kontrakter til Blazor.
+- Infrastructure indeholder EF Core, PostgreSQL, migrations og implementerer facade-query interfaces samt Application persistence interfaces.
 - `DKP.InversionOfControl` samler dependency injection, database og authentication.
 - Read-only queries og state-changing commands holdes adskilt efter et CQRS-lignende mønster.
 - Officer-funktioner skal beskyttes serverside; UI-skjulning er ikke tilstrækkelig.
 - Alle databaseændringer leveres med en EF Core migration.
 - Radzen anvendes som førstevalg til UI-komponenter.
+
+Dependency-retningen for backend-kontrakter er:
+
+```text
+Blazor → Facade contracts
+           ├─ queries → Infrastructure
+           └─ commands → Application → Application persistence interfaces → Infrastructure
+```
 
 ## Slice 1 – Foundation, login, users og characters
 
@@ -124,6 +132,19 @@ Positive og negative beløb visualiseres med Radzen-komponenter.
 - Unit- og infrastructure-tests består.
 
 ## Slice 3 – Officer DKP Management
+
+Status: Færdig.
+
+Leveret:
+
+- Officer-only command-flow til Add DKP og Remove DKP.
+- Serverside validering af Officer, beløb, årsag og target-bruger.
+- Audit-spor via `CreatedByUserId` og `CreatedAtUtc`.
+- Funktionel `/admin` med spiller-dropdown, confirmation, loading og notifications.
+- Facade/query-flow til guild-brugere uden domain entities eller `DbContext` i Blazor.
+- Tests for commands, authorization, validation, audit og opdateret saldo/historik.
+- Ingen ny migration; den eksisterende `DkpTransactions`-tabel genbruges.
+- Facade er reduceret til kontrakter; command implementations ligger i Application og query implementations i Infrastructure.
 
 ### Mål
 

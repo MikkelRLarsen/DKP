@@ -3,6 +3,7 @@ using DKP.Application.Characters;
 using DKP.Application.Persistence;
 using DKP.Domain;
 using DKP.Infrastructure.Persistence;
+using DKP.Facade.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -47,8 +48,8 @@ public sealed class ApplicationTests
 		var characters = new FakeCharacterRepository();
 		var service = new CharacterCommandService(users, characters);
 
-		await service.CreateAsync("123", "Shock", "Adin");
-		await service.CreateAsync("123", "Holy", "Shock");
+		await service.CreateAsync("123", new CharacterInput("Shock", "Adin"));
+		await service.CreateAsync("123", new CharacterInput("Holy", "Shock"));
 
 		Assert.Equal(2, characters.Characters.Count);
 		Assert.All(characters.Characters, character => Assert.Equal(user.Id, character.UserId));
@@ -67,7 +68,7 @@ public sealed class ApplicationTests
 		characters.Characters.Add(character);
 		var service = new CharacterCommandService(users, characters);
 
-		var result = await service.UpdateAsync("other", character.Id, "Hacked", "Name");
+		var result = await service.UpdateAsync("other", character.Id, new CharacterInput("Hacked", "Name"));
 
 		Assert.Null(result);
 		Assert.Equal("Shock", character.FirstName);

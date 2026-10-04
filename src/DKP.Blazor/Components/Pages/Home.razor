@@ -1,10 +1,11 @@
 @page "/"
 @attribute [Authorize]
-@rendermode InteractiveServer
 @using System.Security.Claims
-@using DKP.Facade
+@using DKP.Facade.Commands
 @using DKP.Facade.Contracts
-@inject IAccountFacade AccountFacade
+@using DKP.Facade.Queries
+@inject IAccountQueries AccountQueries
+@inject ICharacterCommands CharacterCommands
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject DialogService DialogService
 @inject NotificationService NotificationService
@@ -121,7 +122,7 @@ else
     {
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         discordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-        dashboard = await AccountFacade.GetDashboardAsync(discordId);
+        dashboard = await AccountQueries.GetDashboardAsync(discordId);
     }
 
     private void BeginEdit(CharacterDto character)
@@ -145,17 +146,17 @@ else
         {
             if (editingId is Guid id)
             {
-                await AccountFacade.UpdateCharacterAsync(discordId, id, new CharacterInput(form.FirstName, form.LastName));
+                await CharacterCommands.UpdateAsync(discordId, id, new CharacterInput(form.FirstName, form.LastName));
                 NotificationService.Notify(NotificationSeverity.Success, "Saved", "Character updated.");
             }
             else
             {
-                await AccountFacade.CreateCharacterAsync(discordId, new CharacterInput(form.FirstName, form.LastName));
+                await CharacterCommands.CreateAsync(discordId, new CharacterInput(form.FirstName, form.LastName));
                 NotificationService.Notify(NotificationSeverity.Success, "Saved", "Character added.");
             }
 
             CancelEdit();
-            dashboard = await AccountFacade.GetDashboardAsync(discordId);
+            dashboard = await AccountQueries.GetDashboardAsync(discordId);
         }
         catch (ArgumentException exception)
         {
@@ -179,10 +180,10 @@ else
             return;
         }
 
-        if (await AccountFacade.DeleteCharacterAsync(discordId, character.Id))
+        if (await CharacterCommands.DeleteAsync(discordId, character.Id))
         {
             NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Character removed.");
-            dashboard = await AccountFacade.GetDashboardAsync(discordId);
+            dashboard = await AccountQueries.GetDashboardAsync(discordId);
         }
     }
 

@@ -1,10 +1,9 @@
 @page "/my-dkp"
 @attribute [Authorize]
-@rendermode InteractiveServer
 @using System.Security.Claims
-@using DKP.Facade
 @using DKP.Facade.Contracts
-@inject IDkpFacade DkpFacade
+@using DKP.Facade.Queries
+@inject IDkpQueries DkpQueries
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NotificationService NotificationService
 
@@ -76,7 +75,7 @@ else
                 throw new InvalidOperationException("The authenticated Discord user could not be identified.");
             }
 
-            history = await DkpFacade.GetHistoryAsync(discordId);
+            history = await DkpQueries.GetHistoryAsync(discordId);
         }
         catch (Exception)
         {

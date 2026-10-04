@@ -3,8 +3,10 @@ using System.Security.Claims;
 using System.Text.Json;
 using DKP.Application.Authentication;
 using DKP.Application.Characters;
+using DKP.Application.DkpTransactions;
 using DKP.Application.Persistence;
 using DKP.Facade;
+using DKP.Facade.Commands;
 using DKP.Facade.Queries;
 using DKP.Infrastructure.Persistence;
 using DKP.Infrastructure.Queries;
@@ -43,13 +45,13 @@ public static class DependencyInjection
 		services.AddSingleton(TimeProvider.System);
 		services.AddScoped<IUserRepository, UserRepository>();
 		services.AddScoped<ICharacterRepository, CharacterRepository>();
+		services.AddScoped<IDkpTransactionRepository, DkpTransactionRepository>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
 		services.AddScoped<IDkpQueries, DkpQueries>();
 		services.AddScoped<IOfficerIdentityPolicy, OfficerIdentityPolicy>();
 		services.AddScoped<IUserProvisioningService, UserProvisioningService>();
-		services.AddScoped<ICharacterCommandService, CharacterCommandService>();
-		services.AddScoped<IAccountFacade, AccountFacade>();
-		services.AddScoped<IDkpFacade, DkpFacade>();
+		services.AddScoped<ICharacterCommands, CharacterCommandService>();
+		services.AddScoped<IDkpTransactionCommands, DkpTransactionCommandService>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));
 		services.AddAuthentication(options =>

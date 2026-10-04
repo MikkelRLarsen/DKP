@@ -1,35 +1,37 @@
 using DKP.Application.Persistence;
+using DKP.Facade.Commands;
+using DKP.Facade.Contracts;
 using DKP.Domain;
 
 namespace DKP.Application.Characters;
 
 public sealed class CharacterCommandService(
 	IUserRepository users,
-	ICharacterRepository characters) : ICharacterCommandService
+	ICharacterRepository characters) : ICharacterCommands
 {
-	public async Task<Character> CreateAsync(string discordId, string firstName, string lastName, CancellationToken cancellationToken = default)
+	public async Task<CharacterDto> CreateAsync(string discordId, CharacterInput input, CancellationToken cancellationToken = default)
 	{
 		var user = await GetUserAsync(discordId, cancellationToken);
-		Validate(firstName, lastName);
-		var character = new Character(user.Id, firstName.Trim(), lastName.Trim());
+		Validate(input.FirstName, input.LastName);
+		var character = new Character(user.Id, input.FirstName.Trim(), input.LastName.Trim());
 		await characters.AddAsync(character, cancellationToken);
 		await characters.SaveChangesAsync(cancellationToken);
-		return character;
+		return ToDto(character);
 	}
 
-	public async Task<Character?> UpdateAsync(string discordId, Guid characterId, string firstName, string lastName, CancellationToken cancellationToken = default)
+	public async Task<CharacterDto?> UpdateAsync(string discordId, Guid characterId, CharacterInput input, CancellationToken cancellationToken = default)
 	{
 		var user = await GetUserAsync(discordId, cancellationToken);
-		Validate(firstName, lastName);
+		Validate(input.FirstName, input.LastName);
 		var character = await characters.FindForUserAsync(characterId, user.Id, cancellationToken);
 		if (character is null)
 		{
 			return null;
 		}
 
-		character.Update(firstName.Trim(), lastName.Trim());
+		character.Update(input.FirstName.Trim(), input.LastName.Trim());
 		await characters.SaveChangesAsync(cancellationToken);
-		return character;
+		return ToDto(character);
 	}
 
 	public async Task<bool> DeleteAsync(string discordId, Guid characterId, CancellationToken cancellationToken = default)
@@ -62,4 +64,7 @@ public sealed class CharacterCommandService(
 			throw new ArgumentException("Last name is required and must be at most 64 characters.", nameof(lastName));
 		}
 	}
+
+	private static CharacterDto ToDto(Character character)
+		=> new(character.Id, character.FirstName, character.LastName);
 }

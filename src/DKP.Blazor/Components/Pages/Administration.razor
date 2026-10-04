@@ -1,6 +1,198 @@
 @page "/admin"
 @attribute [Authorize(Roles = "Officer")]
+@using System.Security.Claims
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IDkpQueries DkpQueries
+@inject IDkpTransactionCommands DkpTransactionCommands
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
 
 <PageTitle>Administration</PageTitle>
-<h1>Administration</h1>
-<RadzenAlert AlertStyle="AlertStyle.Info">Officer administration will be available in the next vertical slice.</RadzenAlert>
+
+<RadzenStack Gap="1.5rem">
+    <div>
+        <h1>DKP Administration</h1>
+        <RadzenText Text="Add or remove DKP for guild members" TextStyle="TextStyle.Subtitle2" />
+    </div>
+
+    @if (loading)
+    {
+        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText Text="Loading guild members..." />
+        </RadzenStack>
+    }
+    else if (loadFailed)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load guild members.</RadzenAlert>
+    }
+    else
+    {
+        <RadzenCard Style="max-width: 50rem;">
+            <RadzenStack Gap="1rem">
+                @if (!string.IsNullOrWhiteSpace(operationMessage))
+                {
+                    <RadzenAlert AlertStyle="@(operationSucceeded ? AlertStyle.Success : AlertStyle.Danger)">@operationMessage</RadzenAlert>
+                }
+
+                <RadzenFormField Text="Player" Style="width: 100%;">
+                    <ChildContent>
+                        <RadzenDropDown @bind-Value="selectedUserId" Data="@users" TextProperty="DiscordName" ValueProperty="Id" Placeholder="Select a player" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Style="width: 100%;" />
+                    </ChildContent>
+                </RadzenFormField>
+
+                <RadzenFormField Text="Amount" Style="width: 100%;">
+                    <ChildContent>
+                        <RadzenNumeric @bind-Value="form.Amount" Min="1" ShowUpDown="false" Style="width: 100%;" />
+                    </ChildContent>
+                </RadzenFormField>
+
+                <RadzenFormField Text="Reason" Style="width: 100%;">
+                    <ChildContent>
+                        <RadzenTextArea @bind-Value="form.Reason" MaxLength="500" Rows="4" Style="width: 100%;" />
+                    </ChildContent>
+                </RadzenFormField>
+
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem">
+                    <RadzenButton Text="Add DKP" Icon="add" ButtonStyle="ButtonStyle.Success" Click="@AddDkpAsync" Disabled="@saving" />
+                    <RadzenButton Text="Remove DKP" Icon="remove" ButtonStyle="ButtonStyle.Danger" Click="@RemoveDkpAsync" Disabled="@saving" />
+                </RadzenStack>
+
+                @if (saving)
+                {
+                    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                }
+            </RadzenStack>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private IReadOnlyList<UserSummary> users = Array.Empty<UserSummary>();
+    private Guid? selectedUserId;
+    private readonly DkpForm form = new();
+    private bool loading = true;
+    private bool loadFailed;
+    private bool saving;
+    private bool operationSucceeded;
+    private string operationMessage = string.Empty;
+    private int? lastBalance;
+    private string officerDiscordId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            officerDiscordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            users = await DkpQueries.GetUsersAsync();
+        }
+        catch (Exception)
+        {
+            loadFailed = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load members", "Please try again later.");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task SubmitAsync(bool add)
+    {
+        operationMessage = string.Empty;
+
+        if (selectedUserId is not Guid targetUserId)
+        {
+            SetOperationError("Player required: select a player first.");
+            return;
+        }
+
+        if (form.Amount <= 0 || string.IsNullOrWhiteSpace(form.Reason))
+        {
+            SetOperationError("Input required: enter a positive amount and a reason.");
+            return;
+        }
+
+        var player = users.FirstOrDefault(user => user.Id == targetUserId);
+        var action = add ? "add" : "remove";
+        var confirmed = await DialogService.Confirm(
+            $"Are you sure you want to {action} {form.Amount} DKP {(add ? "to" : "from")} {player?.DiscordName ?? "the selected player"}?\nReason: {form.Reason.Trim()}",
+            "Confirm DKP change",
+            new ConfirmOptions { OkButtonText = "Confirm", CancelButtonText = "Cancel" });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            var request = new CreateDkpTransactionRequest(targetUserId, form.Amount, form.Reason);
+            if (add)
+            {
+                await DkpTransactionCommands.AddAsync(officerDiscordId, request);
+            }
+            else
+            {
+                await DkpTransactionCommands.RemoveAsync(officerDiscordId, request);
+            }
+
+            var updatedHistory = player is null ? null : await DkpQueries.GetHistoryAsync(player.DiscordId);
+            lastBalance = updatedHistory?.Balance.Amount;
+            var balanceText = lastBalance is int balance ? $" New balance: {balance} DKP." : string.Empty;
+            SetOperationSuccess($"{form.Amount} DKP {(add ? "added to" : "removed from")} {player?.DiscordName}. The transaction was saved.{balanceText}");
+            selectedUserId = null;
+            form.Amount = 0;
+            form.Reason = string.Empty;
+        }
+        catch (ArgumentException exception)
+        {
+            SetOperationError($"Validation error: {exception.Message}");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            SetOperationError("Not authorized: only Officers can manage DKP.");
+        }
+        catch (KeyNotFoundException exception)
+        {
+            SetOperationError($"Player not found: {exception.Message}");
+        }
+        catch (Exception exception)
+        {
+            SetOperationError($"Unable to update DKP: {exception.Message}");
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private Task AddDkpAsync() => SubmitAsync(true);
+
+    private Task RemoveDkpAsync() => SubmitAsync(false);
+
+    private void SetOperationSuccess(string message)
+    {
+        operationSucceeded = true;
+        operationMessage = message;
+        NotificationService.Notify(NotificationSeverity.Success, "DKP updated", message);
+    }
+
+    private void SetOperationError(string message)
+    {
+        operationSucceeded = false;
+        operationMessage = message;
+        NotificationService.Notify(NotificationSeverity.Error, "DKP update failed", message);
+    }
+
+    private sealed class DkpForm
+    {
+        public int Amount { get; set; }
+        public string Reason { get; set; } = string.Empty;
+    }
+}

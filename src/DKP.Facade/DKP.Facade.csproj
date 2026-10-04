@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DKP.Application\DKP.Application.csproj" />
     <ProjectReference Include="..\DKP.Domain\DKP.Domain.csproj" />
   </ItemGroup>
 

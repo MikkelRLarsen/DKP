@@ -36,4 +36,11 @@ public sealed class DkpQueries(DkpDbContext db) : IDkpQueries
 			new BalanceDto(transactions.Sum(transaction => transaction.Amount)),
 			transactions);
 	}
+
+	public async Task<IReadOnlyList<UserSummary>> GetUsersAsync(CancellationToken cancellationToken = default)
+		=> await db.Users
+			.AsNoTracking()
+			.OrderBy(user => user.DiscordName)
+			.Select(user => new UserSummary(user.Id, user.DiscordId, user.DiscordName, user.AvatarUrl, user.Role))
+			.ToArrayAsync(cancellationToken);
 }
