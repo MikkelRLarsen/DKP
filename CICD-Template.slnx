@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+  </Folder>
+  <Folder Name="/src/CiCd/">
+    <File Path="src/CiCd/docker-compose.yml" />
+    <File Path="src/CiCd/Dockerfile" />
+    <Project Path="src/CiCd/CiCd.Domain/CiCd.Domain.csproj" />
+    <Project Path="src/CiCd/CiCd.Facade/CiCd.Facade.csproj" />
+    <Project Path="src/CiCd/CiCd.Gui/CiCd.Gui.csproj" Id="45e18bb9-2322-443a-97c6-59e47c60f452" />
+    <Project Path="src/CiCd/CiCd.Infrastructure/CiCd.Infrastructure.csproj" />
+    <Project Path="src/CiCd/CiCd.UnitTest/CiCd.UnitTest.csproj" />
+    <Project Path="src/CiCd/CiCd.UseCase/CiCd.UseCase.csproj" />
+  </Folder>
+</Solution>

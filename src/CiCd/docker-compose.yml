@@ -1,0 +1,24 @@
+services:
+  {your-containername}:
+    image: ghcr.io/{your-github-name}/{your-image}:latest
+    restart: unless-stopped
+    ports:
+     - 8001:8001
+
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    healthcheck:
+      test: ["CMD", "dotnet", "{Your-Entypoint.dll}"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  watchtower:
+    image: nickfedor/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_POLL_INTERVAL: 30
+      WATCHTOWER_CLEANUP: "true"
+    command: --label-enable
