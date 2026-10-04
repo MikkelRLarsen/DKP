@@ -48,6 +48,7 @@ public static class DependencyInjection
 		services.AddScoped<IDkpTransactionRepository, DkpTransactionRepository>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
 		services.AddScoped<IDkpQueries, DkpQueries>();
+		services.AddScoped<IGuildMemberQueries, GuildMemberQueries>();
 		services.AddScoped<IOfficerIdentityPolicy, OfficerIdentityPolicy>();
 		services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 		services.AddScoped<ICharacterCommands, CharacterCommandService>();

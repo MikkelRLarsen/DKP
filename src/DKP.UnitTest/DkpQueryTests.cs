@@ -96,6 +96,66 @@ public sealed class DkpQueryTests
 		Assert.Equal(50, result.DkpBalance);
 	}
 
+	[Fact]
+	public async Task Guild_members_query_returns_all_members_with_balances_and_characters()
+	{
+		var officer = new User("officer", "Officer", "officer-avatar", UserRole.Officer, DateTime.UtcNow);
+		var member = new User("member", "Member", null, UserRole.Member, DateTime.UtcNow);
+		var mainCharacter = new Character(member.Id, "Zed", "Main");
+		mainCharacter.SetAsMain();
+		member.Characters.Add(mainCharacter);
+		member.Characters.Add(new Character(member.Id, "Alpha", "Alt"));
+		await using var db = CreateDatabase();
+		db.Users.AddRange(officer, member);
+		db.DkpTransactions.AddRange(
+			new DkpTransaction(member.Id, 100, "Raid", officer.Id, DateTime.UtcNow.AddMinutes(-2)),
+			new DkpTransaction(member.Id, -25, "Correction", officer.Id, DateTime.UtcNow.AddMinutes(-1)));
+		await db.SaveChangesAsync();
+
+		var result = await new GuildMemberQueries(db).GetAllAsync();
+
+		Assert.Equal(2, result.Count);
+		var loadedMember = Assert.Single(result, item => item.UserId == member.Id);
+		Assert.Equal(75, loadedMember.DkpBalance);
+		Assert.Equal(2, loadedMember.Characters.Count);
+		Assert.Equal("Zed", loadedMember.Characters[0].FirstName);
+		Assert.True(loadedMember.Characters[0].IsMain);
+	}
+
+	[Fact]
+	public async Task Guild_members_query_includes_users_without_characters_with_zero_balance()
+	{
+		var user = new User("user-1", "No Character", null, UserRole.Member, DateTime.UtcNow);
+		await using var db = CreateDatabase();
+		db.Users.Add(user);
+		await db.SaveChangesAsync();
+
+		var result = await new GuildMemberQueries(db).GetAllAsync();
+
+		var loadedUser = Assert.Single(result);
+		Assert.Equal(user.Id, loadedUser.UserId);
+		Assert.Equal(0, loadedUser.DkpBalance);
+		Assert.Empty(loadedUser.Characters);
+	}
+
+	[Fact]
+	public async Task User_summary_contains_discord_name_and_main_character_for_officer_selection()
+	{
+		var user = new User("user-1", "DiscordName", null, UserRole.Member, DateTime.UtcNow);
+		var main = new Character(user.Id, "Main", "Character");
+		main.SetAsMain();
+		user.Characters.Add(main);
+		await using var db = CreateDatabase();
+		db.Users.Add(user);
+		await db.SaveChangesAsync();
+
+		var result = await new DkpQueries(db).GetUsersAsync();
+
+		var summary = Assert.Single(result);
+		Assert.Equal("Main Character", summary.MainCharacterName);
+		Assert.Equal("DiscordName / Main Character", summary.DisplayName);
+	}
+
 	private static DkpDbContext CreateDatabase()
 	{
 		return new DkpDbContext(new DbContextOptionsBuilder<DkpDbContext>()

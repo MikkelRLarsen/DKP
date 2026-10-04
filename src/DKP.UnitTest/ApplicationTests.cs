@@ -75,6 +75,44 @@ public sealed class ApplicationTests
 	}
 
 	[Fact]
+	public async Task Character_service_sets_one_main_character_and_clears_previous_main()
+	{
+		var users = new FakeUserRepository();
+		var owner = new User("owner", "Owner", null, UserRole.Member, DateTime.UtcNow);
+		users.Users.Add(owner);
+		var characters = new FakeCharacterRepository();
+		var first = new Character(owner.Id, "First", "Character");
+		var second = new Character(owner.Id, "Second", "Character");
+		first.SetAsMain();
+		characters.Characters.AddRange([first, second]);
+		var service = new CharacterCommandService(users, characters);
+
+		var result = await service.SetMainCharacterAsync("owner", second.Id);
+
+		Assert.True(result);
+		Assert.False(first.IsMain);
+		Assert.True(second.IsMain);
+	}
+
+	[Fact]
+	public async Task Character_service_cannot_set_another_users_character_as_main()
+	{
+		var users = new FakeUserRepository();
+		var owner = new User("owner", "Owner", null, UserRole.Member, DateTime.UtcNow);
+		var other = new User("other", "Other", null, UserRole.Member, DateTime.UtcNow);
+		users.Users.AddRange([owner, other]);
+		var characters = new FakeCharacterRepository();
+		var character = new Character(other.Id, "Other", "Character");
+		characters.Characters.Add(character);
+		var service = new CharacterCommandService(users, characters);
+
+		var result = await service.SetMainCharacterAsync("owner", character.Id);
+
+		Assert.False(result);
+		Assert.False(character.IsMain);
+	}
+
+	[Fact]
 	public async Task Ef_mapping_persists_user_and_multiple_characters()
 	{
 		await using var db = new DkpDbContext(new DbContextOptionsBuilder<DkpDbContext>()
@@ -121,6 +159,9 @@ public sealed class ApplicationTests
 
 		public Task<Character?> FindForUserAsync(Guid characterId, Guid userId, CancellationToken cancellationToken = default)
 			=> Task.FromResult(Characters.SingleOrDefault(character => character.Id == characterId && character.UserId == userId));
+
+		public Task<IReadOnlyList<Character>> FindAllForUserAsync(Guid userId, CancellationToken cancellationToken = default)
+			=> Task.FromResult<IReadOnlyList<Character>>(Characters.Where(character => character.UserId == userId).ToArray());
 
 		public Task AddAsync(Character character, CancellationToken cancellationToken = default)
 		{

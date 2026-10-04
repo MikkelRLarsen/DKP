@@ -9,8 +9,9 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 1 | Foundation, login, users og characters | Færdig |
 | 2 | DKP-transaktioner og egen historik | Færdig |
 | 3 | Officer DKP Management | Færdig |
-| 4 | Guild Members overview | Planlagt |
-| 5 | Player details | Planlagt |
+| 4 | Guild Members overview | Færdig |
+| 4a | Main Character | Færdig |
+| 5 | Player details | Næste |
 | 6 | Officer user administration | Planlagt |
 | 7 | LootReserve export | Planlagt |
 | 8 | Køb af Soft Reserves | Planlagt |
@@ -176,6 +177,18 @@ Give Officer-brugere mulighed for at tilføje og fratrække DKP gennem en kontro
 
 ## Slice 4 – Guild Members overview
 
+Status: Færdig.
+
+Leveret:
+
+- `GuildMemberDto` og `IGuildMemberQueries` i Facade.
+- `GuildMemberQueries` i Infrastructure med direkte EF Core projection.
+- Funktionel `/members` for authenticated brugere.
+- RadzenDataGrid med sorting, filtering, search og pagination.
+- Discord-avatar, characters og beregnet DKP-balance.
+- Brugere uden characters vises med saldo `0`.
+- Tests for alle medlemmer, balance, characters og tomme character-lister.
+
 ### Mål
 
 Give authenticated guild members en oversigt over guildens brugere, characters og DKP.
@@ -197,7 +210,73 @@ Give authenticated guild members en oversigt over guildens brugere, characters o
 - Uauthenticated brugere afvises.
 - Blazor modtager kun facade read-models/DTO’er.
 
+## Slice 4a – Main Character
+
+Status: Færdig.
+
+Leveret:
+
+- `Character.IsMain` i domain.
+- `IsMain` i `CharacterDto` og dashboardets character-liste.
+- `SetMainCharacterAsync` via Facade → Application → Infrastructure.
+- Højst én main character pr. bruger via PostgreSQL unique filtered index.
+- Dashboard med ⭐-markering og `Set as main`-handling.
+- Migration `AddCharacterMainStatus`.
+- Tests for valg, skift og ejerskab.
+
+### Mål
+
+Give hver bruger mulighed for at vælge én af sine characters som main character.
+
+### Scope
+
+- Tilføj main-status til `Character`.
+- Højst én main character pr. bruger.
+- Giv brugeren mulighed for at vælge main character fra dashboardet.
+- Markér den valgte character tydeligt i UI’et.
+- Flyt main-status ved valg af en ny character.
+- Nulstil main-status hvis den valgte character slettes.
+- Håndhæv ejerskab serverside gennem Application command logic.
+- Tilføj EF Core migration og relevant unique constraint/index.
+
+### Arkitektur
+
+```text
+Blazor dashboard
+  → ICharacterCommands                 // Facade
+  → CharacterCommandService             // Application
+  → ICharacterRepository                // Application persistence
+  → CharacterRepository                 // Infrastructure
+  → DkpDbContext
+```
+
+### Kontrakter
+
+Tilføj en command svarende til:
+
+```csharp
+Task<bool> SetMainCharacterAsync(
+    string authenticatedDiscordId,
+    Guid characterId,
+    CancellationToken cancellationToken = default);
+```
+
+`CharacterDto` udvides med `IsMain`.
+
+### Acceptkriterier
+
+- En bruger kan vælge én af sine egne characters som main.
+- En ny main character fjerner automatisk den tidligere main-status.
+- En bruger kan ikke vælge en anden brugers character.
+- En bruger kan ikke have mere end én main character.
+- Main-status gemmes i databasen og bevares ved næste login.
+- Sletning af main character efterlader brugeren uden main character.
+- Dashboardet viser korrekt main-status efter ændringen.
+- Migration, Application tests og Infrastructure tests består.
+
 ## Slice 5 – Player details
+
+Status: Næste.
 
 ### Mål
 

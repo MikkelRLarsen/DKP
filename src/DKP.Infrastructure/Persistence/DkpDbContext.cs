@@ -31,6 +31,9 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 			entity.Property(character => character.FirstName).HasMaxLength(64).IsRequired();
 			entity.Property(character => character.LastName).HasMaxLength(64).IsRequired();
 			entity.HasIndex(character => new { character.UserId, character.FirstName, character.LastName }).IsUnique();
+			entity.HasIndex(character => new { character.UserId, character.IsMain })
+				.IsUnique()
+				.HasFilter("\"IsMain\" = TRUE");
 		});
 
 		modelBuilder.Entity<DkpTransaction>(entity =>

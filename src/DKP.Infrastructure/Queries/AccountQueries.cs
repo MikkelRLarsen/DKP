@@ -33,7 +33,7 @@ public sealed class AccountQueries(DkpDbContext db) : IAccountQueries
 				user.User.Characters
 					.OrderBy(character => character.FirstName)
 					.ThenBy(character => character.LastName)
-					.Select(character => new CharacterDto(character.Id, character.FirstName, character.LastName))
+					.Select(character => new CharacterDto(character.Id, character.FirstName, character.LastName, character.IsMain))
 					.ToArray());
 	}
 }

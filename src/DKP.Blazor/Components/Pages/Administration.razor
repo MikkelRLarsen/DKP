@@ -40,7 +40,7 @@
 
                 <RadzenFormField Text="Player" Style="width: 100%;">
                     <ChildContent>
-                        <RadzenDropDown @bind-Value="selectedUserId" Data="@users" TextProperty="DiscordName" ValueProperty="Id" Placeholder="Select a player" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Style="width: 100%;" />
+                        <RadzenDropDown @bind-Value="selectedUserId" Data="@users" TextProperty="DisplayName" ValueProperty="Id" Placeholder="Select a player" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Style="width: 100%;" />
                     </ChildContent>
                 </RadzenFormField>
 

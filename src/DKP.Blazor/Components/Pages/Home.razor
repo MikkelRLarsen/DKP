@@ -59,11 +59,29 @@ else
                 <RadzenText Text="Your characters" TextStyle="TextStyle.H5" />
                 <RadzenDataGrid Data="@dashboard.Characters" AllowPaging="true" PageSize="5" AllowSorting="true" EmptyText="No characters yet.">
                     <Columns>
-                        <RadzenDataGridColumn TItem="CharacterDto" Property="FirstName" Title="First name" />
+                        <RadzenDataGridColumn TItem="CharacterDto" Property="FirstName" Title="First name">
+                            <Template Context="character">
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                    @if (character.IsMain)
+                                    {
+                                        <RadzenText Text="⭐" />
+                                    }
+                                    <RadzenText Text="@character.FirstName" />
+                                </RadzenStack>
+                            </Template>
+                        </RadzenDataGridColumn>
                         <RadzenDataGridColumn TItem="CharacterDto" Property="LastName" Title="Last name" />
                         <RadzenDataGridColumn TItem="CharacterDto" Title="Actions" Sortable="false" Filterable="false">
                             <Template Context="character">
                                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                    @if (character.IsMain)
+                                    {
+                                        <RadzenBadge Text="Main" BadgeStyle="BadgeStyle.Success" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenButton Text="Set as main" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => SetMainAsync(character))" Disabled="@saving" />
+                                    }
                                     <RadzenButton Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => BeginEdit(character))" />
                                     <RadzenButton Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(() => DeleteAsync(character))" />
                                 </RadzenStack>
@@ -184,6 +202,27 @@ else
         {
             NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Character removed.");
             dashboard = await AccountQueries.GetDashboardAsync(discordId);
+        }
+    }
+
+    private async Task SetMainAsync(CharacterDto character)
+    {
+        saving = true;
+        try
+        {
+            if (await CharacterCommands.SetMainCharacterAsync(discordId, character.Id))
+            {
+                NotificationService.Notify(NotificationSeverity.Success, "Main character updated", $"{character.FirstName} {character.LastName} is now your main character.");
+                dashboard = await AccountQueries.GetDashboardAsync(discordId);
+            }
+        }
+        catch (InvalidOperationException exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to set main character", exception.Message);
+        }
+        finally
+        {
+            saving = false;
         }
     }
 

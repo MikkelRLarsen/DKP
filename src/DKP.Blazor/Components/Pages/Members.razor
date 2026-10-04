@@ -1,6 +1,99 @@
 @page "/members"
 @attribute [Authorize]
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IGuildMemberQueries GuildMemberQueries
+@inject NotificationService NotificationService
 
 <PageTitle>Guild Members</PageTitle>
-<h1>Guild Members</h1>
-<RadzenAlert AlertStyle="AlertStyle.Info">Guild member overview will be available in the next vertical slice.</RadzenAlert>
+
+@if (loading)
+{
+    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        <RadzenText Text="Loading guild members..." />
+    </RadzenStack>
+}
+else if (loadFailed)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load guild members.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1.25rem">
+        <div>
+            <h1>Guild Members</h1>
+            <RadzenText Text="Guild members, characters and current DKP" TextStyle="TextStyle.Subtitle2" />
+        </div>
+
+        <RadzenDataGrid @ref="membersGrid" Data="@filteredMembers" TItem="GuildMemberDto" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No guild members found." Responsive="true">
+            <Columns>
+                <RadzenDataGridColumn TItem="GuildMemberDto" Property="DiscordName" Title="Member">
+                    <Template Context="member">
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem">
+                            @if (member.AvatarUrl is not null)
+                            {
+                                <RadzenImage Path="@member.AvatarUrl" Style="width: 2.5rem; height: 2.5rem; border-radius: 50%;" />
+                            }
+                            <RadzenText Text="@member.DiscordName" />
+                        </RadzenStack>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="GuildMemberDto" Property="DkpBalance" Title="DKP">
+                    <Template Context="member">
+                        <RadzenBadge Text="@(member.DkpBalance >= 0 ? $"+{member.DkpBalance}" : member.DkpBalance.ToString())" BadgeStyle="@(member.DkpBalance >= 0 ? BadgeStyle.Success : BadgeStyle.Danger)" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="GuildMemberDto" Property="Characters" Title="Characters" Sortable="false" Filterable="true">
+                    <FilterTemplate>
+                        <RadzenTextBox @bind-Value="characterSearchText" Change="@OnCharacterFilterChanged" Placeholder="Search characters..." Style="width: 100%;" />
+                    </FilterTemplate>
+                    <Template Context="member">
+                        @(member.Characters.Count == 0 ? "No characters" : string.Join(", ", member.Characters.Select(character => $"{character.FirstName} {character.LastName}")))
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    </RadzenStack>
+}
+
+@code {
+    private IReadOnlyList<GuildMemberDto> members = Array.Empty<GuildMemberDto>();
+    private string characterSearchText = string.Empty;
+    private bool loading = true;
+    private bool loadFailed;
+
+    private RadzenDataGrid<GuildMemberDto>? membersGrid;
+
+    private IEnumerable<GuildMemberDto> filteredMembers
+        => string.IsNullOrWhiteSpace(characterSearchText)
+            ? members
+            : members.Where(member => member.Characters.Any(character =>
+                $"{character.FirstName} {character.LastName}".Contains(characterSearchText, StringComparison.OrdinalIgnoreCase)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            members = await GuildMemberQueries.GetAllAsync();
+        }
+        catch (Exception)
+        {
+            loadFailed = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load members", "Please try again later.");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task OnCharacterFilterChanged(object? value)
+    {
+        characterSearchText = value?.ToString() ?? string.Empty;
+        if (membersGrid is not null)
+        {
+            await membersGrid.Reload();
+        }
+    }
+}

@@ -41,6 +41,15 @@ public sealed class DkpQueries(DkpDbContext db) : IDkpQueries
 		=> await db.Users
 			.AsNoTracking()
 			.OrderBy(user => user.DiscordName)
-			.Select(user => new UserSummary(user.Id, user.DiscordId, user.DiscordName, user.AvatarUrl, user.Role))
+			.Select(user => new UserSummary(
+				user.Id,
+				user.DiscordId,
+				user.DiscordName,
+				user.AvatarUrl,
+				user.Role,
+				user.Characters
+					.Where(character => character.IsMain)
+					.Select(character => character.FirstName + " " + character.LastName)
+					.FirstOrDefault()))
 			.ToArrayAsync(cancellationToken);
 }

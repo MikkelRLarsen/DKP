@@ -48,6 +48,41 @@ public sealed class CharacterCommandService(
 		return true;
 	}
 
+	public async Task<bool> SetMainCharacterAsync(string discordId, Guid characterId, CancellationToken cancellationToken = default)
+	{
+		var user = await GetUserAsync(discordId, cancellationToken);
+		var userCharacters = await characters.FindAllForUserAsync(user.Id, cancellationToken);
+		var selected = userCharacters.SingleOrDefault(character => character.Id == characterId);
+		if (selected is null)
+		{
+			return false;
+		}
+
+		if (selected.IsMain)
+		{
+			return true;
+		}
+
+		var previousMain = false;
+		foreach (var character in userCharacters)
+		{
+			if (character.IsMain)
+			{
+				character.ClearMain();
+				previousMain = true;
+			}
+		}
+
+		if (previousMain)
+		{
+			await characters.SaveChangesAsync(cancellationToken);
+		}
+
+		selected.SetAsMain();
+		await characters.SaveChangesAsync(cancellationToken);
+		return true;
+	}
+
 	private async Task<User> GetUserAsync(string discordId, CancellationToken cancellationToken)
 		=> await users.FindByDiscordIdAsync(discordId, cancellationToken)
 			?? throw new InvalidOperationException("The authenticated Discord user does not exist.");
@@ -66,5 +101,5 @@ public sealed class CharacterCommandService(
 	}
 
 	private static CharacterDto ToDto(Character character)
-		=> new(character.Id, character.FirstName, character.LastName);
+		=> new(character.Id, character.FirstName, character.LastName, character.IsMain);
 }
