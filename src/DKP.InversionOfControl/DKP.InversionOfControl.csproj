@@ -6,4 +6,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\DKP.Application\DKP.Application.csproj" />
+    <ProjectReference Include="..\DKP.Facade\DKP.Facade.csproj" />
+    <ProjectReference Include="..\DKP.Infrastructure\DKP.Infrastructure.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
 </Project>

@@ -1,7 +1,194 @@
-﻿@page "/"
+@page "/"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using DKP.Facade
+@using DKP.Facade.Contracts
+@inject IAccountFacade AccountFacade
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Dashboard</PageTitle>
 
-<h1>Hello, world!</h1>
+@if (dashboard is null)
+{
+    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        <RadzenText Text="Loading dashboard..." />
+    </RadzenStack>
+}
+else
+{
+    <RadzenStack Gap="1.5rem">
+        <div>
+            <h1>Dashboard</h1>
+            <RadzenText Text="Your guild DKP overview" TextStyle="TextStyle.Subtitle2" />
+        </div>
 
-Welcome to your new app.
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenCard>
+                    <RadzenText Text="Current DKP" TextStyle="TextStyle.Overline" />
+                    <RadzenText Text="@dashboard.DkpBalance.ToString("0")" Style="font-size: 2.5rem; font-weight: 700;" />
+                </RadzenCard>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenCard>
+                    <RadzenText Text="Discord" TextStyle="TextStyle.Overline" />
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem">
+                        @if (dashboard.AvatarUrl is not null)
+                        {
+                            <RadzenImage Path="@dashboard.AvatarUrl" Style="width: 3rem; height: 3rem; border-radius: 50%;" />
+                        }
+                        <RadzenText Text="@dashboard.DiscordName" Style="font-size: 1.25rem;" />
+                    </RadzenStack>
+                </RadzenCard>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenCard>
+                    <RadzenText Text="Characters" TextStyle="TextStyle.Overline" />
+                    <RadzenText Text="@dashboard.Characters.Count.ToString()" Style="font-size: 2.5rem; font-weight: 700;" />
+                </RadzenCard>
+            </RadzenColumn>
+        </RadzenRow>
+
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText Text="Your characters" TextStyle="TextStyle.H5" />
+                <RadzenDataGrid Data="@dashboard.Characters" AllowPaging="true" PageSize="5" AllowSorting="true" EmptyText="No characters yet.">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="CharacterDto" Property="FirstName" Title="First name" />
+                        <RadzenDataGridColumn TItem="CharacterDto" Property="LastName" Title="Last name" />
+                        <RadzenDataGridColumn TItem="CharacterDto" Title="Actions" Sortable="false" Filterable="false">
+                            <Template Context="character">
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                    <RadzenButton Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => BeginEdit(character))" />
+                                    <RadzenButton Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(() => DeleteAsync(character))" />
+                                </RadzenStack>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenText Text="@(editingId is null ? "Add character" : "Edit character")" TextStyle="TextStyle.H5" />
+            <RadzenTemplateForm TItem="CharacterForm" Data="@form" Submit="@SaveAsync" Style="margin-top: 1rem;">
+                <RadzenRow Gap="1rem">
+                    <RadzenColumn Size="12" SizeMD="5">
+                        <RadzenFormField Text="First name" Style="width: 100%;">
+                            <ChildContent>
+                                <RadzenTextBox Name="FirstName" @bind-Value="form.FirstName" Style="width: 100%;" MaxLength="64" />
+                            </ChildContent>
+                            <Helper>
+                                <RadzenRequiredValidator Component="FirstName" Text="First name is required" />
+                            </Helper>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="5">
+                        <RadzenFormField Text="Last name" Style="width: 100%;">
+                            <ChildContent>
+                                <RadzenTextBox Name="LastName" @bind-Value="form.LastName" Style="width: 100%;" MaxLength="64" />
+                            </ChildContent>
+                            <Helper>
+                                <RadzenRequiredValidator Component="LastName" Text="Last name is required" />
+                            </Helper>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="2" Style="display:flex; align-items:end; gap:.5rem;">
+                        <RadzenButton ButtonType="ButtonType.Submit" Text="Save" Icon="save" ButtonStyle="ButtonStyle.Primary" Disabled="@saving" />
+                        @if (editingId is not null)
+                        {
+                            <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="@CancelEdit" Disabled="@saving" />
+                        }
+                    </RadzenColumn>
+                </RadzenRow>
+            </RadzenTemplateForm>
+        </RadzenCard>
+    </RadzenStack>
+}
+
+@code {
+    private DashboardDto? dashboard;
+    private readonly CharacterForm form = new();
+    private Guid? editingId;
+    private bool saving;
+    private string discordId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        discordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        dashboard = await AccountFacade.GetDashboardAsync(discordId);
+    }
+
+    private void BeginEdit(CharacterDto character)
+    {
+        editingId = character.Id;
+        form.FirstName = character.FirstName;
+        form.LastName = character.LastName;
+    }
+
+    private void CancelEdit()
+    {
+        editingId = null;
+        form.FirstName = string.Empty;
+        form.LastName = string.Empty;
+    }
+
+    private async Task SaveAsync(CharacterForm _)
+    {
+        saving = true;
+        try
+        {
+            if (editingId is Guid id)
+            {
+                await AccountFacade.UpdateCharacterAsync(discordId, id, new CharacterInput(form.FirstName, form.LastName));
+                NotificationService.Notify(NotificationSeverity.Success, "Saved", "Character updated.");
+            }
+            else
+            {
+                await AccountFacade.CreateCharacterAsync(discordId, new CharacterInput(form.FirstName, form.LastName));
+                NotificationService.Notify(NotificationSeverity.Success, "Saved", "Character added.");
+            }
+
+            CancelEdit();
+            dashboard = await AccountFacade.GetDashboardAsync(discordId);
+        }
+        catch (ArgumentException exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Validation error", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to save", exception.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(CharacterDto character)
+    {
+        var confirmed = await DialogService.Confirm($"Delete {character.FirstName} {character.LastName}?", "Confirm deletion", new ConfirmOptions { OkButtonText = "Delete", CancelButtonText = "Cancel" });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        if (await AccountFacade.DeleteCharacterAsync(discordId, character.Id))
+        {
+            NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Character removed.");
+            dashboard = await AccountFacade.GetDashboardAsync(discordId);
+        }
+    }
+
+    private sealed class CharacterForm
+    {
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+    }
+}
