@@ -10,6 +10,6 @@
     <Project Path="src/DKP.Facade/DKP.Facade.csproj" Id="64dc759c-4b82-4599-8cf1-d0d1f4af153f" />
     <Project Path="src/DKP.Infrastructure/DKP.Infrastructure.csproj" Id="c90d063e-2c39-48fe-9295-1c9ebdc05460" />
     <Project Path="src/DKP.InversionOfControl/DKP.InversionOfControl.csproj" Id="b4b39903-8bbe-44af-8fa7-0c66d66be12f" />
-    <Project Path="src/UnitTest/UnitTest.csproj" Id="cec70f24-5ac5-4e60-a7e6-0b7a5d35b878" />
+    <Project Path="src/DKP.UnitTest/DKP.UnitTest.csproj" Id="679fb538-8635-411f-a81a-89666957538d" />
   </Folder>
 </Solution>
