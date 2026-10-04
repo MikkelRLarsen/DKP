@@ -1,6 +1,6 @@
 param (
     [string]$m,
-    [string]$c = "EFAppContext"
+    [string]$c = "DkpDbContext"
 )
 
 if (-not $m) {
@@ -17,4 +17,5 @@ Write-Host "dotnet ef migrations add $m --context $c --project $projectPath --st
 dotnet ef migrations add $m `
     --context $c `
     --project $projectPath `
-    --startup-project $startupPath
+    --startup-project $startupPath `
+    --output-dir Persistence\Migrations

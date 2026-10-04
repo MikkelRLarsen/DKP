@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: dkp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dkp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - dkp-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dkp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: dkp-pgadmin
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@dkp.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - dkp-pgadmin-data:/var/lib/pgadmin
+
+volumes:
+  dkp-postgres-data:
+  dkp-pgadmin-data:

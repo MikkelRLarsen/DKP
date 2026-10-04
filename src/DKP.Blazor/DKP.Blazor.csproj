@@ -5,6 +5,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <UserSecretsId>DKP.Blazor-Development</UserSecretsId>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DKP.Facade\DKP.Facade.csproj" />
+    <ProjectReference Include="..\DKP.InversionOfControl\DKP.InversionOfControl.csproj" />
+    <PackageReference Include="Radzen.Blazor" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
 
 </Project>

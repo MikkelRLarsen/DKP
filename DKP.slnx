@@ -1,6 +1,7 @@
 <Solution>
-  <Folder Name="/Solution Items/">
-    <File Path="AddMigration.ps1" />
+  <File Path="AddMigration.ps1" />
+  <Folder Name="/codex/">
+	<File Path="ProjectDescription.md" />
   </Folder>
   <Folder Name="/src/">
     <File Path="Directory.Packages.props" />
