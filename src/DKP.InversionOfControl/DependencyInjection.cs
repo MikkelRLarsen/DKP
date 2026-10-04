@@ -44,10 +44,12 @@ public static class DependencyInjection
 		services.AddScoped<IUserRepository, UserRepository>();
 		services.AddScoped<ICharacterRepository, CharacterRepository>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
+		services.AddScoped<IDkpQueries, DkpQueries>();
 		services.AddScoped<IOfficerIdentityPolicy, OfficerIdentityPolicy>();
 		services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 		services.AddScoped<ICharacterCommandService, CharacterCommandService>();
 		services.AddScoped<IAccountFacade, AccountFacade>();
+		services.AddScoped<IDkpFacade, DkpFacade>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));
 		services.AddAuthentication(options =>

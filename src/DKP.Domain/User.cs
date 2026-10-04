@@ -15,6 +15,8 @@ public sealed class User
 		Role = role;
 		CreatedAtUtc = createdAtUtc;
 		Characters = new List<Character>();
+		DkpTransactions = new List<DkpTransaction>();
+		CreatedDkpTransactions = new List<DkpTransaction>();
 	}
 
 	public Guid Id { get; private set; }
@@ -24,6 +26,8 @@ public sealed class User
 	public UserRole Role { get; private set; }
 	public DateTime CreatedAtUtc { get; private set; }
 	public ICollection<Character> Characters { get; private set; } = new List<Character>();
+	public ICollection<DkpTransaction> DkpTransactions { get; private set; } = new List<DkpTransaction>();
+	public ICollection<DkpTransaction> CreatedDkpTransactions { get; private set; } = new List<DkpTransaction>();
 
 	public void UpdateProfile(string discordName, string? avatarUrl, UserRole role)
 	{

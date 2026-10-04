@@ -7,6 +7,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 {
 	public DbSet<User> Users => Set<User>();
 	public DbSet<Character> Characters => Set<Character>();
+	public DbSet<DkpTransaction> DkpTransactions => Set<DkpTransaction>();
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
@@ -30,6 +31,24 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 			entity.Property(character => character.FirstName).HasMaxLength(64).IsRequired();
 			entity.Property(character => character.LastName).HasMaxLength(64).IsRequired();
 			entity.HasIndex(character => new { character.UserId, character.FirstName, character.LastName }).IsUnique();
+		});
+
+		modelBuilder.Entity<DkpTransaction>(entity =>
+		{
+			entity.HasKey(transaction => transaction.Id);
+			entity.Property(transaction => transaction.Amount).IsRequired();
+			entity.Property(transaction => transaction.Reason).HasMaxLength(500).IsRequired();
+			entity.Property(transaction => transaction.CreatedAtUtc).IsRequired();
+			entity.HasIndex(transaction => new { transaction.UserId, transaction.CreatedAtUtc });
+			entity.HasIndex(transaction => transaction.CreatedByUserId);
+			entity.HasOne(transaction => transaction.User)
+				.WithMany(user => user.DkpTransactions)
+				.HasForeignKey(transaction => transaction.UserId)
+				.OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(transaction => transaction.CreatedByUser)
+				.WithMany(user => user.CreatedDkpTransactions)
+				.HasForeignKey(transaction => transaction.CreatedByUserId)
+				.OnDelete(DeleteBehavior.Restrict);
 		});
 	}
 }

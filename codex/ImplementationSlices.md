@@ -1,0 +1,317 @@
+# DKP – Implementation Slices
+
+Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge. Hver slice skal implementeres, testes og dokumenteres, før den næste påbegyndes.
+
+## Statusoversigt
+
+| Slice | Funktion | Status |
+|---|---|---|
+| 1 | Foundation, login, users og characters | Færdig |
+| 2 | DKP-transaktioner og egen historik | Færdig |
+| 3 | Officer DKP Management | Næste |
+| 4 | Guild Members overview | Planlagt |
+| 5 | Player details | Planlagt |
+| 6 | Officer user administration | Planlagt |
+| 7 | LootReserve export | Planlagt |
+| 8 | Køb af Soft Reserves | Planlagt |
+| 9 | Deployment og production hardening | Planlagt |
+
+## Arkitektoniske regler
+
+- Blazor afhænger kun af facade-kontrakter og IoC-registrering.
+- Domain indeholder entities og domæneinvarianter uden UI- eller EF Core-afhængigheder.
+- Application indeholder business logic og commands/use cases.
+- Facade indeholder DTO’er og den offentlige backend-kontrakt til Blazor.
+- Infrastructure indeholder EF Core, PostgreSQL, migrations og query implementations.
+- `DKP.InversionOfControl` samler dependency injection, database og authentication.
+- Read-only queries og state-changing commands holdes adskilt efter et CQRS-lignende mønster.
+- Officer-funktioner skal beskyttes serverside; UI-skjulning er ikke tilstrækkelig.
+- Alle databaseændringer leveres med en EF Core migration.
+- Radzen anvendes som førstevalg til UI-komponenter.
+
+## Slice 1 – Foundation, login, users og characters
+
+Status: Færdig.
+
+Leveret:
+
+- Discord OAuth2-login og logout.
+- Automatisk oprettelse/opdatering af `User`.
+- Member/Officer-rolle via konfigurerede Discord User IDs.
+- Flere characters pr. bruger med `FirstName` og `LastName`.
+- Dashboard med Discord-profil og characters.
+- Opret, rediger og slet egne characters.
+- PostgreSQL, EF Core, migrations og cold-start migration.
+- Docker Compose med PostgreSQL og pgAdmin.
+- Application, Facade, Infrastructure og IoC-lag.
+- Unit tests for user provisioning, roller, characters og ejerskab.
+
+## Slice 2 – DKP-transaktioner og egen historik
+
+Status: Færdig.
+
+Leveret:
+
+- `DkpTransaction` med positive og negative heltalsbeløb.
+- Balance beregnet som summen af brugerens transaktioner.
+- Read-only DKP query- og facade-flow.
+- Dashboard med beregnet saldo.
+- `/my-dkp` med egen transaktionshistorik.
+- EF Core relationer og migration `AddDkpTransactions`.
+- Tests for saldo, sortering, brugerafgrænsning og tom historik.
+
+### Mål
+
+Gøre DKP-saldoen funktionel ved at modellere alle ændringer som transaktioner og vise brugerens egen historik.
+
+### Scope
+
+- Opret domain entity `DkpTransaction`.
+- Brug heltalsbeløb med positive og negative værdier.
+- Beregn saldo som `SUM(Amount)`; gem ikke en direkte saldo på `User`.
+- Tilføj `CreatedByUserId` og `CreatedAtUtc` til audit-spor.
+- Implementér read-only queries for saldo og egen historik.
+- Opdater dashboardet til at vise den beregnede saldo.
+- Implementér `/my-dkp` med RadzenDataGrid.
+- Officerer skal ikke endnu kunne oprette transaktioner fra UI’et.
+
+### Data
+
+`DkpTransaction` skal indeholde:
+
+- `Id`
+- `UserId`
+- `Amount` som `int`
+- `Reason`
+- `CreatedByUserId`
+- `CreatedAtUtc`
+
+Der skal være foreign keys til den berørte bruger og brugeren, der oprettede transaktionen. Negative saldi er tilladt.
+
+### Kontrakter
+
+Tilføj facade-DTO’er og query interfaces svarende til:
+
+- `DkpTransactionDto`
+- `DkpHistoryDto`
+- `BalanceDto`
+- `IDkpQueries`
+- `IDkpTransactionQueries`
+
+Blazor må ikke modtage domain entities eller bruge `DbContext` direkte.
+
+### UI
+
+`/my-dkp` viser:
+
+- Aktuel saldo.
+- Dato.
+- Beløb.
+- Årsag.
+- Oprettet af.
+- Loading, empty og error states.
+
+Positive og negative beløb visualiseres med Radzen-komponenter.
+
+### Acceptkriterier
+
+- En brugers saldo beregnes korrekt ud fra alle transaktioner.
+- Positive og negative transaktioner summeres korrekt.
+- Historikken vises nyeste først.
+- En bruger kan kun læse sin egen historik.
+- Dashboardet viser den rigtige saldo i stedet for `0`.
+- Ny EF Core migration er genereret.
+- Unit- og infrastructure-tests består.
+
+## Slice 3 – Officer DKP Management
+
+### Mål
+
+Give Officer-brugere mulighed for at tilføje og fratrække DKP gennem en kontrolleret command-flow.
+
+### Scope
+
+- Add DKP.
+- Remove DKP.
+- Obligatorisk årsag.
+- `CreatedByUserId` sættes fra den aktuelle officer.
+- Negative saldi er fortsat tilladt.
+- Officer authorization i application command og UI.
+- Confirmation dialog, notifications og loading states.
+
+### Kontrakter
+
+- `IDkpTransactionCommands`
+- `CreateDkpTransactionRequest`
+- Facade-metoder for add/remove DKP.
+
+### Acceptkriterier
+
+- Officer kan oprette positive og negative transaktioner.
+- Member afvises serverside.
+- Tom årsag eller ugyldigt beløb afvises.
+- Den korrekte officer gemmes som `CreatedByUserId`.
+- Den nye saldo og historik vises efter gennemført transaktion.
+
+## Slice 4 – Guild Members overview
+
+### Mål
+
+Give authenticated guild members en oversigt over guildens brugere, characters og DKP.
+
+### Scope
+
+- Query for alle brugere.
+- Discord-navn og avatar.
+- Characters.
+- Aktuel DKP-balance.
+- RadzenDataGrid med sorting, filtering, search og pagination.
+- Ingen ændringsfunktionalitet.
+
+### Acceptkriterier
+
+- Alle relevante medlemmer vises.
+- Balance beregnes pr. bruger.
+- Brugere uden characters vises korrekt.
+- Uauthenticated brugere afvises.
+- Blazor modtager kun facade read-models/DTO’er.
+
+## Slice 5 – Player details
+
+### Mål
+
+Give brugere adgang til en detaljeret visning af en guildspiller.
+
+### Scope
+
+- Separat page eller RadzenDialog.
+- Discord-information.
+- Alle characters.
+- Aktuel DKP.
+- Komplet DKP-historik.
+- Genbrug af eksisterende facade queries.
+
+### Acceptkriterier
+
+- Player details viser korrekt bruger, characters og transaktioner.
+- Ukendt spiller håndteres som not found.
+- Brugere kan ikke se domain entities eller databaseobjekter direkte.
+
+## Slice 6 – Officer user administration
+
+### Mål
+
+Give Officer-brugere mulighed for at administrere Member/Officer-roller.
+
+### Scope
+
+- Liste over brugere.
+- Vis rolle.
+- Skift rolle.
+- Serverside Officer authorization.
+- Beskyt bootstrap-officers fra utilsigtet fjernelse.
+
+### Acceptkriterier
+
+- Kun Officer kan ændre roller.
+- Member kan ikke ændre egen eller andres rolle.
+- Rolleændring anvendes ved næste login.
+- Bootstrap-officers kan fortsat logge ind som Officer.
+
+## Slice 7 – LootReserve export
+
+### Mål
+
+Generere en kopiérbar tekstliste til LootReserve uden direkte addon-integration.
+
+### Scope
+
+- Officer-only side.
+- RadzenDataGrid med spiller og reserve limit.
+- Generate Export.
+- CSV/text-output i `RadzenTextArea`.
+- Copy-to-clipboard.
+
+Outputformat:
+
+```text
+Player,ReserveLimit
+Shockadin,1
+```
+
+### Acceptkriterier
+
+- Eksport har korrekt header og stabil rækkefølge.
+- Specialtegn håndteres korrekt.
+- Kun Officer kan generere eksporten.
+- Ingen direkte kommunikation med World of Warcraft eller LootReserve.
+
+## Slice 8 – Køb af Soft Reserves
+
+### Mål
+
+Give brugere mulighed for at købe ekstra Soft Reserves med DKP.
+
+### Scope
+
+- Domain entity `SoftReservePurchase`.
+- Konfigurerbar pris og maksimum antal.
+- Confirmation dialog.
+- Balance- og maksimumsvalidering serverside.
+- Atomisk oprettelse af purchase og negativ DKP-transaktion.
+- Opdateret LootReserve reserve limit.
+
+`SoftReservePurchase` skal indeholde:
+
+- `Id`
+- `UserId`
+- `ReserveNumber`
+- `DkpCost`
+- `CreatedAtUtc`
+
+### Acceptkriterier
+
+- Gyldigt køb opretter purchase og DKP-transaktion atomisk.
+- Utilstrækkelig saldo afvises.
+- Maksimum antal håndhæves.
+- Duplicate purchase afvises.
+- Fejl ruller både purchase og transaktion tilbage.
+- LootReserve-export viser korrekt samlet reserve limit.
+
+## Slice 9 – Deployment og production hardening
+
+### Mål
+
+Gøre systemet klar til en samlet deployment.
+
+### Scope
+
+- Dockerfile for Blazor-applikationen.
+- Docker Compose med app, PostgreSQL og valgfri pgAdmin.
+- Environment-based configuration.
+- Production Discord redirect URI.
+- Database health check.
+- Logging og kontrolleret fejlhåndtering.
+- Dokumentation af lokal opstart, migrationer, Discord-konfiguration og deployment.
+- Ingen secrets i repository.
+
+## Teststrategi for alle slices
+
+Hver slice skal som minimum have:
+
+- Application unit tests.
+- Infrastructure/EF Core tests ved model- eller migrationændringer.
+- Authorization tests for Member/Officer-grænser.
+- Facade-kontrakt tests hvor nye DTO’er eller interfaces introduceres.
+- Build og test af hele solutionen.
+- Manuel smoke-test af den brugerrejse, slicen leverer.
+
+## Beslutninger og antagelser
+
+- DKP-beløb modelleres som `int`.
+- Negative saldi er tilladt.
+- Slice 2 indeholder kun brugerens egen historik.
+- Officer add/remove kommer i Slice 3.
+- LootReserve har ingen direkte integration til World of Warcraft.
+- Soft Reserve-køb kommer først efter DKP og LootReserve-export.
+- Dokumentet skal opdateres med status, migrations og kendte begrænsninger, når hver slice implementeres.

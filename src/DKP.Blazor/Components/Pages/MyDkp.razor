@@ -1,6 +1,90 @@
 @page "/my-dkp"
 @attribute [Authorize]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using DKP.Facade
+@using DKP.Facade.Contracts
+@inject IDkpFacade DkpFacade
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NotificationService NotificationService
 
 <PageTitle>My DKP</PageTitle>
-<h1>My DKP</h1>
-<RadzenAlert AlertStyle="AlertStyle.Info">DKP transactions will be available in the next vertical slice.</RadzenAlert>
+
+@if (loading)
+{
+    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        <RadzenText Text="Loading DKP history..." />
+    </RadzenStack>
+}
+else if (history is null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load your DKP history.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1.5rem">
+        <div>
+            <h1>My DKP</h1>
+            <RadzenText Text="Your DKP balance and transaction history" TextStyle="TextStyle.Subtitle2" />
+        </div>
+
+        <RadzenCard Style="max-width: 20rem;">
+            <RadzenText Text="Current DKP" TextStyle="TextStyle.Overline" />
+            <RadzenText Text="@history.Balance.Amount.ToString("+#;-#;0")" Style="font-size: 2.5rem; font-weight: 700;" />
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenText Text="Transaction history" TextStyle="TextStyle.H5" />
+            @if (history.Transactions.Count == 0)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" Style="margin-top: 1rem;">You do not have any DKP transactions yet.</RadzenAlert>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@history.Transactions" AllowPaging="true" PageSize="10" AllowSorting="true" EmptyText="No transactions found." Style="margin-top: 1rem;">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="DkpTransactionDto" Property="CreatedAtUtc" Title="Date">
+                            <Template Context="transaction">@transaction.CreatedAtUtc.ToLocalTime().ToString("g")</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DkpTransactionDto" Property="Amount" Title="DKP">
+                            <Template Context="transaction">
+                                <RadzenBadge Text="@(transaction.Amount > 0 ? $"+{transaction.Amount}" : transaction.Amount.ToString())" BadgeStyle="@(transaction.Amount >= 0 ? BadgeStyle.Success : BadgeStyle.Danger)" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DkpTransactionDto" Property="Reason" Title="Reason" />
+                        <RadzenDataGridColumn TItem="DkpTransactionDto" Property="CreatedByDiscordName" Title="Created by" />
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+    </RadzenStack>
+}
+
+@code {
+    private DkpHistoryDto? history;
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var discordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(discordId))
+            {
+                throw new InvalidOperationException("The authenticated Discord user could not be identified.");
+            }
+
+            history = await DkpFacade.GetHistoryAsync(discordId);
+        }
+        catch (Exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load DKP", "Please try again later.");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}
