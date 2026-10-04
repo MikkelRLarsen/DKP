@@ -4,6 +4,7 @@
 @using DKP.Facade.Queries
 @inject IGuildMemberQueries GuildMemberQueries
 @inject NotificationService NotificationService
+@inject NavigationManager NavigationManager
 
 <PageTitle>Guild Members</PageTitle>
 
@@ -52,6 +53,11 @@ else
                         @(member.Characters.Count == 0 ? "No characters" : string.Join(", ", member.Characters.Select(character => $"{character.FirstName} {character.LastName}")))
                     </Template>
                 </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="GuildMemberDto" Title="Actions" Sortable="false" Filterable="false">
+                    <Template Context="member">
+                        <RadzenButton Text="View" Icon="open_in_new" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => ViewMember(member))" />
+                    </Template>
+                </RadzenDataGridColumn>
             </Columns>
         </RadzenDataGrid>
     </RadzenStack>
@@ -96,4 +102,7 @@ else
             await membersGrid.Reload();
         }
     }
+
+    private void ViewMember(GuildMemberDto member)
+        => NavigationManager.NavigateTo($"/members/{member.UserId}");
 }

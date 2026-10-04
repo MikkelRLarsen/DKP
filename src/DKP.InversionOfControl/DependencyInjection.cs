@@ -49,6 +49,7 @@ public static class DependencyInjection
 		services.AddScoped<IAccountQueries, AccountQueries>();
 		services.AddScoped<IDkpQueries, DkpQueries>();
 		services.AddScoped<IGuildMemberQueries, GuildMemberQueries>();
+		services.AddScoped<IPlayerDetailsQueries, PlayerDetailsQueries>();
 		services.AddScoped<IOfficerIdentityPolicy, OfficerIdentityPolicy>();
 		services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 		services.AddScoped<ICharacterCommands, CharacterCommandService>();

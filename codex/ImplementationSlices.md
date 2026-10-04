@@ -11,8 +11,8 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 3 | Officer DKP Management | Færdig |
 | 4 | Guild Members overview | Færdig |
 | 4a | Main Character | Færdig |
-| 5 | Player details | Næste |
-| 6 | Officer user administration | Planlagt |
+| 5 | Player details | Færdig |
+| 6 | Officer user administration | Næste |
 | 7 | LootReserve export | Planlagt |
 | 8 | Køb af Soft Reserves | Planlagt |
 | 9 | Deployment og production hardening | Planlagt |
@@ -276,7 +276,17 @@ Task<bool> SetMainCharacterAsync(
 
 ## Slice 5 – Player details
 
-Status: Næste.
+Status: Færdig.
+
+Leveret:
+
+- `PlayerDetailsDto` og `IPlayerDetailsQueries` i Facade.
+- `PlayerDetailsQueries` i Infrastructure med profile, characters og DKP-historik.
+- `/members/{userId}` for authenticated brugere.
+- Discord-profil, main-markering, characters, beregnet DKP-balance og komplet historik.
+- View-knap fra `/members`.
+- Loading, empty, not-found og error states.
+- Tests for detaljer, balance, characters, historik og ukendt bruger.
 
 ### Mål
 
@@ -298,6 +308,8 @@ Give brugere adgang til en detaljeret visning af en guildspiller.
 - Brugere kan ikke se domain entities eller databaseobjekter direkte.
 
 ## Slice 6 – Officer user administration
+
+Status: Næste.
 
 ### Mål
 

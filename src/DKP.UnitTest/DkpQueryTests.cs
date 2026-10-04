@@ -156,6 +156,42 @@ public sealed class DkpQueryTests
 		Assert.Equal("DiscordName / Main Character", summary.DisplayName);
 	}
 
+	[Fact]
+	public async Task Player_details_returns_profile_characters_balance_and_history()
+	{
+		var officer = new User("officer", "Officer", "officer-avatar", UserRole.Officer, DateTime.UtcNow);
+		var member = new User("member", "Member", "member-avatar", UserRole.Member, DateTime.UtcNow);
+		var mainCharacter = new Character(member.Id, "Main", "Character");
+		mainCharacter.SetAsMain();
+		member.Characters.Add(mainCharacter);
+		member.Characters.Add(new Character(member.Id, "Alt", "Character"));
+		await using var db = CreateDatabase();
+		db.Users.AddRange(officer, member);
+		db.DkpTransactions.Add(new DkpTransaction(member.Id, 40, "Raid", officer.Id, DateTime.UtcNow));
+		await db.SaveChangesAsync();
+
+		var result = await new PlayerDetailsQueries(db).GetAsync(member.Id);
+
+		Assert.NotNull(result);
+		Assert.Equal("Member", result.DiscordName);
+		Assert.Equal("member-avatar", result.AvatarUrl);
+		Assert.Equal(40, result.DkpHistory.Balance.Amount);
+		Assert.Equal(2, result.Characters.Count);
+		Assert.True(result.Characters[0].IsMain);
+		var transaction = Assert.Single(result.DkpHistory.Transactions);
+		Assert.Equal("Officer", transaction.CreatedByDiscordName);
+	}
+
+	[Fact]
+	public async Task Player_details_returns_null_for_unknown_user()
+	{
+		await using var db = CreateDatabase();
+
+		var result = await new PlayerDetailsQueries(db).GetAsync(Guid.NewGuid());
+
+		Assert.Null(result);
+	}
+
 	private static DkpDbContext CreateDatabase()
 	{
 		return new DkpDbContext(new DbContextOptionsBuilder<DkpDbContext>()
