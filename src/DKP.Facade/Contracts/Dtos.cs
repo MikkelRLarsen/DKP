@@ -25,3 +25,14 @@ public sealed record SoftReservePurchaseDto(Guid Id, int Quantity, int DkpCost, 
 }
 public sealed record DkpPurchaseOptionDto(string Key, string Name, string Description, int UnitCost);
 public sealed record SoftReserveSummaryDto(int DkpCost, int MaxReserves, int ActiveQuantity, IReadOnlyList<DkpPurchaseOptionDto> Options, IReadOnlyList<SoftReservePurchaseDto> Purchases);
+public sealed record ShopItemDto(Guid Id, string Key, string Name, string Description, int Price, int MaxPerUser, bool IsActive);
+public sealed record ShopPurchaseDto(Guid Id, Guid UserId, string UserName, string? MainCharacterName, Guid ShopItemId, string ItemName, int Quantity, int TotalDkpCost, DateTime CreatedAtUtc, DateTime? CancelledAtUtc)
+{
+	public bool IsCancelled => CancelledAtUtc is not null;
+}
+public sealed record ShopItemInput(string Key, string Name, string Description, int Price, int MaxPerUser);
+public sealed record ShopPurchaseRequest(Guid ShopItemId, int Quantity);
+public sealed record AdminShopPurchaseRequest(Guid ShopItemId, int Quantity, IReadOnlyList<Guid> TargetUserIds);
+public sealed record DkpAwardPresetDto(Guid Id, string Name, int Amount, string Reason, int MaxApplicationsPerUser, bool IsActive);
+public sealed record DkpAwardPresetInput(string Name, int Amount, string Reason, int MaxApplicationsPerUser);
+public sealed record DkpAcquisitionSourceDto(Guid PresetId, string Name, int Amount, string Reason, int Applications, int MaxApplications, int Remaining);

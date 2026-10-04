@@ -7,6 +7,8 @@ using DKP.Application.DkpTransactions;
 using DKP.Application.Persistence;
 using DKP.Application.Users;
 using DKP.Application.SoftReserves;
+using DKP.Application.Shop;
+using DKP.Application.Presets;
 using DKP.Facade;
 using DKP.Facade.Commands;
 using DKP.Facade.Queries;
@@ -49,6 +51,8 @@ public static class DependencyInjection
 		services.AddScoped<ICharacterRepository, CharacterRepository>();
 		services.AddScoped<IDkpTransactionRepository, DkpTransactionRepository>();
 		services.AddScoped<ISoftReservePurchaseRepository, SoftReservePurchaseRepository>();
+		services.AddScoped<IShopRepository, ShopRepository>();
+		services.AddScoped<IPresetRepository, PresetRepository>();
 		services.AddScoped<ISoftReserveSettings, ConfigurationSoftReserveSettings>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
 		services.AddScoped<IDkpQueries, DkpQueries>();
@@ -62,6 +66,10 @@ public static class DependencyInjection
 		services.AddScoped<ISoftReserveQueries, SoftReserveQueries>();
 		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();
 		services.AddScoped<IUserAdministrationQueries, UserAdministrationQueries>();
+		services.AddScoped<IShopQueries, ShopQueries>();
+		services.AddScoped<IShopCommands, ShopCommandService>();
+		services.AddScoped<IDkpPresetQueries, DkpPresetQueries>();
+		services.AddScoped<IDkpPresetCommands, DkpPresetCommandService>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));
 		services.AddAuthentication(options =>

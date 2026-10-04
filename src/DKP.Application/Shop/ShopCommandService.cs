@@ -1,0 +1,27 @@
+using DKP.Application.Persistence;
+using DKP.Application.Authentication;
+using DKP.Domain;
+using DKP.Facade.Commands;
+using DKP.Facade.Contracts;
+namespace DKP.Application.Shop;
+public sealed class ShopCommandService(IUserRepository users, IShopRepository shop, IDkpTransactionRepository transactions, TimeProvider time) : IShopCommands
+{
+	private async Task<User> Actor(string id, CancellationToken ct) => await users.FindByDiscordIdAsync(id, ct) ?? throw new UnauthorizedAccessException("Authenticated user does not exist.");
+	private static void EnsureOfficer(User u) { if (u.Role != UserRole.Officer) throw new UnauthorizedAccessException("Only Officers can perform this action."); }
+	private static ShopItemDto Dto(ShopItem x) => new(x.Id,x.Key,x.Name,x.Description,x.Price,x.MaxPerUser,x.IsActive);
+	public async Task<ShopItemDto> CreateItemAsync(string actorDiscordId, ShopItemInput input, CancellationToken ct = default) { var a=await Actor(actorDiscordId,ct); EnsureOfficer(a); Validate(input); var now=time.GetUtcNow().UtcDateTime; var item=new ShopItem(input.Key.Trim(),input.Name.Trim(),input.Description.Trim(),input.Price,input.MaxPerUser,now); await shop.AddItemAsync(item,ct); await shop.SaveChangesAsync(ct); return Dto(item); }
+	public async Task<ShopItemDto> UpdateItemAsync(string actorDiscordId, Guid itemId, ShopItemInput input, CancellationToken ct = default) { var a=await Actor(actorDiscordId,ct); EnsureOfficer(a); Validate(input); var item=await shop.FindItemAsync(itemId,ct)??throw new KeyNotFoundException("Shop item not found."); item.Update(input.Name.Trim(),input.Description.Trim(),input.Price,input.MaxPerUser,time.GetUtcNow().UtcDateTime); await shop.SaveChangesAsync(ct); return Dto(item); }
+	public async Task SetActiveAsync(string actorDiscordId, Guid itemId, bool active, CancellationToken ct = default) { var a=await Actor(actorDiscordId,ct); EnsureOfficer(a); var item=await shop.FindItemAsync(itemId,ct)??throw new KeyNotFoundException("Shop item not found."); item.SetActive(active,time.GetUtcNow().UtcDateTime); await shop.SaveChangesAsync(ct); }
+	public async Task<IReadOnlyList<ShopPurchaseDto>> PurchaseAsync(string actorDiscordId, ShopPurchaseRequest request, CancellationToken ct = default) => await PurchaseForUsersAsync(actorDiscordId,new AdminShopPurchaseRequest(request.ShopItemId,request.Quantity,[ (await Actor(actorDiscordId,ct)).Id ]),ct);
+	public async Task<IReadOnlyList<ShopPurchaseDto>> PurchaseForUsersAsync(string actorDiscordId, AdminShopPurchaseRequest request, CancellationToken ct = default)
+	{
+		var actor=await Actor(actorDiscordId,ct); if (actor.IsBlocked) throw new UnauthorizedAccessException("Blocked users cannot purchase.");
+		if (request.TargetUserIds.Count == 0 || request.Quantity <= 0) throw new ArgumentException("At least one user and a positive quantity are required.");
+		if (actor.Role != UserRole.Officer && request.TargetUserIds.Any(x=>x!=actor.Id)) throw new UnauthorizedAccessException("Members may only purchase for themselves.");
+		var item=await shop.FindItemAsync(request.ShopItemId,ct)??throw new KeyNotFoundException("Shop item not found."); if (!item.IsActive) throw new InvalidOperationException("Shop item is inactive.");
+		var targets=new List<User>(); foreach(var id in request.TargetUserIds.Distinct()){var u=await users.FindByIdAsync(id,ct)??throw new KeyNotFoundException("Target user not found."); if(u.IsBlocked) throw new InvalidOperationException("A selected user is blocked."); var current=await shop.GetActiveQuantityAsync(u.Id,item.Id,ct); if(current+request.Quantity>item.MaxPerUser) throw new InvalidOperationException($"{u.DiscordName} exceeds the maximum quantity."); var cost=checked(item.Price*request.Quantity); if(await transactions.GetBalanceAsync(u.Id,ct)<cost) throw new InvalidOperationException($"{u.DiscordName} has insufficient DKP."); targets.Add(u);}
+		var now=time.GetUtcNow().UtcDateTime; var result=new List<ShopPurchaseDto>(); foreach(var u in targets){var cost=checked(item.Price*request.Quantity);var p=new ShopPurchase(u.Id,item.Id,request.Quantity,cost,actor.Id,now);var tx=new DkpTransaction(u.Id,-cost,$"Purchase: {item.Name} x{request.Quantity}",actor.Id,now);await shop.AddPurchaseAsync(p,ct);await transactions.AddAsync(tx,ct);result.Add(new ShopPurchaseDto(p.Id,u.Id,u.DiscordName,u.Characters.FirstOrDefault(c=>c.IsMain) is { } c?$"{c.FirstName} {c.LastName}":null,item.Id,item.Name,p.Quantity,p.TotalDkpCost,p.CreatedAtUtc,null));} await shop.SaveChangesAsync(ct); return result;
+	}
+	public async Task CancelAsync(string actorDiscordId, Guid purchaseId, CancellationToken ct = default){var actor=await Actor(actorDiscordId,ct);var p=await shop.FindPurchaseAsync(purchaseId,ct)??throw new KeyNotFoundException("Purchase not found.");if(p.UserId!=actor.Id && actor.Role!=UserRole.Officer)throw new UnauthorizedAccessException("You cannot cancel this purchase.");p.Cancel(time.GetUtcNow().UtcDateTime);var tx=new DkpTransaction(p.UserId,p.TotalDkpCost,"Purchase cancellation",actor.Id,time.GetUtcNow().UtcDateTime);await transactions.AddAsync(tx,ct);await shop.SaveChangesAsync(ct);}
+	private static void Validate(ShopItemInput i){if(string.IsNullOrWhiteSpace(i.Key)||string.IsNullOrWhiteSpace(i.Name)||i.Description is null)throw new ArgumentException("Key, name and description are required.");if(i.Price<=0||i.MaxPerUser<=0)throw new ArgumentException("Price and maximum must be positive.");}
+}

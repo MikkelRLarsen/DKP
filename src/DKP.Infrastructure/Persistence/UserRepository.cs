@@ -20,4 +20,7 @@ public sealed class UserRepository(DkpDbContext db) : IUserRepository
 
 	public Task SaveChangesAsync(CancellationToken cancellationToken = default)
 		=> db.SaveChangesAsync(cancellationToken);
+
+	public async Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken = default)
+		=> await db.Users.AsNoTracking().Include(x => x.Characters).OrderBy(x => x.DiscordName).ToArrayAsync(cancellationToken);
 }

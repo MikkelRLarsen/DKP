@@ -9,6 +9,10 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 	public DbSet<Character> Characters => Set<Character>();
 	public DbSet<DkpTransaction> DkpTransactions => Set<DkpTransaction>();
 	public DbSet<SoftReservePurchase> SoftReservePurchases => Set<SoftReservePurchase>();
+	public DbSet<ShopItem> ShopItems => Set<ShopItem>();
+	public DbSet<ShopPurchase> ShopPurchases => Set<ShopPurchase>();
+	public DbSet<DkpAwardPreset> DkpAwardPresets => Set<DkpAwardPreset>();
+	public DbSet<DkpAwardPresetApplication> DkpAwardPresetApplications => Set<DkpAwardPresetApplication>();
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
@@ -20,6 +24,8 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 			entity.Property(user => user.DiscordName).HasMaxLength(128).IsRequired();
 			entity.Property(user => user.AvatarUrl).HasMaxLength(512);
 			entity.Property(user => user.Role).HasConversion<string>().HasMaxLength(32).IsRequired();
+			entity.Property(user => user.BlockReason).HasMaxLength(500);
+			entity.HasIndex(user => user.IsBlocked);
 			entity.HasMany(user => user.Characters)
 				.WithOne(character => character.User)
 				.HasForeignKey(character => character.UserId)
@@ -67,6 +73,49 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 				.WithMany(user => user.SoftReservePurchases)
 				.HasForeignKey(purchase => purchase.UserId)
 				.OnDelete(DeleteBehavior.Cascade);
+		});
+
+		modelBuilder.Entity<ShopItem>(entity =>
+		{
+			entity.HasKey(item => item.Id);
+			entity.HasIndex(item => item.Key).IsUnique();
+			entity.Property(item => item.Key).HasMaxLength(64).IsRequired();
+			entity.Property(item => item.Name).HasMaxLength(128).IsRequired();
+			entity.Property(item => item.Description).HasMaxLength(500).IsRequired();
+			entity.Property(item => item.Price).IsRequired();
+			entity.Property(item => item.MaxPerUser).IsRequired();
+			entity.Property(item => item.CreatedAtUtc).IsRequired();
+			entity.Property(item => item.UpdatedAtUtc).IsRequired();
+		});
+
+		modelBuilder.Entity<ShopPurchase>(entity =>
+		{
+			entity.HasKey(purchase => purchase.Id);
+			entity.Property(purchase => purchase.Quantity).IsRequired();
+			entity.Property(purchase => purchase.TotalDkpCost).IsRequired();
+			entity.HasIndex(purchase => new { purchase.UserId, purchase.ShopItemId });
+			entity.HasIndex(purchase => purchase.CreatedAtUtc);
+			entity.HasOne(purchase => purchase.User).WithMany(user => user.ShopPurchases).HasForeignKey(purchase => purchase.UserId).OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(purchase => purchase.ShopItem).WithMany(item => item.Purchases).HasForeignKey(purchase => purchase.ShopItemId).OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(purchase => purchase.CreatedByUser).WithMany(user => user.CreatedShopPurchases).HasForeignKey(purchase => purchase.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+		});
+
+		modelBuilder.Entity<DkpAwardPreset>(entity =>
+		{
+			entity.HasKey(preset => preset.Id);
+			entity.HasIndex(preset => preset.Name).IsUnique();
+			entity.Property(preset => preset.Name).HasMaxLength(128).IsRequired();
+			entity.Property(preset => preset.Reason).HasMaxLength(500).IsRequired();
+		});
+
+		modelBuilder.Entity<DkpAwardPresetApplication>(entity =>
+		{
+			entity.HasKey(application => application.Id);
+			entity.HasIndex(application => new { application.PresetId, application.UserId });
+			entity.HasOne(application => application.Preset).WithMany().HasForeignKey(application => application.PresetId).OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(application => application.User).WithMany().HasForeignKey(application => application.UserId).OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(application => application.DkpTransaction).WithMany().HasForeignKey(application => application.DkpTransactionId).OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(application => application.AppliedByUser).WithMany().HasForeignKey(application => application.AppliedByUserId).OnDelete(DeleteBehavior.Restrict);
 		});
 	}
 }
