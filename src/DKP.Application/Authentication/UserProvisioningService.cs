@@ -20,18 +20,21 @@ public sealed class UserProvisioningService(
 			throw new ArgumentException("Discord display name is required.", nameof(profile));
 		}
 
-		var role = officerIdentityPolicy.IsOfficer(profile.DiscordId)
-			? UserRole.Officer
-			: UserRole.Member;
 		var user = await users.FindByDiscordIdAsync(profile.DiscordId, cancellationToken);
 
 		if (user is null)
 		{
+			var role = officerIdentityPolicy.IsOfficer(profile.DiscordId)
+				? UserRole.Officer
+				: UserRole.Member;
 			user = new User(profile.DiscordId, profile.DiscordName, profile.AvatarUrl, role, timeProvider.GetUtcNow().UtcDateTime);
 			await users.AddAsync(user, cancellationToken);
 		}
 		else
 		{
+			var role = officerIdentityPolicy.IsOfficer(profile.DiscordId)
+				? UserRole.Officer
+				: user.Role;
 			user.UpdateProfile(profile.DiscordName, profile.AvatarUrl, role);
 		}
 

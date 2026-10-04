@@ -1,6 +1,7 @@
 using DKP.Application.Authentication;
 using DKP.Application.Characters;
 using DKP.Application.Persistence;
+using DKP.Application.Users;
 using DKP.Domain;
 using DKP.Infrastructure.Persistence;
 using DKP.Facade.Contracts;
@@ -15,7 +16,7 @@ public sealed class ApplicationTests
 	public async Task Provisioning_creates_new_user_and_assigns_officer_role()
 	{
 		var users = new FakeUserRepository();
-		var service = new UserProvisioningService(users, new FakeOfficerPolicy(true), TimeProvider.System);
+		var service = new UserProvisioningService(users, new FakeOfficerPolicy("123"), TimeProvider.System);
 
 		var user = await service.ProvisionAsync(new DiscordUserProfile("123", "Shock", "avatar"));
 
@@ -28,7 +29,7 @@ public sealed class ApplicationTests
 	public async Task Provisioning_updates_existing_user_without_creating_duplicate()
 	{
 		var users = new FakeUserRepository();
-		var service = new UserProvisioningService(users, new FakeOfficerPolicy(false), TimeProvider.System);
+		var service = new UserProvisioningService(users, new FakeOfficerPolicy(), TimeProvider.System);
 
 		var first = await service.ProvisionAsync(new DiscordUserProfile("123", "OldName", null));
 		var second = await service.ProvisionAsync(new DiscordUserProfile("123", "NewName", "avatar"));
@@ -37,6 +38,61 @@ public sealed class ApplicationTests
 		Assert.Equal("NewName", second.DiscordName);
 		Assert.Equal(UserRole.Member, second.Role);
 		Assert.Single(users.Users);
+	}
+
+	[Fact]
+	public async Task Provisioning_preserves_role_changes_for_non_bootstrap_users()
+	{
+		var users = new FakeUserRepository();
+		var user = new User("123", "Member", null, UserRole.Officer, DateTime.UtcNow);
+		users.Users.Add(user);
+		var service = new UserProvisioningService(users, new FakeOfficerPolicy(), TimeProvider.System);
+
+		var result = await service.ProvisionAsync(new DiscordUserProfile("123", "Member", null));
+
+		Assert.Equal(UserRole.Officer, result.Role);
+	}
+
+	[Fact]
+	public async Task Officer_can_change_member_role()
+	{
+		var users = new FakeUserRepository();
+		var officer = new User("officer", "Officer", null, UserRole.Officer, DateTime.UtcNow);
+		var member = new User("member", "Member", null, UserRole.Member, DateTime.UtcNow);
+		users.Users.AddRange([officer, member]);
+		var service = new UserRoleCommandService(users, new FakeOfficerPolicy("officer"));
+
+		var result = await service.SetRoleAsync("officer", new SetUserRoleRequest(member.Id, UserRole.Officer));
+
+		Assert.True(result);
+		Assert.Equal(UserRole.Officer, member.Role);
+	}
+
+	[Fact]
+	public async Task Member_cannot_change_user_roles()
+	{
+		var users = new FakeUserRepository();
+		var member = new User("member", "Member", null, UserRole.Member, DateTime.UtcNow);
+		var other = new User("other", "Other", null, UserRole.Member, DateTime.UtcNow);
+		users.Users.AddRange([member, other]);
+		var service = new UserRoleCommandService(users, new FakeOfficerPolicy());
+
+		await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+			service.SetRoleAsync("member", new SetUserRoleRequest(other.Id, UserRole.Officer)));
+	}
+
+	[Fact]
+	public async Task Bootstrap_officer_cannot_be_demoted()
+	{
+		var users = new FakeUserRepository();
+		var officer = new User("bootstrap", "Bootstrap", null, UserRole.Officer, DateTime.UtcNow);
+		var actor = new User("actor", "Actor", null, UserRole.Officer, DateTime.UtcNow);
+		users.Users.AddRange([officer, actor]);
+		var service = new UserRoleCommandService(users, new FakeOfficerPolicy("bootstrap", "actor"));
+
+		await Assert.ThrowsAsync<InvalidOperationException>(() =>
+			service.SetRoleAsync("actor", new SetUserRoleRequest(officer.Id, UserRole.Member)));
+		Assert.Equal(UserRole.Officer, officer.Role);
 	}
 
 	[Fact]
@@ -129,9 +185,11 @@ public sealed class ApplicationTests
 		Assert.Equal(2, loaded.Characters.Count);
 	}
 
-	private sealed class FakeOfficerPolicy(bool officer) : IOfficerIdentityPolicy
+	private sealed class FakeOfficerPolicy(params string[] officerIds) : IOfficerIdentityPolicy
 	{
-		public bool IsOfficer(string discordId) => officer;
+		private readonly HashSet<string> ids = officerIds.ToHashSet(StringComparer.Ordinal);
+
+		public bool IsOfficer(string discordId) => ids.Contains(discordId);
 	}
 
 	private sealed class FakeUserRepository : IUserRepository

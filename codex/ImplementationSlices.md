@@ -12,8 +12,8 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 4 | Guild Members overview | Færdig |
 | 4a | Main Character | Færdig |
 | 5 | Player details | Færdig |
-| 6 | Officer user administration | Næste |
-| 7 | LootReserve export | Planlagt |
+| 6 | Officer user administration | Færdig |
+| 7 | LootReserve export | Næste |
 | 8 | Køb af Soft Reserves | Planlagt |
 | 9 | Deployment og production hardening | Planlagt |
 
@@ -309,7 +309,19 @@ Give brugere adgang til en detaljeret visning af en guildspiller.
 
 ## Slice 6 – Officer user administration
 
-Status: Næste.
+Status: Færdig.
+
+Leveret:
+
+- Officer-only brugeroversigt med Discord-navn, main character og rolle.
+- `IUserAdministrationQueries` og `IUserRoleCommands` i Facade.
+- Rolleændringer gennem Application business logic og Infrastructure persistence.
+- Serverside Officer-authorization på role commands.
+- Bootstrap-Officers fra `Discord:OfficerUserIds` kan ikke demoteres.
+- Normale rolleændringer bevares ved efterfølgende Discord-login.
+- Confirmation, loading, notifications og opdatering af brugerlisten i Administration.
+- Administration er opdelt i `/admin`, `/admin/dkp` og `/admin/users` med en hierarkisk Radzen-menu.
+- Tests for rolleændring, authorization, bootstrap-beskyttelse og provisioning.
 
 ### Mål
 
@@ -331,6 +343,8 @@ Give Officer-brugere mulighed for at administrere Member/Officer-roller.
 - Bootstrap-officers kan fortsat logge ind som Officer.
 
 ## Slice 7 – LootReserve export
+
+Status: Næste.
 
 ### Mål
 

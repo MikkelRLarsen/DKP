@@ -11,6 +11,7 @@ public sealed record UserSummary(Guid Id, string DiscordId, string DiscordName, 
 		? DiscordName
 		: $"{DiscordName} / {MainCharacterName}";
 }
+public sealed record SetUserRoleRequest(Guid TargetUserId, UserRole Role);
 public sealed record GuildMemberDto(Guid UserId, string DiscordName, string? AvatarUrl, int DkpBalance, IReadOnlyList<CharacterDto> Characters);
 public sealed record PlayerDetailsDto(Guid UserId, string DiscordName, string? AvatarUrl, IReadOnlyList<CharacterDto> Characters, DkpHistoryDto DkpHistory);
 public sealed record CreateDkpTransactionRequest(Guid TargetUserId, int Amount, string Reason);

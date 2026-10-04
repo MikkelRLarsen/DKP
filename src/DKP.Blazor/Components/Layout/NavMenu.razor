@@ -6,7 +6,11 @@
             <RadzenPanelMenuItem Text="Guild Members" Icon="groups" Path="/members" />
             <AuthorizeView Roles="Officer">
                 <Authorized Context="officerContext">
-                    <RadzenPanelMenuItem Text="Administration" Icon="admin_panel_settings" Path="/admin" />
+                    <RadzenPanelMenuItem Text="Administration" Icon="admin_panel_settings">
+                        <RadzenPanelMenuItem Text="Overview" Icon="dashboard" Path="/admin" />
+                        <RadzenPanelMenuItem Text="DKP Management" Icon="account_balance_wallet" Path="/admin/dkp" />
+                        <RadzenPanelMenuItem Text="User Management" Icon="manage_accounts" Path="/admin/users" />
+                    </RadzenPanelMenuItem>
                 </Authorized>
             </AuthorizeView>
         </Authorized>

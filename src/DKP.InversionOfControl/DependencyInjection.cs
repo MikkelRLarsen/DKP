@@ -5,6 +5,7 @@ using DKP.Application.Authentication;
 using DKP.Application.Characters;
 using DKP.Application.DkpTransactions;
 using DKP.Application.Persistence;
+using DKP.Application.Users;
 using DKP.Facade;
 using DKP.Facade.Commands;
 using DKP.Facade.Queries;
@@ -54,6 +55,8 @@ public static class DependencyInjection
 		services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 		services.AddScoped<ICharacterCommands, CharacterCommandService>();
 		services.AddScoped<IDkpTransactionCommands, DkpTransactionCommandService>();
+		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();
+		services.AddScoped<IUserAdministrationQueries, UserAdministrationQueries>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));
 		services.AddAuthentication(options =>

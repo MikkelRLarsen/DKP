@@ -1,0 +1,116 @@
+@page "/admin/users"
+@attribute [Authorize(Roles = "Officer")]
+@using DKP.Domain
+@using System.Security.Claims
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IUserAdministrationQueries UserAdministrationQueries
+@inject IUserRoleCommands UserRoleCommands
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>User Management</PageTitle>
+
+<RadzenStack Gap="1.5rem">
+    <div>
+        <h1>User Management</h1>
+        <RadzenText Text="Manage Member and Officer roles" TextStyle="TextStyle.Subtitle2" />
+    </div>
+
+    @if (loading)
+    {
+        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText Text="Loading users..." />
+        </RadzenStack>
+    }
+    else if (loadFailed)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load user roles.</RadzenAlert>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenDataGrid Data="@users" TItem="UserSummary" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No users found." Responsive="true">
+                <Columns>
+                    <RadzenDataGridColumn TItem="UserSummary" Property="DiscordName" Title="Discord name" />
+                    <RadzenDataGridColumn TItem="UserSummary" Property="MainCharacterName" Title="Main character" />
+                    <RadzenDataGridColumn TItem="UserSummary" Property="Role" Title="Role" />
+                    <RadzenDataGridColumn TItem="UserSummary" Title="Actions" Sortable="false" Filterable="false">
+                        <Template Context="user">
+                            <RadzenButton Text="@(user.Role == UserRole.Officer ? "Set Member" : "Set Officer")" Icon="@(user.Role == UserRole.Officer ? "person" : "admin_panel_settings")" ButtonStyle="@(user.Role == UserRole.Officer ? ButtonStyle.Light : ButtonStyle.Primary)" Size="ButtonSize.Small" Click="@(() => ChangeRoleAsync(user))" Disabled="@saving" />
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private IReadOnlyList<UserSummary> users = Array.Empty<UserSummary>();
+    private string officerDiscordId = string.Empty;
+    private bool loading = true;
+    private bool loadFailed;
+    private bool saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            officerDiscordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            users = await UserAdministrationQueries.GetAllAsync();
+        }
+        catch (Exception)
+        {
+            loadFailed = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load users", "Please try again later.");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task ChangeRoleAsync(UserSummary user)
+    {
+        var newRole = user.Role == UserRole.Officer ? UserRole.Member : UserRole.Officer;
+        var roleName = newRole == UserRole.Officer ? "Officer" : "Member";
+        var confirmed = await DialogService.Confirm($"Are you sure you want to set {user.DisplayName} as {roleName}?", "Confirm role change", new ConfirmOptions { OkButtonText = "Confirm", CancelButtonText = "Cancel" });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            await UserRoleCommands.SetRoleAsync(officerDiscordId, new SetUserRoleRequest(user.Id, newRole));
+            users = await UserAdministrationQueries.GetAllAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Role updated", $"{user.DisplayName} is now a {roleName}.");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Not authorized", "Only Officers can manage user roles.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Role change rejected", exception.Message);
+        }
+        catch (KeyNotFoundException)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "User not found", "The selected user no longer exists.");
+        }
+        catch (Exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Role update failed", "Please try again later.");
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

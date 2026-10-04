@@ -157,6 +157,26 @@ public sealed class DkpQueryTests
 	}
 
 	[Fact]
+	public async Task User_administration_query_returns_roles_and_main_characters()
+	{
+		var officer = new User("officer", "Officer", null, UserRole.Officer, DateTime.UtcNow);
+		var main = new Character(officer.Id, "Main", "Character");
+		main.SetAsMain();
+		officer.Characters.Add(main);
+		var member = new User("member", "Member", null, UserRole.Member, DateTime.UtcNow);
+		await using var db = CreateDatabase();
+		db.Users.AddRange(officer, member);
+		await db.SaveChangesAsync();
+
+		var result = await new UserAdministrationQueries(db).GetAllAsync();
+
+		Assert.Equal(2, result.Count);
+		var loadedOfficer = Assert.Single(result, user => user.Id == officer.Id);
+		Assert.Equal(UserRole.Officer, loadedOfficer.Role);
+		Assert.Equal("Main Character", loadedOfficer.MainCharacterName);
+	}
+
+	[Fact]
 	public async Task Player_details_returns_profile_characters_balance_and_history()
 	{
 		var officer = new User("officer", "Officer", "officer-avatar", UserRole.Officer, DateTime.UtcNow);

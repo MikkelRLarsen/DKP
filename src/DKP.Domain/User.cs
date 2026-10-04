@@ -35,4 +35,6 @@ public sealed class User
 		AvatarUrl = avatarUrl;
 		Role = role;
 	}
+
+	public void SetRole(UserRole role) => Role = role;
 }
