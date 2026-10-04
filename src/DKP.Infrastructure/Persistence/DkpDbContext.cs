@@ -8,6 +8,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 	public DbSet<User> Users => Set<User>();
 	public DbSet<Character> Characters => Set<Character>();
 	public DbSet<DkpTransaction> DkpTransactions => Set<DkpTransaction>();
+	public DbSet<SoftReservePurchase> SoftReservePurchases => Set<SoftReservePurchase>();
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
@@ -52,6 +53,20 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 				.WithMany(user => user.CreatedDkpTransactions)
 				.HasForeignKey(transaction => transaction.CreatedByUserId)
 				.OnDelete(DeleteBehavior.Restrict);
+		});
+
+		modelBuilder.Entity<SoftReservePurchase>(entity =>
+		{
+			entity.HasKey(purchase => purchase.Id);
+			entity.Property(purchase => purchase.Quantity).IsRequired();
+			entity.Property(purchase => purchase.DkpCost).IsRequired();
+			entity.Property(purchase => purchase.CreatedAtUtc).IsRequired();
+			entity.Property(purchase => purchase.CancelledAtUtc);
+			entity.HasIndex(purchase => purchase.UserId);
+			entity.HasOne(purchase => purchase.User)
+				.WithMany(user => user.SoftReservePurchases)
+				.HasForeignKey(purchase => purchase.UserId)
+				.OnDelete(DeleteBehavior.Cascade);
 		});
 	}
 }

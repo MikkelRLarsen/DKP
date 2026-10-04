@@ -18,3 +18,10 @@ public sealed record CreateDkpTransactionRequest(Guid TargetUserId, int Amount, 
 public sealed record DkpTransactionDto(Guid Id, int Amount, string Reason, DateTime CreatedAtUtc, string CreatedByDiscordName);
 public sealed record BalanceDto(int Amount);
 public sealed record DkpHistoryDto(BalanceDto Balance, IReadOnlyList<DkpTransactionDto> Transactions);
+public sealed record PurchaseSoftReserveRequest(int Quantity);
+public sealed record SoftReservePurchaseDto(Guid Id, int Quantity, int DkpCost, DateTime CreatedAtUtc, DateTime? CancelledAtUtc)
+{
+	public bool IsCancelled => CancelledAtUtc is not null;
+}
+public sealed record DkpPurchaseOptionDto(string Key, string Name, string Description, int UnitCost);
+public sealed record SoftReserveSummaryDto(int DkpCost, int MaxReserves, int ActiveQuantity, IReadOnlyList<DkpPurchaseOptionDto> Options, IReadOnlyList<SoftReservePurchaseDto> Purchases);

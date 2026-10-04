@@ -13,8 +13,8 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 4a | Main Character | Færdig |
 | 5 | Player details | Færdig |
 | 6 | Officer user administration | Færdig |
-| 7 | LootReserve export | Næste |
-| 8 | Køb af Soft Reserves | Planlagt |
+| 7 | Køb af Soft Reserves | Færdig |
+| 8 | LootReserve export | Næste |
 | 9 | Deployment og production hardening | Planlagt |
 
 ## Arkitektoniske regler
@@ -342,7 +342,50 @@ Give Officer-brugere mulighed for at administrere Member/Officer-roller.
 - Rolleændring anvendes ved næste login.
 - Bootstrap-officers kan fortsat logge ind som Officer.
 
-## Slice 7 – LootReserve export
+## Slice 7 – Køb af Soft Reserves
+
+Status: Færdig.
+
+### Mål
+
+Give brugere mulighed for at købe ekstra Soft Reserves med DKP.
+
+### Scope
+
+- Domain entity `SoftReservePurchase`.
+- Konfigurerbar pris og maksimum antal via `SoftReserve:DkpCost` og `SoftReserve:MaxReserves`.
+- Balance-, maksimums- og duplicate-validering serverside.
+- Atomisk oprettelse af purchase og negativ DKP-transaktion.
+- Confirmation dialog og brugerflow på `/dkp-shop`.
+
+`SoftReservePurchase` indeholder:
+
+- `Id`
+- `UserId`
+- `Quantity`
+- `CancelledAtUtc`
+- `DkpCost`
+- `CreatedAtUtc`
+
+### Acceptkriterier
+
+- Gyldigt køb opretter purchase og negativ DKP-transaktion atomisk.
+- Utilstrækkelig saldo afvises.
+- Maksimum samlet antal og positiv quantity håndhæves.
+- Annullerede køb kan ikke annulleres igen.
+- Ny EF Core migration er genereret.
+- Brugerens saldo og Soft Reserve-liste opdateres efter køb.
+
+Leveret:
+
+- `ISoftReserveCommands` og `ISoftReserveQueries` i Facade.
+- Application command med authenticated user, balancekontrol og atomic persistence.
+- Infrastructure mapping, repositories, query og migrationerne `AddSoftReservePurchases` og `AddSoftReserveQuantityAndCancellation`.
+- Konfiguration med defaults: 10 DKP pr. reserve og maksimalt 2 reserves.
+- `/dkp-shop` med produkt-dropdown, quantity, confirmation, købshistorik og annullering.
+- Tests for køb, refundering, quantity, saldo, brugerafgrænsning og query.
+
+## Slice 8 – LootReserve export
 
 Status: Næste.
 
@@ -352,18 +395,11 @@ Generere en kopiérbar tekstliste til LootReserve uden direkte addon-integration
 
 ### Scope
 
-- Officer-only side.
-- RadzenDataGrid med spiller og reserve limit.
+- Officer-only side under Administration.
+- RadzenDataGrid med spiller og samlet reserve limit.
 - Generate Export.
 - CSV/text-output i `RadzenTextArea`.
 - Copy-to-clipboard.
-
-Outputformat:
-
-```text
-Player,ReserveLimit
-Shockadin,1
-```
 
 ### Acceptkriterier
 
@@ -371,38 +407,6 @@ Shockadin,1
 - Specialtegn håndteres korrekt.
 - Kun Officer kan generere eksporten.
 - Ingen direkte kommunikation med World of Warcraft eller LootReserve.
-
-## Slice 8 – Køb af Soft Reserves
-
-### Mål
-
-Give brugere mulighed for at købe ekstra Soft Reserves med DKP.
-
-### Scope
-
-- Domain entity `SoftReservePurchase`.
-- Konfigurerbar pris og maksimum antal.
-- Confirmation dialog.
-- Balance- og maksimumsvalidering serverside.
-- Atomisk oprettelse af purchase og negativ DKP-transaktion.
-- Opdateret LootReserve reserve limit.
-
-`SoftReservePurchase` skal indeholde:
-
-- `Id`
-- `UserId`
-- `ReserveNumber`
-- `DkpCost`
-- `CreatedAtUtc`
-
-### Acceptkriterier
-
-- Gyldigt køb opretter purchase og DKP-transaktion atomisk.
-- Utilstrækkelig saldo afvises.
-- Maksimum antal håndhæves.
-- Duplicate purchase afvises.
-- Fejl ruller både purchase og transaktion tilbage.
-- LootReserve-export viser korrekt samlet reserve limit.
 
 ## Slice 9 – Deployment og production hardening
 

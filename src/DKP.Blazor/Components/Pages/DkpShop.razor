@@ -1,0 +1,218 @@
+@page "/dkp-shop"
+@attribute [Authorize]
+@using System.Security.Claims
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IDkpQueries DkpQueries
+@inject ISoftReserveQueries SoftReserveQueries
+@inject ISoftReserveCommands SoftReserveCommands
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>DKP Shop</PageTitle>
+
+@if (loading)
+{
+    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        <RadzenText Text="Loading DKP Shop..." />
+    </RadzenStack>
+}
+else if (summary is null || history is null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load the DKP Shop.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1.5rem">
+        <div>
+            <h1>DKP Shop</h1>
+            <RadzenText Text="Use DKP to purchase guild benefits." TextStyle="TextStyle.Subtitle2" />
+        </div>
+
+        <RadzenCard Style="max-width: 20rem;">
+            <RadzenText Text="Current DKP" TextStyle="TextStyle.Overline" />
+            <RadzenText Text="@history.Balance.Amount.ToString("+#;-#;0")" Style="font-size: 2.5rem; font-weight: 700;" />
+        </RadzenCard>
+
+        <RadzenCard Style="max-width: 50rem;">
+            <RadzenStack Gap="1rem">
+                <RadzenText Text="New purchase" TextStyle="TextStyle.H5" />
+                <RadzenFormField Text="What would you like to buy?" Style="width: 100%;">
+                    <ChildContent>
+                        <RadzenDropDown @bind-Value="selectedProductKey" Data="@summary.Options" TextProperty="Name" ValueProperty="Key" AllowFiltering="false" Style="width: 100%;" />
+                    </ChildContent>
+                </RadzenFormField>
+
+                @if (selectedProduct is not null)
+                {
+                    <RadzenText Text="@(selectedProduct.Description + $" Cost: {selectedProduct.UnitCost} DKP per unit.")" />
+                    <RadzenFormField Text="Quantity">
+                        <ChildContent>
+                            <RadzenNumeric @bind-Value="quantity" Min="1" Max="@AvailableQuantity" ShowUpDown="true" />
+                        </ChildContent>
+                    </RadzenFormField>
+                    <RadzenText Text="@( $"Total cost: {selectedProduct.UnitCost * quantity} DKP")" />
+                    <RadzenButton Text="Purchase" Icon="shopping_cart" ButtonStyle="ButtonStyle.Primary" Click="@PurchaseAsync" Disabled="@(saving || AvailableQuantity < 1)" />
+                }
+
+                @if (saving)
+                {
+                    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                }
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenText Text="My purchases" TextStyle="TextStyle.H5" />
+            @if (summary.Purchases.Count == 0)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" Style="margin-top: 1rem;">You have not made any purchases yet.</RadzenAlert>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@summary.Purchases" TItem="SoftReservePurchaseDto" AllowPaging="true" PageSize="10" AllowSorting="true" EmptyText="No purchases found." Style="margin-top: 1rem;">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="SoftReservePurchaseDto" Property="Quantity" Title="Quantity" />
+                        <RadzenDataGridColumn TItem="SoftReservePurchaseDto" Property="DkpCost" Title="DKP" />
+                        <RadzenDataGridColumn TItem="SoftReservePurchaseDto" Property="CreatedAtUtc" Title="Purchased">
+                            <Template Context="purchase">@purchase.CreatedAtUtc.ToLocalTime().ToString("g")</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="SoftReservePurchaseDto" Title="Status" Sortable="false">
+                            <Template Context="purchase">
+                                <RadzenBadge Text="@(purchase.IsCancelled ? "Cancelled" : "Active")" BadgeStyle="@(purchase.IsCancelled ? BadgeStyle.Light : BadgeStyle.Success)" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="SoftReservePurchaseDto" Title="Actions" Sortable="false" Filterable="false">
+                            <Template Context="purchase">
+                                @if (!purchase.IsCancelled)
+                                {
+                                    <RadzenButton Text="Cancel" Icon="cancel" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => CancelAsync(purchase))" Disabled="@saving" />
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+    </RadzenStack>
+}
+
+@code {
+    private DkpHistoryDto? history;
+    private SoftReserveSummaryDto? summary;
+    private string selectedProductKey = "soft-reserve";
+    private int quantity = 1;
+    private bool loading = true;
+    private bool saving;
+
+    private DkpPurchaseOptionDto? selectedProduct
+        => summary?.Options.FirstOrDefault(option => option.Key == selectedProductKey);
+
+    private int AvailableQuantity
+        => summary is null ? 0 : Math.Max(0, summary.MaxReserves - summary.ActiveQuantity);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load DKP Shop", "Please try again later.");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var discordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(discordId))
+        {
+            throw new UnauthorizedAccessException("The authenticated Discord user could not be identified.");
+        }
+
+        history = await DkpQueries.GetHistoryAsync(discordId);
+        summary = await SoftReserveQueries.GetForUserAsync(discordId);
+        if (summary is not null && summary.Options.Count > 0 && summary.Options.All(option => option.Key != selectedProductKey))
+        {
+            selectedProductKey = summary.Options[0].Key;
+        }
+        quantity = Math.Clamp(quantity, 1, Math.Max(1, AvailableQuantity));
+    }
+
+    private async Task PurchaseAsync()
+    {
+        if (selectedProduct?.Key != "soft-reserve" || quantity < 1 || quantity > AvailableQuantity)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Purchase failed", "Select a valid product and quantity.");
+            return;
+        }
+
+        var confirmed = await DialogService.Confirm(
+            $"Purchase {quantity} Soft Reserve(s) for {selectedProduct.UnitCost * quantity} DKP?",
+            "Confirm purchase",
+            new ConfirmOptions { OkButtonText = "Purchase", CancelButtonText = "Cancel" });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var discordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new UnauthorizedAccessException("The authenticated Discord user could not be identified.");
+            await SoftReserveCommands.PurchaseAsync(discordId, new PurchaseSoftReserveRequest(quantity));
+            await ReloadAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Purchase completed", $"{quantity} Soft Reserve(s) purchased.");
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Purchase failed", exception.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task CancelAsync(SoftReservePurchaseDto purchase)
+    {
+        var confirmed = await DialogService.Confirm(
+            $"Cancel this purchase of {purchase.Quantity} Soft Reserve(s) and refund {purchase.DkpCost} DKP?",
+            "Confirm cancellation",
+            new ConfirmOptions { OkButtonText = "Cancel purchase", CancelButtonText = "Keep purchase" });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var discordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new UnauthorizedAccessException("The authenticated Discord user could not be identified.");
+            await SoftReserveCommands.CancelAsync(discordId, purchase.Id);
+            await ReloadAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Purchase cancelled", $"{purchase.DkpCost} DKP was refunded.");
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or KeyNotFoundException or InvalidOperationException)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Cancellation failed", exception.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

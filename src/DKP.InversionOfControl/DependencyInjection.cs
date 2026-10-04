@@ -6,6 +6,7 @@ using DKP.Application.Characters;
 using DKP.Application.DkpTransactions;
 using DKP.Application.Persistence;
 using DKP.Application.Users;
+using DKP.Application.SoftReserves;
 using DKP.Facade;
 using DKP.Facade.Commands;
 using DKP.Facade.Queries;
@@ -47,6 +48,8 @@ public static class DependencyInjection
 		services.AddScoped<IUserRepository, UserRepository>();
 		services.AddScoped<ICharacterRepository, CharacterRepository>();
 		services.AddScoped<IDkpTransactionRepository, DkpTransactionRepository>();
+		services.AddScoped<ISoftReservePurchaseRepository, SoftReservePurchaseRepository>();
+		services.AddScoped<ISoftReserveSettings, ConfigurationSoftReserveSettings>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
 		services.AddScoped<IDkpQueries, DkpQueries>();
 		services.AddScoped<IGuildMemberQueries, GuildMemberQueries>();
@@ -55,6 +58,8 @@ public static class DependencyInjection
 		services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 		services.AddScoped<ICharacterCommands, CharacterCommandService>();
 		services.AddScoped<IDkpTransactionCommands, DkpTransactionCommandService>();
+		services.AddScoped<ISoftReserveCommands, SoftReserveCommandService>();
+		services.AddScoped<ISoftReserveQueries, SoftReserveQueries>();
 		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();
 		services.AddScoped<IUserAdministrationQueries, UserAdministrationQueries>();
 

@@ -118,6 +118,9 @@ public sealed class DkpTransactionCommandTests
 	{
 		public List<DkpTransaction> Transactions { get; } = [];
 
+	public Task<int> GetBalanceAsync(Guid userId, CancellationToken cancellationToken = default)
+		=> Task.FromResult(Transactions.Where(transaction => transaction.UserId == userId).Sum(transaction => transaction.Amount));
+
 		public Task AddAsync(DkpTransaction transaction, CancellationToken cancellationToken = default)
 		{
 			Transactions.Add(transaction);

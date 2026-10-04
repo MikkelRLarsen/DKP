@@ -17,6 +17,7 @@ public sealed class User
 		Characters = new List<Character>();
 		DkpTransactions = new List<DkpTransaction>();
 		CreatedDkpTransactions = new List<DkpTransaction>();
+		SoftReservePurchases = new List<SoftReservePurchase>();
 	}
 
 	public Guid Id { get; private set; }
@@ -28,6 +29,7 @@ public sealed class User
 	public ICollection<Character> Characters { get; private set; } = new List<Character>();
 	public ICollection<DkpTransaction> DkpTransactions { get; private set; } = new List<DkpTransaction>();
 	public ICollection<DkpTransaction> CreatedDkpTransactions { get; private set; } = new List<DkpTransaction>();
+	public ICollection<SoftReservePurchase> SoftReservePurchases { get; private set; } = new List<SoftReservePurchase>();
 
 	public void UpdateProfile(string discordName, string? avatarUrl, UserRole role)
 	{
