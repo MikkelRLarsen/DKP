@@ -9,7 +9,7 @@ namespace DKP.Application.Shop;
 public sealed class ShopCommandService(IUserRepository users, IShopRepository shop, IEventLedgerRepository ledger, ISoftReserveSettings softReserveSettings, TimeProvider time) : IShopCommands
 {
 	private async Task<User> Actor(string id, CancellationToken ct) => await users.FindByDiscordIdAsync(id, ct) ?? throw new UnauthorizedAccessException("Authenticated user does not exist.");
-	private static void Officer(User u) { if (u.Role != UserRole.Officer) throw new UnauthorizedAccessException("Only Officers can perform this action."); }
+	private static void Officer(User u) { if (u.Role != UserRole.Officer || u.IsBlocked) throw new UnauthorizedAccessException("Only active Officers can perform this action."); }
 	private static ShopItemDto Dto(ShopItem x) => new(x.Id,x.Key,x.Name,x.Description,x.Price,x.MaxPerUser,x.IsActive);
 	public async Task<ShopItemDto> CreateItemAsync(string actor, ShopItemInput input, CancellationToken ct = default) { var a=await Actor(actor,ct); Officer(a); Validate(input); var now=time.GetUtcNow().UtcDateTime; var item=new ShopItem(input.Key.Trim(),input.Name.Trim(),input.Description.Trim(),input.Price,input.MaxPerUser,now); await shop.AddItemAsync(item,ct); await shop.SaveChangesAsync(ct); return Dto(item); }
 	public async Task<ShopItemDto> UpdateItemAsync(string actor, Guid id, ShopItemInput input, CancellationToken ct = default) { var a=await Actor(actor,ct); Officer(a); Validate(input); var item=await shop.FindItemAsync(id,ct)??throw new KeyNotFoundException("Shop item not found."); item.Update(input.Name.Trim(),input.Description.Trim(),input.Price,input.MaxPerUser,time.GetUtcNow().UtcDateTime); await shop.SaveChangesAsync(ct); return Dto(item); }

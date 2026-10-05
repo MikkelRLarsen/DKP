@@ -7,6 +7,7 @@
 @using DKP.Facade.Queries
 @inject IUserAdministrationQueries UserAdministrationQueries
 @inject IUserRoleCommands UserRoleCommands
+@inject IUserBlockCommands UserBlockCommands
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject DialogService DialogService
 @inject NotificationService NotificationService
@@ -33,14 +34,36 @@
     else
     {
         <RadzenCard>
+            <RadzenFormField Text="Block reason (optional)" Style="max-width: 32rem; width: 100%; margin-bottom: 1rem;">
+                <ChildContent><RadzenTextBox @bind-Value="blockReason" MaxLength="500" Placeholder="Reason used when blocking a member" Style="width:100%;" /></ChildContent>
+            </RadzenFormField>
             <RadzenDataGrid Data="@users" TItem="UserSummary" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No users found." Responsive="true">
                 <Columns>
                     <RadzenDataGridColumn TItem="UserSummary" Property="DiscordName" Title="Discord name" />
                     <RadzenDataGridColumn TItem="UserSummary" Property="MainCharacterName" Title="Main character" />
                     <RadzenDataGridColumn TItem="UserSummary" Property="Role" Title="Role" />
+                    <RadzenDataGridColumn TItem="UserSummary" Title="Block status" Sortable="false" Filterable="false">
+                        <Template Context="user">
+                            <RadzenBadge Text="@(user.IsBlocked ? "Blocked" : "Active")" BadgeStyle="@(user.IsBlocked ? BadgeStyle.Danger : BadgeStyle.Success)" />
+                            @if (user.IsBlocked && !string.IsNullOrWhiteSpace(user.BlockReason))
+                            {
+                                <RadzenText Text="@user.BlockReason" TextStyle="TextStyle.Caption" Style="display:block;" />
+                            }
+                        </Template>
+                    </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="UserSummary" Title="Actions" Sortable="false" Filterable="false">
                         <Template Context="user">
-                            <RadzenButton Text="@(user.Role == UserRole.Officer ? "Set Member" : "Set Officer")" Icon="@(user.Role == UserRole.Officer ? "person" : "admin_panel_settings")" ButtonStyle="@(user.Role == UserRole.Officer ? ButtonStyle.Light : ButtonStyle.Primary)" Size="ButtonSize.Small" Click="@(() => ChangeRoleAsync(user))" Disabled="@saving" />
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap=".5rem">
+                                <RadzenButton Text="@(user.Role == UserRole.Officer ? "Set Member" : "Set Officer")" Icon="@(user.Role == UserRole.Officer ? "person" : "admin_panel_settings")" ButtonStyle="@(user.Role == UserRole.Officer ? ButtonStyle.Light : ButtonStyle.Primary)" Size="ButtonSize.Small" Click="@(() => ChangeRoleAsync(user))" Disabled="@saving" />
+                                @if (user.IsBlocked)
+                                {
+                                    <RadzenButton Text="Unblock" Icon="lock_open" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" Click="@(() => UnblockAsync(user))" Disabled="@saving" />
+                                }
+                                else
+                                {
+                                    <RadzenButton Text="Block" Icon="block" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => BlockAsync(user))" Disabled="@saving" />
+                                }
+                            </RadzenStack>
                         </Template>
                     </RadzenDataGridColumn>
                 </Columns>
@@ -55,6 +78,7 @@
     private bool loading = true;
     private bool loadFailed;
     private bool saving;
+    private string blockReason = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -107,6 +131,48 @@
         catch (Exception)
         {
             NotificationService.Notify(NotificationSeverity.Error, "Role update failed", "Please try again later.");
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task BlockAsync(UserSummary user)
+    {
+        if (await DialogService.Confirm($"Are you sure you want to block {user.DisplayName}?", "Confirm member block", new ConfirmOptions { OkButtonText = "Block", CancelButtonText = "Cancel" }) != true) return;
+
+        saving = true;
+        try
+        {
+            await UserBlockCommands.BlockAsync(officerDiscordId, new BlockUserRequest(user.Id, blockReason));
+            users = await UserAdministrationQueries.GetAllAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Member blocked", $"{user.DisplayName} can no longer log in or use DKP features.");
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Block failed", exception.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task UnblockAsync(UserSummary user)
+    {
+        if (await DialogService.Confirm($"Remove the block from {user.DisplayName}?", "Confirm unblock") != true) return;
+
+        saving = true;
+        try
+        {
+            await UserBlockCommands.UnblockAsync(officerDiscordId, user.Id);
+            users = await UserAdministrationQueries.GetAllAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Member unblocked", $"{user.DisplayName} can log in again.");
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unblock failed", exception.Message);
         }
         finally
         {

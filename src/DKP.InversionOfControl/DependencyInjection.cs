@@ -23,6 +23,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.WebUtilities;
 using DKP.InversionOfControl.Authentication;
 
 namespace DKP.InversionOfControl;
@@ -44,6 +45,12 @@ public static class DependencyInjection
 		{
 			throw new InvalidOperationException(
 				"Missing Discord:ClientId or Discord:ClientSecret. Configure both with User Secrets or environment variables.");
+		}
+		var guildId = configuration["Discord:GuildId"];
+		if (string.IsNullOrWhiteSpace(guildId) || !ulong.TryParse(guildId, out _))
+		{
+			throw new InvalidOperationException(
+				"Missing or invalid Discord:GuildId. Configure the Discord server ID with User Secrets or the Discord__GuildId environment variable.");
 		}
 
 		services.SetupDatabase(configuration, connectionString);
@@ -75,6 +82,7 @@ public static class DependencyInjection
 		services.AddScoped<ISoftReserveCommands, SoftReserveCommandService>();
 		services.AddScoped<ISoftReserveQueries, SoftReserveQueries>();
 		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();
+		services.AddScoped<IUserBlockCommands, UserBlockCommandService>();
 		services.AddScoped<IUserAdministrationQueries, UserAdministrationQueries>();
 		services.AddScoped<IShopQueries, ShopQueries>();
 		services.AddScoped<IShopPurchaseQueries, ShopPurchaseQueries>();
@@ -91,7 +99,26 @@ public static class DependencyInjection
 			options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
 			options.DefaultChallengeScheme = "Discord";
 		})
-		.AddCookie(options => options.LoginPath = "/account/login")
+		.AddCookie(options =>
+		{
+			options.LoginPath = "/account/login";
+			options.Events = new CookieAuthenticationEvents
+			{
+				OnValidatePrincipal = async context =>
+				{
+					var discordId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+					var userRepository = context.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
+					var user = string.IsNullOrWhiteSpace(discordId)
+						? null
+						: await userRepository.FindByDiscordIdAsync(discordId, context.HttpContext.RequestAborted);
+					if (user is null || user.IsBlocked)
+					{
+						context.RejectPrincipal();
+						await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+					}
+				}
+			};
+		})
 		.AddOAuth("Discord", options =>
 		{
 			options.ClientId = clientId;
@@ -101,9 +128,31 @@ public static class DependencyInjection
 			options.TokenEndpoint = "https://discord.com/api/oauth2/token";
 			options.UserInformationEndpoint = "https://discord.com/api/users/@me";
 			options.Scope.Add("identify");
+			options.Scope.Add("guilds");
 			options.SaveTokens = false;
 			options.Events = new OAuthEvents
 			{
+				OnRedirectToAuthorizationEndpoint = context =>
+				{
+					// Discord users who authorized the application before the guilds scope
+					// was added must explicitly approve the expanded scope set once.
+					var authorizationUri = QueryHelpers.AddQueryString(context.RedirectUri, "prompt", "consent");
+					context.Response.Redirect(authorizationUri);
+					return Task.CompletedTask;
+				},
+				OnRemoteFailure = context =>
+				{
+					var message = context.Failure?.Message ?? string.Empty;
+					var reason = context.HttpContext.Items["DkpAuthenticationFailureReason"] as string
+						?? (message.Contains("member of the configured Discord server", StringComparison.OrdinalIgnoreCase)
+							? "guild"
+							: message.Contains("blocked", StringComparison.OrdinalIgnoreCase)
+								? "blocked"
+								: "authentication");
+					context.Response.Redirect($"/account/access-denied?reason={Uri.EscapeDataString(reason)}");
+					context.HandleResponse();
+					return Task.CompletedTask;
+				},
 				OnCreatingTicket = async context =>
 				{
 					using var request = new HttpRequestMessage(HttpMethod.Get, context.Options.UserInformationEndpoint);
@@ -121,9 +170,39 @@ public static class DependencyInjection
 						: null;
 					var avatarUrl = avatarHash is null ? null : $"https://cdn.discordapp.com/avatars/{discordId}/{avatarHash}.png";
 
+					using var guildRequest = new HttpRequestMessage(HttpMethod.Get, "https://discord.com/api/users/@me/guilds");
+					guildRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", context.AccessToken);
+					using var guildResponse = await context.Backchannel.SendAsync(guildRequest, context.HttpContext.RequestAborted);
+					if (!guildResponse.IsSuccessStatusCode)
+					{
+						FailAuthentication(context, "authentication");
+						return;
+					}
+					using var guildsDocument = JsonDocument.Parse(await guildResponse.Content.ReadAsStringAsync(context.HttpContext.RequestAborted));
+					var isGuildMember = guildsDocument.RootElement.EnumerateArray().Any(guild => guild.TryGetProperty("id", out var id) && id.GetString() == guildId);
+					if (!isGuildMember)
+					{
+						FailAuthentication(context, "guild");
+						return;
+					}
+
+					var existingUser = await context.HttpContext.RequestServices
+						.GetRequiredService<IUserRepository>()
+						.FindByDiscordIdAsync(discordId, context.HttpContext.RequestAborted);
+					if (existingUser?.IsBlocked == true)
+					{
+						FailAuthentication(context, "blocked");
+						return;
+					}
+
 					var user = await context.HttpContext.RequestServices
 						.GetRequiredService<IUserProvisioningService>()
 						.ProvisionAsync(new DiscordUserProfile(discordId, discordName, avatarUrl), context.HttpContext.RequestAborted);
+					if (user.IsBlocked)
+					{
+						FailAuthentication(context, "blocked");
+						return;
+					}
 
 					var identity = context.Identity!;
 					identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.DiscordId));
@@ -138,6 +217,13 @@ public static class DependencyInjection
 		});
 
 		return services;
+	}
+
+	private static void FailAuthentication(OAuthCreatingTicketContext context, string reason)
+	{
+		context.HttpContext.Items["DkpAuthenticationFailureReason"] = reason;
+		context.Response.Redirect($"/account/access-denied?reason={Uri.EscapeDataString(reason)}");
+		context.NoResult();
 	}
 
 	private static IServiceCollection SetupDatabase(this IServiceCollection services, IConfiguration configuration, string connectionString)

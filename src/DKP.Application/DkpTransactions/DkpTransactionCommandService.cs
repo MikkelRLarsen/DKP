@@ -17,7 +17,7 @@ public sealed class DkpTransactionCommandService : IDkpTransactionCommands
 	private async Task<DkpTransactionDto> CreateAsync(string officerDiscordId, CreateDkpTransactionRequest request, int sign, CancellationToken ct)
 	{
 		var officer = await users.FindByDiscordIdAsync(officerDiscordId, ct) ?? throw new UnauthorizedAccessException("Authenticated officer does not exist.");
-		if (officer.Role != UserRole.Officer) throw new UnauthorizedAccessException("Only Officers can manage DKP.");
+		if (officer.Role != UserRole.Officer || officer.IsBlocked) throw new UnauthorizedAccessException("Only active Officers can manage DKP.");
 		if (request.Amount <= 0) throw new ArgumentException("Amount must be greater than zero.", nameof(request.Amount));
 		var reason = request.Reason?.Trim(); if (string.IsNullOrWhiteSpace(reason) || reason.Length > 500) throw new ArgumentException("Reason is required and must be at most 500 characters.", nameof(request.Reason));
 		var target = await users.FindByIdAsync(request.TargetUserId, ct) ?? throw new KeyNotFoundException("The selected player does not exist.");

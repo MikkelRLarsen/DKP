@@ -20,6 +20,9 @@ public sealed class UserAdministrationQueries(DkpDbContext db) : IUserAdministra
 				user.Characters
 					.Where(character => character.IsMain)
 					.Select(character => character.FirstName + " " + character.LastName)
-					.FirstOrDefault()))
+					.FirstOrDefault(),
+				user.IsBlocked,
+				user.BlockedAtUtc,
+				user.BlockReason))
 			.ToArrayAsync(cancellationToken);
 }

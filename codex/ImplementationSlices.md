@@ -19,7 +19,7 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 8b | Mine aktive køb og forbrug | Færdig |
 | 9 | Shop catalog og shop-item administration | Færdig |
 | 10 | Admin shop-overview og køb for brugere | Færdig |
-| 11 | Blokering af medlemmer | Planlagt |
+| 11 | Guild membership ved OAuth og blokering af medlemmer | Færdig |
 | 12 | DKP management presets | Delvist implementeret |
 | 13 | DKP acquisition overview | Planlagt |
 | 13a | Achievement-baserede DKP awards | Planlagt |
@@ -550,11 +550,62 @@ Leveret:
 
 Multi-user køb valideres samlet og gennemføres atomisk. Hver bruger får sin egen purchase-record og DKP-event, og Officer gemmes som actor.
 
-## Slice 11 – Blokering af medlemmer
+## Slice 11 – Guild membership ved OAuth og blokering af medlemmer
 
-Status: Planlagt.
+Status: Færdig.
 
-Tilføj `IsBlocked`, `BlockedAtUtc`, `BlockedByUserId` og valgfri årsag. Blokerede brugere må ikke logge ind, købe, modtage admin-køb eller anvende DKP-presets. Bootstrap-Officers beskyttes, og eksisterende sessioner afvises ved næste cookie-validering. Alle regler håndhæves i Application.
+Slice 11 implementeres uden Discord bot.
+
+OAuth-flowet udvides med Discord `guilds`-scope. Ved login hentes brugerens guild-liste via `/users/@me/guilds`, og systemet kontrollerer den konfigurerede `Discord:GuildId`. Brugere, der ikke er medlem af guilden, afvises før user provisioning.
+
+Tilføj `IsBlocked`, `BlockedAtUtc`, `BlockedByUserId` og valgfri årsag. Blokerede brugere må ikke logge ind, købe, modtage admin-køb eller anvende DKP-presets. Bootstrap-Officers beskyttes, og alle regler håndhæves i Application.
+
+Uden bot kontrolleres guild-medlemskab ved OAuth-login. Kontinuerlig kontrol af, om en allerede aktiv bruger senere forlader guilden, hører til backlog-punktet for Discord bot security integration.
+
+Leveret:
+
+- OAuth `guilds`-scope og kontrol mod `Discord:GuildId` ved Discord callback.
+- Brugere uden medlemskab af den konfigurerede guild provisioneres ikke.
+- `IUserBlockCommands` og Application command service til block/unblock.
+- Valgfri blokeringsårsag med maksimum 500 tegn.
+- Bootstrap-Officers kan ikke blokeres.
+- Blokerede brugere afvises ved login og ved cookie-validering.
+- Blokerede brugere er fortsat afskåret fra shop- og DKP-handlinger gennem eksisterende serverside-validering.
+- User Administration viser block-status, årsag og block/unblock-handlinger.
+- Eksisterende User-felter og migration genbruges; ingen ny migration var nødvendig.
+
+## Backlog – Discord guild security og OAuth callback
+
+Status: Potentielt fremtidigt tiltag.
+
+### Kendt problem: OAuth callback ved forkert bruger
+
+Når en Discord-bruger, som ikke er medlem af den konfigurerede guild, trykker **Authorize**, kan Discord OAuth-flowet i lokal udvikling blive hængende på eller genindlæse OAuth 2.0-siden i stedet for stabilt at navigere til `/account/access-denied?reason=guild`. Cancel-flowet fungerer, men Authorize-flowet er ikke stabilt nok og skal undersøges særskilt.
+
+Mulige årsager, der skal undersøges:
+
+- ASP.NET Core correlation-cookie/state mellem Discord og localhost.
+- Discords callback-adfærd ved `guilds`-scope og afvisning i `OnCreatingTicket`.
+- Samspillet mellem HTTPS-dev-certifikat, flere localhost-redirects og browserens cookie-politik.
+- Om guild-valideringen bør flyttes til et separat callback-/ticket-trin.
+
+Acceptkriteriet for en fremtidig rettelse er, at en forkert Discord-bruger altid lander på en tydelig 401/access-denied-side uden exception, redirect-loop eller genindlæsning af Discord OAuth-siden.
+
+### Planlagt Discord bot-integration
+
+Hvis der senere er behov for løbende kontrol af guild-medlemskab, kan systemet udvides med en Discord bot integration. Botten skal være medlem af guilden og bruge konfiguration for `Discord:BotToken` og `Discord:GuildId`.
+
+Botten kan bruges til serverside medlemskontrol ved login og cookie-validering via Discords guild-member endpoint. Brugere, der forlader guilden, kan dermed miste adgang ved næste cookie-validering. Manglende eller ugyldig bot-konfiguration skal give en tydelig konfigurationsfejl.
+
+Bot-token må kun komme fra User Secrets eller deployment environment variables og må aldrig commit’es.
+
+Mulige tests:
+
+- Guild-member success/not-found.
+- Discord API-fejl.
+- Cookie-validering.
+- Manglende eller ugyldig bot-konfiguration.
+- Forsøg på at omgå guild-kontrollen.
 
 ## Slice 12 – DKP management presets
 

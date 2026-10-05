@@ -23,7 +23,7 @@ public sealed class UserRoleCommandService(
 		var officer = await users.FindByDiscordIdAsync(officerDiscordId, cancellationToken)
 			?? throw new UnauthorizedAccessException("The authenticated officer does not exist.");
 
-		if (officer.Role != UserRole.Officer)
+		if (officer.Role != UserRole.Officer || officer.IsBlocked)
 		{
 			throw new UnauthorizedAccessException("Only Officers can manage user roles.");
 		}
