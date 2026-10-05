@@ -18,10 +18,12 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 8a | Event-sourced DKP ledger og shop-køb | Færdig |
 | 8b | Mine aktive køb og forbrug | Færdig |
 | 9 | Shop catalog og shop-item administration | Færdig |
-| 10 | Admin shop-overview og køb for brugere | Delvist implementeret |
+| 10 | Admin shop-overview og køb for brugere | Færdig |
 | 11 | Blokering af medlemmer | Planlagt |
 | 12 | DKP management presets | Delvist implementeret |
 | 13 | DKP acquisition overview | Planlagt |
+| 13a | Achievement-baserede DKP awards | Planlagt |
+| 13b | Achievement-gated shop-items | Planlagt |
 | 14 | Deployment og production hardening | Planlagt |
 
 ## Arkitektoniske regler
@@ -533,9 +535,18 @@ Shop-items indeholder `Id`, `Key`, `Name`, `Description`, `Price`, `MaxPerUser`,
 
 ## Slice 10 – Admin shop-overview og køb for brugere
 
-Status: Delvist implementeret.
+Status: Færdig.
 
-Den eksisterende shop purchase-model og multi-user purchase-contract skal færdiggøres med Officer-only oversigt over items og køb, filtering/sorting/search, annullering med refundering samt UI til køb på vegne af flere brugere.
+Leveret:
+
+- Officer-only `/admin/shop/purchases`.
+- Oversigt over alle køb med bruger, main character, item, quantity, DKP, dato og status.
+- Radzen sorting, filtering, search og pagination.
+- Annullering af aktive køb med automatisk refundering.
+- Multi-select af guild-medlemmer til køb på vegne af flere brugere.
+- Validering og atomisk multi-user purchase-flow i Application/event-sourcing-laget.
+- Officer authorization både i UI og query-flow.
+- Almindelige brugere kan kun hente egne køb; admin-queryen kræver Officer serverside.
 
 Multi-user køb valideres samlet og gennemføres atomisk. Hver bruger får sin egen purchase-record og DKP-event, og Officer gemmes som actor.
 
@@ -558,6 +569,31 @@ Preset-apply opretter usage-record og DKP-event atomisk. Deaktiverede presets ka
 Status: Planlagt.
 
 Tilføj `/my-dkp/sources` med aktive DKP-presets, beløb, årsag, anvendelser, maksimum og resterende muligheder. Presets, hvor brugeren har nået maksimum, skjules. Oversigten er informativ; kun Officers kan anvende presets.
+
+## Slice 13a – Achievement-baserede DKP awards
+
+Status: Planlagt.
+
+Achievements registreres manuelt af Officers og knyttes til brugeren på guild-systemniveau, ikke til en character. En Officer kan oprette achievement definitions med key, navn, beskrivelse og DKP-belønning samt give eller fjerne et achievement for flere valgte brugere på én gang.
+
+Tildeling opretter et positivt DKP-event. Fjernelse opretter et modgående DKP-event med det oprindelige beløb, så event store og saldo forbliver konsistente. Grant/revoke-historik bevares, og et revoked achievement kan gives igen. Members og blokerede brugere kan ikke anvende flowet.
+
+Planlagte modeller:
+
+- `AchievementDefinition`: `Id`, `Key`, `Name`, `Description`, `DkpAmount`, `IsActive`, `CreatedAtUtc`, `UpdatedAtUtc`.
+- `UserAchievement`: bruger, achievement, grant-audit og revoke-audit med timestamps og Officer IDs.
+
+Der skal være Officer-only UI, Facade-kontrakter, Application commands, Infrastructure persistence, migration og tests for authorization, multi-user atomicitet, duplicate grants, revoke/refund og re-grant.
+
+## Slice 13b – Achievement-gated shop-items
+
+Status: Planlagt.
+
+Shop-items kan valgfrit kræve ét eller flere achievements. Hvis flere krav er sat, skal brugeren have alle achievements. Ingen krav betyder, at item’et fungerer som normalt.
+
+Tilføj en relation mellem shop-items og achievement definitions. Shop administration skal kunne vælge krav, og shop query/UI skal vise eventuelle manglende krav. Købsvalideringen håndhæves altid serverside, også ved Officer-køb på vegne af brugere. Multi-user køb fejler atomisk, hvis én target-bruger mangler et krav.
+
+Kravændringer påvirker kun fremtidige køb. Historiske køb og DKP-events ændres ikke. Der skal tilføjes Facade-kontrakter, Application-/Infrastructure-flow, EF migration og tests for AND-logik, manglende/deaktiverede achievements, multi-user atomicitet og historisk databevarelse.
 
 ## Slice 14 – Deployment og production hardening
 

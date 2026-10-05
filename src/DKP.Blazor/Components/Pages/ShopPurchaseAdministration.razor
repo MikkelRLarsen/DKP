@@ -1,0 +1,173 @@
+@page "/admin/shop/purchases"
+@attribute [Authorize(Roles = "Officer")]
+@using System.Security.Claims
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IShopQueries ShopQueries
+@inject IShopCommands ShopCommands
+@inject IUserAdministrationQueries UserAdministrationQueries
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>Shop Purchases</PageTitle>
+
+<RadzenStack Gap="1.5rem">
+    <div>
+        <h1>Shop Purchases</h1>
+        <RadzenText Text="Review purchases and buy shop items for guild members." TextStyle="TextStyle.Subtitle2" />
+    </div>
+
+    @if (loading)
+    {
+        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height:16rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText Text="Loading shop purchases..." />
+        </RadzenStack>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText Text="Purchase for guild members" TextStyle="TextStyle.H5" />
+                <RadzenFormField Text="Shop item" Style="width:100%;">
+                    <ChildContent>
+                        <RadzenDropDown TValue="Guid" @bind-Value="selectedItemId" Data="@items" TextProperty="Name" ValueProperty="Id" AllowFiltering="true" Style="width:100%;" />
+                    </ChildContent>
+                </RadzenFormField>
+                <RadzenFormField Text="Players" Style="width:100%;">
+                    <ChildContent>
+                        <RadzenDropDown TValue="IEnumerable<Guid>" @bind-Value="selectedUserIds" Data="@users" TextProperty="DisplayName" ValueProperty="Id" Multiple="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Select one or more players" Style="width:100%;" />
+                    </ChildContent>
+                </RadzenFormField>
+                <RadzenFormField Text="Quantity" Style="max-width:18rem; width:100%;">
+                    <ChildContent><RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Style="width:100%;" /></ChildContent>
+                </RadzenFormField>
+                <RadzenButton Text="Purchase for selected players" Icon="shopping_cart" ButtonStyle="ButtonStyle.Primary" Click="PurchaseForUsersAsync" Disabled="@saving" />
+                @if (saving)
+                {
+                    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                }
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenText Text="All purchases" TextStyle="TextStyle.H5" />
+            <RadzenDataGrid Data="@purchases" TItem="ShopPurchaseDto" AllowPaging="true" PageSize="15" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No shop purchases found." Style="margin-top:1rem;">
+                <Columns>
+                    <RadzenDataGridColumn TItem="ShopPurchaseDto" Property="UserName" Title="User" />
+                    <RadzenDataGridColumn TItem="ShopPurchaseDto" Property="MainCharacterName" Title="Main character" />
+                    <RadzenDataGridColumn TItem="ShopPurchaseDto" Property="ItemName" Title="Item" />
+                    <RadzenDataGridColumn TItem="ShopPurchaseDto" Property="Quantity" Title="Quantity" />
+                    <RadzenDataGridColumn TItem="ShopPurchaseDto" Property="TotalDkpCost" Title="DKP" />
+                    <RadzenDataGridColumn TItem="ShopPurchaseDto" Property="CreatedAtUtc" Title="Date">
+                        <Template Context="purchase">@purchase.CreatedAtUtc.ToLocalTime().ToString("g")</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Status">
+                        <Template Context="purchase"><RadzenBadge Text="@(purchase.IsCancelled ? "Cancelled" : "Active")" BadgeStyle="@(purchase.IsCancelled ? BadgeStyle.Light : BadgeStyle.Success)" /></Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Actions" Sortable="false" Filterable="false">
+                        <Template Context="purchase">
+                            @if (!purchase.IsCancelled)
+                            {
+                                <RadzenButton Text="Cancel & refund" Icon="undo" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(() => CancelAsync(purchase))" Disabled="@saving" />
+                            }
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private IReadOnlyList<ShopItemDto> items = [];
+    private IReadOnlyList<UserSummary> users = [];
+    private IReadOnlyList<ShopPurchaseDto> purchases = [];
+    private IEnumerable<Guid> selectedUserIds = [];
+    private Guid selectedItemId;
+    private int quantity = 1;
+    private bool loading = true;
+    private bool saving;
+    private string officerDiscordId = string.Empty;
+
+    private ShopItemDto? SelectedItem => items.FirstOrDefault(x => x.Id == selectedItemId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            officerDiscordId = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException("Not authenticated.");
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load shop purchases", exception.Message);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        items = await ShopQueries.GetActiveItemsAsync();
+        users = await UserAdministrationQueries.GetAllAsync();
+        purchases = await ShopQueries.GetAllPurchasesAsync(officerDiscordId);
+        if (SelectedItem is null && items.Count > 0) selectedItemId = items[0].Id;
+    }
+
+    private async Task PurchaseForUsersAsync()
+    {
+        var targetIds = selectedUserIds.Distinct().ToArray();
+        var item = SelectedItem;
+        if (item is null || targetIds.Length == 0 || quantity <= 0)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Purchase validation", "Select an item, at least one player and a positive quantity.");
+            return;
+        }
+
+        if (await DialogService.Confirm($"Purchase {quantity} {item.Name} for {targetIds.Length} player(s)?", "Confirm purchase") != true) return;
+
+        saving = true;
+        try
+        {
+            await ShopCommands.PurchaseForUsersAsync(officerDiscordId, new AdminShopPurchaseRequest(item.Id, quantity, targetIds));
+            selectedUserIds = [];
+            quantity = 1;
+            await ReloadAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Purchases completed", "The selected players received the shop item.");
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Purchase failed", exception.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task CancelAsync(ShopPurchaseDto purchase)
+    {
+        if (await DialogService.Confirm($"Cancel this purchase and refund {purchase.TotalDkpCost} DKP to {purchase.UserName}?", "Confirm cancellation") != true) return;
+
+        saving = true;
+        try
+        {
+            await ShopCommands.CancelAsync(officerDiscordId, purchase.Id);
+            await ReloadAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Purchase cancelled", "The purchase was cancelled and DKP was refunded.");
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Cancellation failed", exception.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

@@ -22,6 +22,15 @@
         <RadzenColumn Size="12" SizeMD="6">
             <RadzenCard>
                 <RadzenStack Gap="0.75rem">
+                    <RadzenText Text="Shop Purchases" TextStyle="TextStyle.H5" />
+                    <RadzenText Text="Review purchases and buy items for guild members." />
+                    <RadzenButton Text="Open Shop Purchases" Icon="shopping_bag" ButtonStyle="ButtonStyle.Primary" Click="@OpenShopPurchases" />
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard>
+                <RadzenStack Gap="0.75rem">
                     <RadzenText Text="Shop Catalog" TextStyle="TextStyle.H5" />
                     <RadzenText Text="Create, edit and activate shop items." />
                     <RadzenButton Text="Open Shop Catalog" Icon="storefront" ButtonStyle="ButtonStyle.Primary" Click="@OpenShopCatalog" />
@@ -51,4 +60,5 @@
     private void OpenUserManagement() => NavigationManager.NavigateTo("/admin/users");
     private void OpenLootReserve() => NavigationManager.NavigateTo("/admin/loot-reserve");
     private void OpenShopCatalog() => NavigationManager.NavigateTo("/admin/shop");
+    private void OpenShopPurchases() => NavigationManager.NavigateTo("/admin/shop/purchases");
 }
