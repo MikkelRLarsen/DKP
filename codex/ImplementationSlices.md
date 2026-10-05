@@ -17,7 +17,7 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 8 | LootReserve copy-to-clipboard export | Færdig |
 | 8a | Event-sourced DKP ledger og shop-køb | Færdig |
 | 8b | Mine aktive køb og forbrug | Færdig |
-| 9 | Shop catalog og shop-item administration | Delvist implementeret |
+| 9 | Shop catalog og shop-item administration | Færdig |
 | 10 | Admin shop-overview og køb for brugere | Delvist implementeret |
 | 11 | Blokering af medlemmer | Planlagt |
 | 12 | DKP management presets | Delvist implementeret |
@@ -516,9 +516,18 @@ Den eksisterende købshistorik på DKP Shop bevares med dato, item, quantity, pr
 
 ## Slice 9 – Shop catalog og shop-item administration
 
-Status: Delvist implementeret.
+Status: Færdig.
 
-Den generiske `ShopItem`-model, shop queries, commands og migration findes allerede delvist. Slicen færdiggøres med Officer-only UI til oprettelse, redigering, aktivering/deaktivering og visning af historiske køb.
+Leveret:
+
+- Officer-only `/admin/shop` med Radzen-katalog.
+- Opret shop-item med key, navn, beskrivelse, pris og maksimum pr. bruger.
+- Redigér navn, beskrivelse, pris og maksimum; key er stabil efter oprettelse.
+- Aktivér/deaktivér items med confirmation dialog.
+- Historiske køb forbliver bevaret, og items slettes ikke fysisk.
+- Shop Catalog er tilgængelig under Administration-menuen og admin-overblikket.
+
+Den generiske `ShopItem`-model, shop queries, commands og migration var allerede etableret og genbruges af UI’et.
 
 Shop-items indeholder `Id`, `Key`, `Name`, `Description`, `Price`, `MaxPerUser`, `IsActive`, `CreatedAtUtc` og `UpdatedAtUtc`. Soft Reserve er item med key `soft-reserve`. Historiske køb beholder den oprindelige pris, og items med køb slettes ikke fysisk.
 

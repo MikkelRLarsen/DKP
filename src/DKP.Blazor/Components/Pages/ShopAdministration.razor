@@ -1,0 +1,210 @@
+@page "/admin/shop"
+@attribute [Authorize(Roles = "Officer")]
+@using System.Security.Claims
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IShopQueries ShopQueries
+@inject IShopCommands ShopCommands
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>Shop Administration</PageTitle>
+
+<RadzenStack Gap="1.5rem">
+    <div>
+        <h1>Shop Administration</h1>
+        <RadzenText Text="Create and manage the items available in the DKP shop." TextStyle="TextStyle.Subtitle2" />
+    </div>
+
+    @if (loading)
+    {
+        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText Text="Loading shop items..." />
+        </RadzenStack>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText Text="@(editingId is null ? "Create shop item" : "Edit shop item")" TextStyle="TextStyle.H5" />
+                <RadzenRow Gap="1rem">
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Key" Style="width:100%;">
+                            <ChildContent><RadzenTextBox @bind-Value="form.Key" Disabled="@(editingId is not null)" MaxLength="64" Style="width:100%;" /></ChildContent>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Name" Style="width:100%;">
+                            <ChildContent><RadzenTextBox @bind-Value="form.Name" MaxLength="128" Style="width:100%;" /></ChildContent>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="2">
+                        <RadzenFormField Text="Price" Style="width:100%;">
+                            <ChildContent><RadzenNumeric @bind-Value="form.Price" Min="1" Style="width:100%;" /></ChildContent>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="2">
+                        <RadzenFormField Text="Max per user" Style="width:100%;">
+                            <ChildContent><RadzenNumeric @bind-Value="form.MaxPerUser" Min="1" Style="width:100%;" /></ChildContent>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                </RadzenRow>
+                <RadzenFormField Text="Description" Style="width:100%;">
+                    <ChildContent><RadzenTextArea @bind-Value="form.Description" MaxLength="500" Rows="3" Style="width:100%;" /></ChildContent>
+                </RadzenFormField>
+                <RadzenStack Orientation="Orientation.Horizontal" Gap=".75rem">
+                    <RadzenButton Text="@(editingId is null ? "Create item" : "Save changes")" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="SaveAsync" Disabled="@saving" />
+                    @if (editingId is not null)
+                    {
+                        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="ResetForm" Disabled="@saving" />
+                    }
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenText Text="Shop catalog" TextStyle="TextStyle.H5" />
+            <RadzenDataGrid Data="@items" TItem="ShopItemDto" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No shop items found." Style="margin-top:1rem;">
+                <Columns>
+                    <RadzenDataGridColumn TItem="ShopItemDto" Property="Name" Title="Name" />
+                    <RadzenDataGridColumn TItem="ShopItemDto" Property="Key" Title="Key" />
+                    <RadzenDataGridColumn TItem="ShopItemDto" Property="Price" Title="Price" />
+                    <RadzenDataGridColumn TItem="ShopItemDto" Property="MaxPerUser" Title="Max per user" />
+                    <RadzenDataGridColumn TItem="ShopItemDto" Property="IsActive" Title="Status">
+                        <Template Context="item"><RadzenBadge Text="@(item.IsActive ? "Active" : "Inactive")" BadgeStyle="@(item.IsActive ? BadgeStyle.Success : BadgeStyle.Light)" /></Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="ShopItemDto" Title="Actions" Sortable="false" Filterable="false">
+                        <Template Context="item">
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap=".5rem">
+                                <RadzenButton Text="Edit" Icon="edit" Size="ButtonSize.Small" Click="@(() => BeginEdit(item))" Disabled="@saving" />
+                                <RadzenButton Text="@(item.IsActive ? "Deactivate" : "Activate")" Icon="@(item.IsActive ? "visibility_off" : "visibility")" Size="ButtonSize.Small" ButtonStyle="@(item.IsActive ? ButtonStyle.Light : ButtonStyle.Success)" Click="@(() => ToggleActiveAsync(item))" Disabled="@saving" />
+                            </RadzenStack>
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private IReadOnlyList<ShopItemDto> items = [];
+    private readonly ShopItemForm form = new();
+    private Guid? editingId;
+    private bool loading = true;
+    private bool saving;
+    private string actorDiscordId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            actorDiscordId = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException("Not authenticated.");
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load shop", exception.Message);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task ReloadAsync() => items = await ShopQueries.GetAllItemsAsync();
+
+    private void BeginEdit(ShopItemDto item)
+    {
+        editingId = item.Id;
+        form.Key = item.Key;
+        form.Name = item.Name;
+        form.Description = item.Description;
+        form.Price = item.Price;
+        form.MaxPerUser = item.MaxPerUser;
+    }
+
+    private void ResetForm()
+    {
+        editingId = null;
+        form.Key = string.Empty;
+        form.Name = string.Empty;
+        form.Description = string.Empty;
+        form.Price = 1;
+        form.MaxPerUser = 1;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(form.Key) || string.IsNullOrWhiteSpace(form.Name) || string.IsNullOrWhiteSpace(form.Description) || form.Price <= 0 || form.MaxPerUser <= 0)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Validation error", "Key, name, description, positive price and maximum are required.");
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            var input = new ShopItemInput(form.Key, form.Name, form.Description, form.Price, form.MaxPerUser);
+            if (editingId is Guid id)
+            {
+                await ShopCommands.UpdateItemAsync(actorDiscordId, id, input);
+                NotificationService.Notify(NotificationSeverity.Success, "Shop item updated", $"{form.Name.Trim()} was updated.");
+            }
+            else
+            {
+                await ShopCommands.CreateItemAsync(actorDiscordId, input);
+                NotificationService.Notify(NotificationSeverity.Success, "Shop item created", $"{form.Name.Trim()} was added to the catalog.");
+            }
+
+            ResetForm();
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to save shop item", exception.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task ToggleActiveAsync(ShopItemDto item)
+    {
+        var action = item.IsActive ? "deactivate" : "activate";
+        if (await DialogService.Confirm($"Are you sure you want to {action} {item.Name}?", $"Confirm {action}") != true)
+        {
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            await ShopCommands.SetActiveAsync(actorDiscordId, item.Id, !item.IsActive);
+            await ReloadAsync();
+            var status = item.IsActive ? "inactive" : "active";
+            NotificationService.Notify(NotificationSeverity.Success, "Shop item updated", $"{item.Name} is now {status}.");
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to update shop item", exception.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private sealed class ShopItemForm
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public int Price { get; set; } = 1;
+        public int MaxPerUser { get; set; } = 1;
+    }
+}
