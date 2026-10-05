@@ -33,6 +33,11 @@ public sealed record ShopPurchaseDto(Guid Id, Guid UserId, string UserName, stri
 public sealed record ShopItemInput(string Key, string Name, string Description, int Price, int MaxPerUser);
 public sealed record ShopPurchaseRequest(Guid ShopItemId, int Quantity);
 public sealed record AdminShopPurchaseRequest(Guid ShopItemId, int Quantity, IReadOnlyList<Guid> TargetUserIds);
+public sealed record ActivePurchaseItemDto(string Key, string Name, int Quantity, int MaxPerUser, int RemainingQuantity, int Price, int? RollBonusValue)
+{
+	public bool IsRollBonus => RollBonusValue is not null;
+}
+public sealed record ActivePurchaseOverviewDto(IReadOnlyList<ActivePurchaseItemDto> Items, int RollBonus);
 public sealed record DkpAwardPresetDto(Guid Id, string Name, int Amount, string Reason, int MaxApplicationsPerUser, bool IsActive);
 public sealed record DkpAwardPresetInput(string Name, int Amount, string Reason, int MaxApplicationsPerUser);
 public sealed record DkpAcquisitionSourceDto(Guid PresetId, string Name, int Amount, string Reason, int Applications, int MaxApplications, int Remaining);

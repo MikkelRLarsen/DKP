@@ -7,6 +7,7 @@
 @inject IAccountQueries AccountQueries
 @inject ICharacterCommands CharacterCommands
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 
@@ -53,6 +54,16 @@ else
                 </RadzenCard>
             </RadzenColumn>
         </RadzenRow>
+
+        <RadzenCard>
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" Gap="1rem">
+                <div>
+                    <RadzenText Text="Active purchases" TextStyle="TextStyle.H5" />
+                    <RadzenText Text="See your SoftReserve, RollBonus and other active shop items." />
+                </div>
+                <RadzenButton Text="View my purchases" Icon="shopping_bag" ButtonStyle="ButtonStyle.Primary" Click="GoToPurchases" />
+            </RadzenStack>
+        </RadzenCard>
 
         <RadzenCard>
             <RadzenStack Gap="1rem">
@@ -225,6 +236,8 @@ else
             saving = false;
         }
     }
+
+    private void GoToPurchases() => NavigationManager.NavigateTo("/my-purchases");
 
     private sealed class CharacterForm
     {

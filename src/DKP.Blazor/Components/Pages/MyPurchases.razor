@@ -1,0 +1,110 @@
+@page "/my-purchases"
+@attribute [Authorize]
+@using System.Security.Claims
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IShopPurchaseQueries ShopPurchaseQueries
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NotificationService NotificationService
+
+<PageTitle>My Purchases</PageTitle>
+
+@if (loading)
+{
+    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        <RadzenText Text="Loading active purchases..." />
+    </RadzenStack>
+}
+else if (overview is null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load your active purchases.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1.5rem">
+        <div>
+            <h1>My Purchases</h1>
+            <RadzenText Text="Your active shop purchases and remaining limits" TextStyle="TextStyle.Subtitle2" />
+        </div>
+
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenCard>
+                    <RadzenText Text="SoftReserve" TextStyle="TextStyle.Overline" />
+                    <RadzenText Text="@SoftReserveText" Style="font-size: 2rem; font-weight: 700;" />
+                    <RadzenText Text="Active quantity / maximum" TextStyle="TextStyle.Caption" />
+                </RadzenCard>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenCard>
+                    <RadzenText Text="RollBonus" TextStyle="TextStyle.Overline" />
+                    <RadzenText Text="@overview.RollBonus.ToString()" Style="font-size: 2rem; font-weight: 700;" />
+                    <RadzenText Text="Active roll bonus" TextStyle="TextStyle.Caption" />
+                </RadzenCard>
+            </RadzenColumn>
+        </RadzenRow>
+
+        <RadzenCard>
+            <RadzenText Text="Other active shop items" TextStyle="TextStyle.H5" />
+            @if (OtherItems.Count == 0)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" Style="margin-top: 1rem;">You have no other active shop items.</RadzenAlert>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@OtherItems" TItem="ActivePurchaseItemDto" AllowPaging="true" PageSize="10" AllowSorting="true" EmptyText="No active shop items found." Style="margin-top: 1rem;">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="ActivePurchaseItemDto" Property="Name" Title="Item" />
+                        <RadzenDataGridColumn TItem="ActivePurchaseItemDto" Property="Quantity" Title="Quantity">
+                            <Template Context="item">@item.Quantity / @item.MaxPerUser</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="ActivePurchaseItemDto" Property="RemainingQuantity" Title="Remaining" />
+                        <RadzenDataGridColumn TItem="ActivePurchaseItemDto" Property="Price" Title="Price (DKP)" />
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+    </RadzenStack>
+}
+
+@code {
+    private ActivePurchaseOverviewDto? overview;
+    private bool loading = true;
+
+    private IReadOnlyList<ActivePurchaseItemDto> OtherItems => overview?.Items
+        .Where(x => x.Key != "soft-reserve" && !x.IsRollBonus)
+        .ToArray() ?? [];
+
+    private string SoftReserveText
+    {
+        get
+        {
+            var item = overview?.Items.FirstOrDefault(x => x.Key == "soft-reserve");
+            return item is null ? "0 / 0" : $"{item.Quantity} / {item.MaxPerUser}";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var discordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(discordId))
+            {
+                throw new InvalidOperationException("The authenticated Discord user could not be identified.");
+            }
+
+            overview = await ShopPurchaseQueries.GetActiveOverviewAsync(discordId);
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load purchases", exception.Message);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

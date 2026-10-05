@@ -77,6 +77,7 @@ public static class DependencyInjection
 		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();
 		services.AddScoped<IUserAdministrationQueries, UserAdministrationQueries>();
 		services.AddScoped<IShopQueries, ShopQueries>();
+		services.AddScoped<IShopPurchaseQueries, ShopPurchaseQueries>();
 		services.AddScoped<IShopCommands, ShopCommandService>();
 		services.AddScoped<IDkpPresetQueries, DkpPresetQueries>();
 		services.AddScoped<IDkpPresetCommands, DkpPresetCommandService>();

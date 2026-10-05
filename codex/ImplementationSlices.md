@@ -16,7 +16,13 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 7 | Køb af Soft Reserves | Færdig |
 | 8 | LootReserve copy-to-clipboard export | Færdig |
 | 8a | Event-sourced DKP ledger og shop-køb | Færdig |
-| 9 | Deployment og production hardening | Planlagt |
+| 8b | Mine aktive køb og forbrug | Færdig |
+| 9 | Shop catalog og shop-item administration | Delvist implementeret |
+| 10 | Admin shop-overview og køb for brugere | Delvist implementeret |
+| 11 | Blokering af medlemmer | Planlagt |
+| 12 | DKP management presets | Delvist implementeret |
+| 13 | DKP acquisition overview | Planlagt |
+| 14 | Deployment og production hardening | Planlagt |
 
 ## Arkitektoniske regler
 
@@ -449,22 +455,108 @@ Migration: `20261005175846_Slice8aEventSourcedLedger`.
 
 Den generiske shop- og DKP-command path skriver nu immutable events og opdaterer projections atomisk. De tidligere tabeller findes fortsat i EF-modellen som kompatibilitetslag for eksisterende tests/legacy contracts, men bruges ikke af det nye UI-flow som source of truth.
 
-## Slice 9 – Deployment og production hardening
+## Slice 8b – Mine aktive køb og forbrug
+
+Status: Færdig.
 
 ### Mål
 
-Gøre systemet klar til en samlet deployment.
+Give brugeren et tydeligt overblik over aktive køb, anvendt quantity og resterende muligheder.
 
-### Scope
+### UI
 
-- Dockerfile for Blazor-applikationen.
-- Docker Compose med app, PostgreSQL og valgfri pgAdmin.
-- Environment-based configuration.
-- Production Discord redirect URI.
-- Database health check.
-- Logging og kontrolleret fejlhåndtering.
-- Dokumentation af lokal opstart, migrationer, Discord-konfiguration og deployment.
-- Ingen secrets i repository.
+Tilføj `/my-purchases` og gerne et kort på dashboardet.
+
+Faste produktoversigter skal være lette at aflæse:
+
+```text
+SoftReserve: 0 / 2
+RollBonus: 30
+```
+
+Hvis brugeren ikke har et aktivt RollBonus-køb, vises `RollBonus: 0`.
+
+Andre shop-items vises dynamisk med item-navn, aktuel quantity, maksimum og resterende quantity.
+
+Eksempel:
+
+```text
+SoftReserve       0 / 2
+RollBonus         30
+Guild Token       2 / 5
+Raid Entry        1 / 1
+```
+
+### Dataflow og kontrakter
+
+```text
+Blazor
+  → Facade query contract
+  → Infrastructure query
+  → ShopPurchaseProjections + ShopItems
+  → ActivePurchaseOverviewDto
+```
+
+Tilføj `IShopPurchaseQueries`, `ActivePurchaseOverviewDto` og `ActivePurchaseItemDto` i Facade. DTO’erne skal indeholde item key, navn, quantity, maksimum, resterende quantity, pris og eventuel RollBonusValue.
+
+Queryen afgrænses til den authenticated bruger, ignorerer annullerede køb, summerer flere aktive køb af samme item og bruger event projections som source of truth. Blazor må ikke se domain entities, projections eller `DbContext`.
+
+Den eksisterende købshistorik på DKP Shop bevares med dato, item, quantity, pris og status. Annullering sker fortsat gennem det eksisterende command-flow.
+
+### Tests og acceptkriterier
+
+- SoftReserve vises som `0 / 2`, `1 / 2` eller `2 / 2`.
+- RollBonus vises som den aktive værdi eller `0`.
+- Dynamiske items viser quantity og maksimum.
+- Flere køb af samme item summeres korrekt.
+- Annullerede køb tæller ikke som aktive.
+- Brugere kan kun se egne aktive køb.
+- Empty state og authorization håndteres korrekt.
+- Queryen læser event projections og ikke legacy purchase-tabeller.
+
+## Slice 9 – Shop catalog og shop-item administration
+
+Status: Delvist implementeret.
+
+Den generiske `ShopItem`-model, shop queries, commands og migration findes allerede delvist. Slicen færdiggøres med Officer-only UI til oprettelse, redigering, aktivering/deaktivering og visning af historiske køb.
+
+Shop-items indeholder `Id`, `Key`, `Name`, `Description`, `Price`, `MaxPerUser`, `IsActive`, `CreatedAtUtc` og `UpdatedAtUtc`. Soft Reserve er item med key `soft-reserve`. Historiske køb beholder den oprindelige pris, og items med køb slettes ikke fysisk.
+
+## Slice 10 – Admin shop-overview og køb for brugere
+
+Status: Delvist implementeret.
+
+Den eksisterende shop purchase-model og multi-user purchase-contract skal færdiggøres med Officer-only oversigt over items og køb, filtering/sorting/search, annullering med refundering samt UI til køb på vegne af flere brugere.
+
+Multi-user køb valideres samlet og gennemføres atomisk. Hver bruger får sin egen purchase-record og DKP-event, og Officer gemmes som actor.
+
+## Slice 11 – Blokering af medlemmer
+
+Status: Planlagt.
+
+Tilføj `IsBlocked`, `BlockedAtUtc`, `BlockedByUserId` og valgfri årsag. Blokerede brugere må ikke logge ind, købe, modtage admin-køb eller anvende DKP-presets. Bootstrap-Officers beskyttes, og eksisterende sessioner afvises ved næste cookie-validering. Alle regler håndhæves i Application.
+
+## Slice 12 – DKP management presets
+
+Status: Delvist implementeret.
+
+`DkpAwardPreset` og preset commands/queries findes delvist. Slicen færdiggøres med Officer UI til CRUD, aktivering/deaktivering, preset-dropdown i DKP Management, usage-visning og livstidsgrænse pr. bruger.
+
+Preset-apply opretter usage-record og DKP-event atomisk. Deaktiverede presets kan ikke anvendes, og eksisterende events ændres ikke ved redigering.
+
+## Slice 13 – DKP acquisition overview
+
+Status: Planlagt.
+
+Tilføj `/my-dkp/sources` med aktive DKP-presets, beløb, årsag, anvendelser, maksimum og resterende muligheder. Presets, hvor brugeren har nået maksimum, skjules. Oversigten er informativ; kun Officers kan anvende presets.
+
+## Slice 14 – Deployment og production hardening
+
+Status: Planlagt.
+
+Gør systemet deploymentklart med Dockerfile, Docker Compose for app/PostgreSQL/pgAdmin, production Discord redirect URI, environment-based configuration, database health checks, logging, kontrolleret fejlhåndtering, migration-/backup-dokumentation og kontrol af secrets.
+
+Deployment-testen skal dække shop, refundering, blokering og DKP presets.
 
 ## Teststrategi for alle slices
 
