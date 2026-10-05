@@ -13,6 +13,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 	public DbSet<ShopPurchase> ShopPurchases => Set<ShopPurchase>();
 	public DbSet<DkpAwardPreset> DkpAwardPresets => Set<DkpAwardPreset>();
 	public DbSet<DkpAwardPresetApplication> DkpAwardPresetApplications => Set<DkpAwardPresetApplication>();
+	public DbSet<GuildSetting> GuildSettings => Set<GuildSetting>();
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
@@ -25,6 +26,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 			entity.Property(user => user.AvatarUrl).HasMaxLength(512);
 			entity.Property(user => user.Role).HasConversion<string>().HasMaxLength(32).IsRequired();
 			entity.Property(user => user.BlockReason).HasMaxLength(500);
+			entity.Property(user => user.RollBonus).IsRequired();
 			entity.HasIndex(user => user.IsBlocked);
 			entity.HasMany(user => user.Characters)
 				.WithOne(character => character.User)
@@ -86,6 +88,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 			entity.Property(item => item.MaxPerUser).IsRequired();
 			entity.Property(item => item.CreatedAtUtc).IsRequired();
 			entity.Property(item => item.UpdatedAtUtc).IsRequired();
+			entity.Property(item => item.RollBonusValue);
 		});
 
 		modelBuilder.Entity<ShopPurchase>(entity =>
@@ -116,6 +119,12 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 			entity.HasOne(application => application.User).WithMany().HasForeignKey(application => application.UserId).OnDelete(DeleteBehavior.Restrict);
 			entity.HasOne(application => application.DkpTransaction).WithMany().HasForeignKey(application => application.DkpTransactionId).OnDelete(DeleteBehavior.Restrict);
 			entity.HasOne(application => application.AppliedByUser).WithMany().HasForeignKey(application => application.AppliedByUserId).OnDelete(DeleteBehavior.Restrict);
+		});
+
+		modelBuilder.Entity<GuildSetting>(entity =>
+		{
+			entity.HasKey(setting => setting.Id);
+			entity.Property(setting => setting.DefaultReserveLimit).IsRequired();
 		});
 	}
 }

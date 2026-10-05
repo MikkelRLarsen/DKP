@@ -9,6 +9,7 @@ using DKP.Application.Users;
 using DKP.Application.SoftReserves;
 using DKP.Application.Shop;
 using DKP.Application.Presets;
+using DKP.Application.LootReserve;
 using DKP.Facade;
 using DKP.Facade.Commands;
 using DKP.Facade.Queries;
@@ -53,6 +54,7 @@ public static class DependencyInjection
 		services.AddScoped<ISoftReservePurchaseRepository, SoftReservePurchaseRepository>();
 		services.AddScoped<IShopRepository, ShopRepository>();
 		services.AddScoped<IPresetRepository, PresetRepository>();
+		services.AddScoped<IGuildSettingsRepository, GuildSettingsRepository>();
 		services.AddScoped<ISoftReserveSettings, ConfigurationSoftReserveSettings>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
 		services.AddScoped<IDkpQueries, DkpQueries>();
@@ -70,6 +72,8 @@ public static class DependencyInjection
 		services.AddScoped<IShopCommands, ShopCommandService>();
 		services.AddScoped<IDkpPresetQueries, DkpPresetQueries>();
 		services.AddScoped<IDkpPresetCommands, DkpPresetCommandService>();
+		services.AddScoped<ILootReserveQueries, LootReserveQueries>();
+		services.AddScoped<ILootReserveCommands, LootReserveCommandService>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));
 		services.AddAuthentication(options =>

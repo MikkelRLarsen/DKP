@@ -20,6 +20,7 @@ public sealed class User
 		SoftReservePurchases = new List<SoftReservePurchase>();
 		ShopPurchases = new List<ShopPurchase>();
 		CreatedShopPurchases = new List<ShopPurchase>();
+		RollBonus = 0;
 	}
 
 	public Guid Id { get; private set; }
@@ -32,6 +33,7 @@ public sealed class User
 	public DateTime? BlockedAtUtc { get; private set; }
 	public Guid? BlockedByUserId { get; private set; }
 	public string? BlockReason { get; private set; }
+	public int RollBonus { get; private set; }
 	public ICollection<Character> Characters { get; private set; } = new List<Character>();
 	public ICollection<DkpTransaction> DkpTransactions { get; private set; } = new List<DkpTransaction>();
 	public ICollection<DkpTransaction> CreatedDkpTransactions { get; private set; } = new List<DkpTransaction>();
@@ -49,4 +51,5 @@ public sealed class User
 	public void SetRole(UserRole role) => Role = role;
 	public void Block(Guid blockedByUserId, string? reason, DateTime now) { IsBlocked = true; BlockedByUserId = blockedByUserId; BlockedAtUtc = now; BlockReason = reason; }
 	public void Unblock() { IsBlocked = false; BlockedByUserId = null; BlockedAtUtc = null; BlockReason = null; }
+	public void SetRollBonus(int rollBonus) { if (rollBonus < 0) throw new ArgumentOutOfRangeException(nameof(rollBonus)); RollBonus = rollBonus; }
 }

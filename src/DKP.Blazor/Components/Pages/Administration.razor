@@ -20,6 +20,9 @@
             </RadzenCard>
         </RadzenColumn>
         <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard><RadzenStack Gap="0.75rem"><RadzenText Text="LootReserve Export" TextStyle="TextStyle.H5" /><RadzenText Text="Select characters and copy addon-ready text." /><RadzenButton Text="Open LootReserve Export" Icon="file_copy" ButtonStyle="ButtonStyle.Primary" Click="@OpenLootReserve" /></RadzenStack></RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
             <RadzenCard>
                 <RadzenStack Gap="0.75rem">
                     <RadzenText Text="User Management" TextStyle="TextStyle.H5" />
@@ -37,4 +40,5 @@
 
     private void OpenDkpManagement() => NavigationManager.NavigateTo("/admin/dkp");
     private void OpenUserManagement() => NavigationManager.NavigateTo("/admin/users");
+    private void OpenLootReserve() => NavigationManager.NavigateTo("/admin/loot-reserve");
 }

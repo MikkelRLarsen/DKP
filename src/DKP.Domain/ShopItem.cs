@@ -4,11 +4,12 @@ public sealed class ShopItem
 {
 	private ShopItem() { }
 
-	public ShopItem(string key, string name, string description, int price, int maxPerUser, DateTime createdAtUtc)
+	public ShopItem(string key, string name, string description, int price, int maxPerUser, DateTime createdAtUtc, int? rollBonusValue = null)
 	{
 		Id = Guid.NewGuid(); Key = key; Name = name; Description = description;
 		Price = price; MaxPerUser = maxPerUser; IsActive = true;
 		CreatedAtUtc = createdAtUtc; UpdatedAtUtc = createdAtUtc;
+		RollBonusValue = rollBonusValue;
 		Purchases = new List<ShopPurchase>();
 	}
 
@@ -21,6 +22,7 @@ public sealed class ShopItem
 	public bool IsActive { get; private set; }
 	public DateTime CreatedAtUtc { get; private set; }
 	public DateTime UpdatedAtUtc { get; private set; }
+	public int? RollBonusValue { get; private set; }
 	public ICollection<ShopPurchase> Purchases { get; private set; } = new List<ShopPurchase>();
 
 	public void Update(string name, string description, int price, int maxPerUser, DateTime now)

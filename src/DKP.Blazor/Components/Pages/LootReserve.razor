@@ -1,0 +1,163 @@
+@page "/admin/loot-reserve"
+@attribute [Authorize(Roles = "Officer")]
+@using System.Security.Claims
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject ILootReserveQueries LootReserveQueries
+@inject ILootReserveCommands LootReserveCommands
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NotificationService NotificationService
+@inject IJSRuntime JS
+
+<PageTitle>LootReserve Export</PageTitle>
+
+<RadzenStack Gap="1rem">
+    <div>
+        <h1>LootReserve Export</h1>
+        <RadzenText Text="Select characters and copy the generated text directly into the addon." TextStyle="TextStyle.Subtitle2" />
+    </div>
+
+    @if (loading)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
+                <RadzenFormField Text="Default ReserveLimit">
+                    <ChildContent><RadzenNumeric TValue="int" @bind-Value="defaultReserveLimit" Min="0" Change="@OnValueChanged" /></ChildContent>
+                </RadzenFormField>
+                <RadzenButton Text="Save default" Icon="save" Click="SaveSettingsAsync" Disabled="@saving" />
+                <RadzenButton Text="Generate text" Icon="description" ButtonStyle="ButtonStyle.Primary" Click="GenerateText" />
+                <RadzenButton Text="Copy CSV text" Icon="content_copy" ButtonStyle="ButtonStyle.Success" Click="CopyTextAsync" Disabled="@string.IsNullOrEmpty(exportText)" />
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenDataGrid @ref="grid" Data="@rows" TItem="LootReserveRow" AllowPaging="true" PageSize="25" AllowSorting="true" RowRender="RowRender" EmptyText="No guild members found.">
+            <Columns>
+                <RadzenDataGridColumn TItem="LootReserveRow" Property="DiscordName" Title="Member" />
+                <RadzenDataGridColumn TItem="LootReserveRow" Title="Character" Sortable="false">
+                    <Template Context="row">
+                        @if (row.Characters.Count == 0)
+                        {
+                            <RadzenText Text="Not ready" />
+                        }
+                        else
+                        {
+                            <RadzenDropDown TValue="Guid?" @bind-Value="row.SelectedCharacterId" Data="@row.Characters" TextProperty="FullName" ValueProperty="Id" Style="width:100%;" Change="@(_ => ClearGeneratedText())" />
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="LootReserveRow" Title="ReserveLimit" Sortable="false">
+                    <Template Context="row"><RadzenNumeric TValue="int" @bind-Value="row.ReserveLimit" Min="0" Change="@OnValueChanged" /></Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="LootReserveRow" Title="RollBonus" Sortable="false">
+                    <Template Context="row"><RadzenNumeric TValue="int" @bind-Value="row.RollBonus" Min="0" Change="@OnValueChanged" /></Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="LootReserveRow" Title="Status" Sortable="false">
+                    <Template Context="row"><RadzenBadge Text="@(row.IsReady ? (row.Struck ? "Excluded" : "Included") : "Not ready")" BadgeStyle="@(row.Struck ? BadgeStyle.Light : row.IsReady ? BadgeStyle.Success : BadgeStyle.Warning)" /></Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="LootReserveRow" Title="Action" Sortable="false" Filterable="false">
+                    <Template Context="row"><RadzenButton Text="@(row.Struck ? "Include" : "Strike")" Icon="@(row.Struck ? "undo" : "remove_circle_outline")" Size="ButtonSize.Small" Click="@(() => ToggleStrike(row))" Disabled="@(!row.IsReady)" /></Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+
+        @if (!string.IsNullOrEmpty(exportText))
+        {
+            <RadzenCard>
+                <RadzenText Text="Generated text" TextStyle="TextStyle.H5" />
+                <RadzenTextArea @bind-Value="exportText" Rows="10" Style="width:100%;font-family:monospace;" />
+            </RadzenCard>
+        }
+    }
+</RadzenStack>
+
+@code {
+    private RadzenDataGrid<LootReserveRow>? grid;
+    private List<LootReserveRow> rows = [];
+    private string? exportText;
+    private int defaultReserveLimit;
+    private bool loading = true;
+    private bool saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var discordId = await GetDiscordIdAsync();
+            var members = await LootReserveQueries.GetMembersAsync(discordId);
+            var settings = await LootReserveQueries.GetSettingsAsync(discordId);
+            defaultReserveLimit = settings.DefaultReserveLimit;
+            rows = members.Select(member => new LootReserveRow(member)).ToList();
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load LootReserve", exception.Message);
+        }
+        finally { loading = false; }
+    }
+
+    private async Task<string> GetDiscordIdAsync()
+        => (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? throw new UnauthorizedAccessException("The authenticated Discord user could not be identified.");
+
+    private async Task SaveSettingsAsync()
+    {
+        saving = true;
+        try
+        {
+            var result = await LootReserveCommands.UpdateSettingsAsync(await GetDiscordIdAsync(), new UpdateLootReserveSettingsRequest(defaultReserveLimit));
+            defaultReserveLimit = result.DefaultReserveLimit;
+            NotificationService.Notify(NotificationSeverity.Success, "Settings saved", "Default ReserveLimit updated.");
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to save settings", exception.Message); }
+        finally { saving = false; }
+    }
+
+    private void ToggleStrike(LootReserveRow row) { row.Struck = !row.Struck; ClearGeneratedText(); }
+    private void OnValueChanged(int _) => ClearGeneratedText();
+    private void ClearGeneratedText() => exportText = null;
+
+    private void GenerateText()
+    {
+        var included = rows.Where(row => row.IsReady && !row.Struck && row.SelectedCharacter is not null)
+            .OrderBy(row => row.SelectedCharacter!.LastName).ThenBy(row => row.SelectedCharacter!.FirstName);
+        var lines = new List<string> { "FirstName,LastName,ReserveLimit,RollBonus" };
+        lines.AddRange(included.Select(row => string.Join(',', Csv(row.SelectedCharacter!.FirstName), Csv(row.SelectedCharacter.LastName), row.ReserveLimit, row.RollBonus)));
+        exportText = string.Join("\r\n", lines);
+        NotificationService.Notify(NotificationSeverity.Success, "Text generated", "The export text is ready to copy.");
+    }
+
+    private async Task CopyTextAsync()
+    {
+        if (string.IsNullOrEmpty(exportText)) return;
+        try { await JS.InvokeVoidAsync("dkpLootReserve.copyText", exportText); NotificationService.Notify(NotificationSeverity.Success, "Copied", "The text was copied to the clipboard."); }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Copy failed", exception.Message); }
+    }
+
+    private static string Csv(string value) => value.Contains(',') || value.Contains('"') || value.Contains('\r') || value.Contains('\n') ? $"\"{value.Replace("\"", "\"\"")}\"" : value;
+    private static void RowRender(RowRenderEventArgs<LootReserveRow> args) { if (args.Data.Struck) args.Attributes["style"] = "text-decoration:line-through;opacity:.55;"; }
+
+    private sealed class LootReserveRow(LootReserveMemberDto source)
+    {
+        public Guid UserId { get; } = source.UserId;
+        public string DiscordName { get; } = source.DiscordName;
+        public IReadOnlyList<LootReserveCharacter> Characters { get; } = source.Characters.Select(x => new LootReserveCharacter(x)).ToArray();
+        public Guid? SelectedCharacterId { get; set; } = source.Characters.FirstOrDefault()?.Id;
+        public int ReserveLimit { get; set; } = source.ReserveLimit;
+        public int RollBonus { get; set; } = source.RollBonus;
+        public bool Struck { get; set; }
+        public bool IsReady => SelectedCharacterId is not null;
+        public LootReserveCharacter? SelectedCharacter => Characters.FirstOrDefault(x => x.Id == SelectedCharacterId);
+    }
+    private sealed class LootReserveCharacter(CharacterDto source)
+    {
+        public Guid Id { get; } = source.Id;
+        public string FirstName { get; } = source.FirstName;
+        public string LastName { get; } = source.LastName;
+        public string FullName => $"{FirstName} {LastName}";
+    }
+}

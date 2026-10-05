@@ -14,7 +14,7 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 5 | Player details | Færdig |
 | 6 | Officer user administration | Færdig |
 | 7 | Køb af Soft Reserves | Færdig |
-| 8 | LootReserve export | Næste |
+| 8 | LootReserve copy-to-clipboard export | Færdig |
 | 9 | Deployment og production hardening | Planlagt |
 
 ## Arkitektoniske regler
@@ -385,28 +385,35 @@ Leveret:
 - `/dkp-shop` med produkt-dropdown, quantity, confirmation, købshistorik og annullering.
 - Tests for køb, refundering, quantity, saldo, brugerafgrænsning og query.
 
-## Slice 8 – LootReserve export
+## Slice 8 – LootReserve copy-to-clipboard export
 
-Status: Næste.
+Status: Færdig.
 
 ### Mål
 
-Generere en kopiérbar tekstliste til LootReserve uden direkte addon-integration.
+Generere en kopiérbar CSV-formateret tekstliste til LootReserve uden fil-download eller direkte addon-integration.
 
 ### Scope
 
-- Officer-only side under Administration.
-- RadzenDataGrid med spiller og samlet reserve limit.
-- Generate Export.
-- CSV/text-output i `RadzenTextArea`.
-- Copy-to-clipboard.
+- Officer-only `/admin/loot-reserve` under Administration.
+- RadzenDataGrid med alle medlemmer, character-valg og Main Character som default.
+- Midlertidig override af ReserveLimit og RollBonus.
+- Visuel strikethrough, hvor fravalgte medlemmer udelades fra outputtet.
+- Output i `RadzenTextArea` med `FirstName,LastName,ReserveLimit,RollBonus`.
+- Copy-to-clipboard via browser Clipboard API; ingen CSV-fil downloades.
+- Default ReserveLimit gemmes i guild settings.
+- RollBonus-tiers seedes som shop-items med én aktiv bonus pr. bruger.
 
 ### Acceptkriterier
 
-- Eksport har korrekt header og stabil rækkefølge.
-- Specialtegn håndteres korrekt.
-- Kun Officer kan generere eksporten.
+- Teksten har korrekt header og stabil rækkefølge.
+- Specialtegn håndteres korrekt som CSV-tekst.
+- Kun Officer kan hente data og ændre settings.
+- Gennemstregede og ikke-klare medlemmer udelades.
+- Teksten kan kopieres og indsættes direkte i addon’et.
 - Ingen direkte kommunikation med World of Warcraft eller LootReserve.
+
+Migration: `20261005172857_Slice8LootReserve`.
 
 ## Slice 9 – Deployment og production hardening
 
@@ -443,5 +450,5 @@ Hver slice skal som minimum have:
 - Slice 2 indeholder kun brugerens egen historik.
 - Officer add/remove kommer i Slice 3.
 - LootReserve har ingen direkte integration til World of Warcraft.
-- Soft Reserve-køb kommer først efter DKP og LootReserve-export.
+- LootReserve-exporten er tekstbaseret og downloader ikke filer.
 - Dokumentet skal opdateres med status, migrations og kendte begrænsninger, når hver slice implementeres.
