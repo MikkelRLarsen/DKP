@@ -1,0 +1,173 @@
+@page "/admin/dkp-presets"
+@attribute [Authorize(Roles = "Officer")]
+@using System.Security.Claims
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IDkpPresetQueries PresetQueries
+@inject IDkpPresetCommands PresetCommands
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>DKP Presets</PageTitle>
+
+<RadzenStack Gap="1.5rem">
+    <div>
+        <h1>DKP Presets</h1>
+        <RadzenText Text="Manage predefined DKP awards and their lifetime limits." TextStyle="TextStyle.Subtitle2" />
+    </div>
+
+    @if (loading)
+    {
+        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 12rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText Text="Loading presets..." />
+        </RadzenStack>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText Text="@(editingId is null ? "Create preset" : "Edit preset")" TextStyle="TextStyle.H5" />
+                <RadzenRow Gap="1rem">
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Name" Style="width:100%;"><ChildContent><RadzenTextBox @bind-Value="form.Name" MaxLength="128" Style="width:100%;" /></ChildContent></RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Amount" Style="width:100%;"><ChildContent><RadzenNumeric @bind-Value="form.Amount" Min="1" ShowUpDown="false" Style="width:100%;" /></ChildContent></RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Max applications per user" Style="width:100%;"><ChildContent><RadzenNumeric @bind-Value="form.MaxApplicationsPerUser" Min="1" ShowUpDown="false" Style="width:100%;" /></ChildContent></RadzenFormField>
+                    </RadzenColumn>
+                </RadzenRow>
+                <RadzenFormField Text="Reason" Style="width:100%;"><ChildContent><RadzenTextArea @bind-Value="form.Reason" MaxLength="500" Rows="3" Style="width:100%;" /></ChildContent></RadzenFormField>
+                <RadzenStack Orientation="Orientation.Horizontal" Gap=".75rem">
+                    <RadzenButton Text="@(editingId is null ? "Create preset" : "Save changes")" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="SaveAsync" Disabled="@saving" />
+                    @if (editingId is not null)
+                    {
+                        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="ResetForm" Disabled="@saving" />
+                    }
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenText Text="Presets" TextStyle="TextStyle.H5" />
+            <RadzenDataGrid Data="@presets" TItem="DkpAwardPresetDto" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No presets found." Style="margin-top:1rem;">
+                <Columns>
+                    <RadzenDataGridColumn TItem="DkpAwardPresetDto" Property="Name" Title="Name" />
+                    <RadzenDataGridColumn TItem="DkpAwardPresetDto" Property="Amount" Title="Amount" />
+                    <RadzenDataGridColumn TItem="DkpAwardPresetDto" Property="Reason" Title="Reason" />
+                    <RadzenDataGridColumn TItem="DkpAwardPresetDto" Property="MaxApplicationsPerUser" Title="Max per user" />
+                    <RadzenDataGridColumn TItem="DkpAwardPresetDto" Property="IsActive" Title="Status">
+                        <Template Context="preset"><RadzenBadge Text="@(preset.IsActive ? "Active" : "Inactive")" BadgeStyle="@(preset.IsActive ? BadgeStyle.Success : BadgeStyle.Light)" /></Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="DkpAwardPresetDto" Title="Actions" Sortable="false" Filterable="false">
+                        <Template Context="preset">
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap=".5rem">
+                                <RadzenButton Text="Edit" Icon="edit" Size="ButtonSize.Small" Click="@(() => BeginEdit(preset))" Disabled="@saving" />
+                                <RadzenButton Text="@(preset.IsActive ? "Deactivate" : "Activate")" Icon="@(preset.IsActive ? "visibility_off" : "visibility")" Size="ButtonSize.Small" ButtonStyle="@(preset.IsActive ? ButtonStyle.Light : ButtonStyle.Success)" Click="@(() => ToggleActiveAsync(preset))" Disabled="@saving" />
+                            </RadzenStack>
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private IReadOnlyList<DkpAwardPresetDto> presets = [];
+    private readonly PresetForm form = new();
+    private Guid? editingId;
+    private string actorDiscordId = string.Empty;
+    private bool loading = true;
+    private bool saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            actorDiscordId = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException("Not authenticated.");
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load presets", exception.Message);
+        }
+        finally { loading = false; }
+    }
+
+    private async Task ReloadAsync() => presets = await PresetQueries.GetAllAsync();
+
+    private void BeginEdit(DkpAwardPresetDto preset)
+    {
+        editingId = preset.Id;
+        form.Name = preset.Name;
+        form.Amount = preset.Amount;
+        form.Reason = preset.Reason;
+        form.MaxApplicationsPerUser = preset.MaxApplicationsPerUser;
+    }
+
+    private void ResetForm()
+    {
+        editingId = null;
+        form.Name = string.Empty;
+        form.Amount = 1;
+        form.Reason = string.Empty;
+        form.MaxApplicationsPerUser = 1;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(form.Name) || string.IsNullOrWhiteSpace(form.Reason) || form.Amount <= 0 || form.MaxApplicationsPerUser <= 0 || form.Reason.Trim().Length > 500)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Validation error", "Name, positive amount, reason and a positive maximum are required. Reason must be at most 500 characters.");
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            var input = new DkpAwardPresetInput(form.Name, form.Amount, form.Reason, form.MaxApplicationsPerUser);
+            if (editingId is Guid id)
+            {
+                await PresetCommands.UpdateAsync(actorDiscordId, id, input);
+                NotificationService.Notify(NotificationSeverity.Success, "Preset updated", $"{form.Name.Trim()} was updated.");
+            }
+            else
+            {
+                await PresetCommands.CreateAsync(actorDiscordId, input);
+                NotificationService.Notify(NotificationSeverity.Success, "Preset created", $"{form.Name.Trim()} was added.");
+            }
+            ResetForm();
+            await ReloadAsync();
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to save preset", exception.Message); }
+        finally { saving = false; }
+    }
+
+    private async Task ToggleActiveAsync(DkpAwardPresetDto preset)
+    {
+        var action = preset.IsActive ? "deactivate" : "activate";
+        if (await DialogService.Confirm($"Are you sure you want to {action} {preset.Name}?", $"Confirm {action}") != true) return;
+        saving = true;
+        try
+        {
+            await PresetCommands.SetActiveAsync(actorDiscordId, preset.Id, !preset.IsActive);
+            await ReloadAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Preset updated", $"{preset.Name} is now {(!preset.IsActive ? "active" : "inactive")}.");
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to update preset", exception.Message); }
+        finally { saving = false; }
+    }
+
+    private sealed class PresetForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public int Amount { get; set; } = 1;
+        public string Reason { get; set; } = string.Empty;
+        public int MaxApplicationsPerUser { get; set; } = 1;
+    }
+}

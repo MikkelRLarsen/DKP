@@ -22,6 +22,15 @@
         <RadzenColumn Size="12" SizeMD="6">
             <RadzenCard>
                 <RadzenStack Gap="0.75rem">
+                    <RadzenText Text="DKP Presets" TextStyle="TextStyle.H5" />
+                    <RadzenText Text="Create predefined awards and manage their lifetime limits." />
+                    <RadzenButton Text="Open DKP Presets" Icon="rule" ButtonStyle="ButtonStyle.Primary" Click="@OpenDkpPresets" />
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard>
+                <RadzenStack Gap="0.75rem">
                     <RadzenText Text="Shop Purchases" TextStyle="TextStyle.H5" />
                     <RadzenText Text="Review purchases and buy items for guild members." />
                     <RadzenButton Text="Open Shop Purchases" Icon="shopping_bag" ButtonStyle="ButtonStyle.Primary" Click="@OpenShopPurchases" />
@@ -57,6 +66,7 @@
     private NavigationManager NavigationManager { get; set; } = default!;
 
     private void OpenDkpManagement() => NavigationManager.NavigateTo("/admin/dkp");
+    private void OpenDkpPresets() => NavigationManager.NavigateTo("/admin/dkp-presets");
     private void OpenUserManagement() => NavigationManager.NavigateTo("/admin/users");
     private void OpenLootReserve() => NavigationManager.NavigateTo("/admin/loot-reserve");
     private void OpenShopCatalog() => NavigationManager.NavigateTo("/admin/shop");

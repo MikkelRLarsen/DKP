@@ -20,7 +20,7 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 9 | Shop catalog og shop-item administration | Færdig |
 | 10 | Admin shop-overview og køb for brugere | Færdig |
 | 11 | Guild membership ved OAuth og blokering af medlemmer | Færdig |
-| 12 | DKP management presets | Delvist implementeret |
+| 12 | DKP management presets | Færdig |
 | 13 | DKP acquisition overview | Planlagt |
 | 13a | Achievement-baserede DKP awards | Planlagt |
 | 13b | Achievement-gated shop-items | Planlagt |
@@ -609,11 +609,22 @@ Mulige tests:
 
 ## Slice 12 – DKP management presets
 
-Status: Delvist implementeret.
+Status: Færdig.
 
-`DkpAwardPreset` og preset commands/queries findes delvist. Slicen færdiggøres med Officer UI til CRUD, aktivering/deaktivering, preset-dropdown i DKP Management, usage-visning og livstidsgrænse pr. bruger.
+`DkpAwardPreset` og preset commands/queries er færdigimplementeret med Officer UI til CRUD, aktivering/deaktivering, preset-dropdown i DKP Management, usage-visning og livstidsgrænse pr. bruger.
 
 Preset-apply opretter usage-record og DKP-event atomisk. Deaktiverede presets kan ikke anvendes, og eksisterende events ændres ikke ved redigering.
+
+Leveret:
+
+- Officer-only `/admin/dkp-presets` med opret, redigér og aktivér/deaktivér.
+- Validering af navn, positivt beløb, årsag og maksimum på 500 tegn.
+- Preset-dropdown i `/admin/dkp` med mulighed for fortsat custom amount/reason.
+- Presets kan kun bruges til Add DKP; Remove DKP forbliver custom.
+- Usage-query viser anvendelser, maksimum og resterende anvendelser for den valgte bruger.
+- Lifetime-limit håndhæves serverside og atomisk sammen med DKP-event og usage-record.
+- Deaktiverede presets vises ikke som valgmulighed til nye awards.
+- Officer authorization håndhæves både på UI, query og commands.
 
 ## Slice 13 – DKP acquisition overview
 

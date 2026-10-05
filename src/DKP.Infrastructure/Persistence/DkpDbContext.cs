@@ -120,7 +120,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 			entity.HasIndex(application => new { application.PresetId, application.UserId });
 			entity.HasOne(application => application.Preset).WithMany().HasForeignKey(application => application.PresetId).OnDelete(DeleteBehavior.Restrict);
 			entity.HasOne(application => application.User).WithMany().HasForeignKey(application => application.UserId).OnDelete(DeleteBehavior.Restrict);
-			entity.HasOne(application => application.DkpTransaction).WithMany().HasForeignKey(application => application.DkpTransactionId).OnDelete(DeleteBehavior.Restrict);
+			entity.HasOne(application => application.DkpTransaction).WithMany().HasForeignKey(application => application.DkpTransactionId).OnDelete(DeleteBehavior.Restrict).IsRequired(false);
 			entity.HasOne(application => application.AppliedByUser).WithMany().HasForeignKey(application => application.AppliedByUserId).OnDelete(DeleteBehavior.Restrict);
 		});
 

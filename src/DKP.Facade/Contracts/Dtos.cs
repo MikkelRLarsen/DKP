@@ -16,6 +16,7 @@ public sealed record BlockUserRequest(Guid TargetUserId, string? Reason);
 public sealed record GuildMemberDto(Guid UserId, string DiscordName, string? AvatarUrl, int DkpBalance, IReadOnlyList<CharacterDto> Characters);
 public sealed record PlayerDetailsDto(Guid UserId, string DiscordName, string? AvatarUrl, IReadOnlyList<CharacterDto> Characters, DkpHistoryDto DkpHistory);
 public sealed record CreateDkpTransactionRequest(Guid TargetUserId, int Amount, string Reason);
+public sealed record CreateDkpTransactionsRequest(IReadOnlyCollection<Guid> TargetUserIds, int Amount, string Reason);
 public sealed record DkpTransactionDto(Guid Id, int Amount, string Reason, DateTime CreatedAtUtc, string CreatedByDiscordName);
 public sealed record BalanceDto(int Amount);
 public sealed record DkpHistoryDto(BalanceDto Balance, IReadOnlyList<DkpTransactionDto> Transactions);
@@ -41,4 +42,8 @@ public sealed record ActivePurchaseItemDto(string Key, string Name, int Quantity
 public sealed record ActivePurchaseOverviewDto(IReadOnlyList<ActivePurchaseItemDto> Items, int RollBonus);
 public sealed record DkpAwardPresetDto(Guid Id, string Name, int Amount, string Reason, int MaxApplicationsPerUser, bool IsActive);
 public sealed record DkpAwardPresetInput(string Name, int Amount, string Reason, int MaxApplicationsPerUser);
+public sealed record DkpPresetUsageDto(Guid PresetId, int Applications, int MaxApplications, int Remaining)
+{
+	public bool IsAvailable => Remaining > 0;
+}
 public sealed record DkpAcquisitionSourceDto(Guid PresetId, string Name, int Amount, string Reason, int Applications, int MaxApplications, int Remaining);
