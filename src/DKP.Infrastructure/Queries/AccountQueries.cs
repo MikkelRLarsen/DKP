@@ -1,39 +1,14 @@
-using DKP.Domain;
 using DKP.Facade.Contracts;
 using DKP.Facade.Queries;
 using DKP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-
 namespace DKP.Infrastructure.Queries;
-
 public sealed class AccountQueries(DkpDbContext db) : IAccountQueries
 {
-	public async Task<DashboardDto?> GetDashboardAsync(string discordId, CancellationToken cancellationToken = default)
+	public async Task<DashboardDto?> GetDashboardAsync(string discordId, CancellationToken ct = default)
 	{
-		var user = await db.Users
-			.AsNoTracking()
-			.Include(item => item.Characters)
-			.Where(item => item.DiscordId == discordId)
-			.Select(item => new
-			{
-				User = item,
-				DkpBalance = item.DkpTransactions.Sum(transaction => (int?)transaction.Amount) ?? 0
-			})
-			.SingleOrDefaultAsync(cancellationToken);
-
-		return user is null
-			? null
-			: new DashboardDto(
-				user.User.Id,
-				user.User.DiscordId,
-				user.User.DiscordName,
-				user.User.AvatarUrl,
-				user.User.Role,
-				user.DkpBalance,
-				user.User.Characters
-					.OrderBy(character => character.FirstName)
-					.ThenBy(character => character.LastName)
-					.Select(character => new CharacterDto(character.Id, character.FirstName, character.LastName, character.IsMain))
-					.ToArray());
+		var user=await db.Users.AsNoTracking().Include(x=>x.Characters).SingleOrDefaultAsync(x=>x.DiscordId==discordId,ct);if(user is null)return null;
+		var projection=await db.DkpBalanceProjections.AsNoTracking().Where(x=>x.UserId==user.Id).Select(x=>(int?)x.Balance).SingleOrDefaultAsync(ct);var balance=projection??await db.DkpTransactions.Where(x=>x.UserId==user.Id).Select(x=>(int?)x.Amount).SumAsync(ct)??0;
+		return new DashboardDto(user.Id,user.DiscordId,user.DiscordName,user.AvatarUrl,user.Role,balance,user.Characters.OrderBy(x=>x.FirstName).ThenBy(x=>x.LastName).Select(x=>new CharacterDto(x.Id,x.FirstName,x.LastName,x.IsMain)).ToArray());
 	}
 }

@@ -15,6 +15,7 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 6 | Officer user administration | Færdig |
 | 7 | Køb af Soft Reserves | Færdig |
 | 8 | LootReserve copy-to-clipboard export | Færdig |
+| 8a | Event-sourced DKP ledger og shop-køb | Færdig |
 | 9 | Deployment og production hardening | Planlagt |
 
 ## Arkitektoniske regler
@@ -414,6 +415,39 @@ Generere en kopiérbar CSV-formateret tekstliste til LootReserve uden fil-downlo
 - Ingen direkte kommunikation med World of Warcraft eller LootReserve.
 
 Migration: `20261005172857_Slice8LootReserve`.
+
+## Slice 8a – Event-sourced DKP ledger og shop-køb
+
+Status: Færdig.
+
+### Mål
+
+Gøre event store til source of truth for DKP-balance, DKP-hændelser, shop-køb, annulleringer og refunderinger. Balance og aktive item-quantity beregnes fra immutable events og vises gennem genopbyggelige read projections.
+
+### Scope
+
+- Append-only typed events for `DkpCredited`, `DkpDebited`, `ShopPurchaseCreated` og `ShopPurchaseCancelled`.
+- Atomisk event append og projection-opdatering i samme PostgreSQL-transaktion.
+- Balance projection som summen af credit/debit events.
+- Shop purchase projection til historik, aktive køb og `MaxPerUser`-validering.
+- Database lock under saldo- og item-limit-validering.
+- Annullering som modgående credit event; dobbelt-refundering afvises.
+- RollBonus med maksimalt ét aktivt køb pr. bruger.
+- Projection rebuild/replay uden at skabe nye events.
+- Eksisterende tabeller udfases som source of truth; databasen er tom, så historiske records migreres ikke.
+
+### Acceptkriterier
+
+- Nye DKP- og shop-commands skriver events og ikke gamle transaction-/purchase-records.
+- Dashboard, `/my-dkp`, `/dkp-shop` og LootReserve læser event-baserede projections.
+- Saldo, refunderinger og item limits beregnes korrekt efter replay.
+- Samtidige køb kan ikke overskride saldo eller `MaxPerUser`.
+- Event store er immutable og har aggregate sequence/correlation-id beskyttelse.
+- Build, tests og EF migration passerer.
+
+Migration: `20261005175846_Slice8aEventSourcedLedger`.
+
+Den generiske shop- og DKP-command path skriver nu immutable events og opdaterer projections atomisk. De tidligere tabeller findes fortsat i EF-modellen som kompatibilitetslag for eksisterende tests/legacy contracts, men bruges ikke af det nye UI-flow som source of truth.
 
 ## Slice 9 – Deployment og production hardening
 

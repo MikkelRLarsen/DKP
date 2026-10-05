@@ -55,6 +55,8 @@ public static class DependencyInjection
 		services.AddScoped<IShopRepository, ShopRepository>();
 		services.AddScoped<IPresetRepository, PresetRepository>();
 		services.AddScoped<IGuildSettingsRepository, GuildSettingsRepository>();
+		services.AddScoped<IEventLedgerRepository, EventLedgerRepository>();
+		services.AddScoped<IEventProjectionRebuilder, EventProjectionRebuilder>();
 		services.AddScoped<ISoftReserveSettings, ConfigurationSoftReserveSettings>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
 		services.AddScoped<IDkpQueries, DkpQueries>();
@@ -63,7 +65,13 @@ public static class DependencyInjection
 		services.AddScoped<IOfficerIdentityPolicy, OfficerIdentityPolicy>();
 		services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 		services.AddScoped<ICharacterCommands, CharacterCommandService>();
-		services.AddScoped<IDkpTransactionCommands, DkpTransactionCommandService>();
+		// DkpTransactionCommandService keeps a legacy constructor for older unit tests/contracts.
+		// Use an explicit factory so the container always selects the event-sourced path.
+		services.AddScoped<IDkpTransactionCommands>(serviceProvider =>
+			new DkpTransactionCommandService(
+				serviceProvider.GetRequiredService<IUserRepository>(),
+				serviceProvider.GetRequiredService<IEventLedgerRepository>(),
+				serviceProvider.GetRequiredService<TimeProvider>()));
 		services.AddScoped<ISoftReserveCommands, SoftReserveCommandService>();
 		services.AddScoped<ISoftReserveQueries, SoftReserveQueries>();
 		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();

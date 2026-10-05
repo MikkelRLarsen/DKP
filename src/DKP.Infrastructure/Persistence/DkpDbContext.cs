@@ -14,6 +14,9 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 	public DbSet<DkpAwardPreset> DkpAwardPresets => Set<DkpAwardPreset>();
 	public DbSet<DkpAwardPresetApplication> DkpAwardPresetApplications => Set<DkpAwardPresetApplication>();
 	public DbSet<GuildSetting> GuildSettings => Set<GuildSetting>();
+	public DbSet<DkpEvent> DkpEvents => Set<DkpEvent>();
+	public DbSet<DkpBalanceProjection> DkpBalanceProjections => Set<DkpBalanceProjection>();
+	public DbSet<ShopPurchaseProjection> ShopPurchaseProjections => Set<ShopPurchaseProjection>();
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
@@ -125,6 +128,30 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
 		{
 			entity.HasKey(setting => setting.Id);
 			entity.Property(setting => setting.DefaultReserveLimit).IsRequired();
+		});
+
+		modelBuilder.Entity<DkpEvent>(entity =>
+		{
+			entity.HasKey(x => x.Id);
+			entity.Property(x => x.AggregateType).HasMaxLength(64).IsRequired();
+			entity.Property(x => x.EventType).HasMaxLength(128).IsRequired();
+			entity.Property(x => x.Payload).HasColumnType("jsonb").IsRequired();
+			entity.HasIndex(x => new { x.AggregateType, x.AggregateId, x.Sequence }).IsUnique();
+			entity.HasIndex(x => x.CorrelationId).IsUnique();
+			entity.HasIndex(x => new { x.UserId, x.OccurredAtUtc });
+		});
+
+		modelBuilder.Entity<DkpBalanceProjection>(entity =>
+		{
+			entity.HasKey(x => x.UserId);
+			entity.Property(x => x.Balance).IsRequired();
+		});
+
+		modelBuilder.Entity<ShopPurchaseProjection>(entity =>
+		{
+			entity.HasKey(x => x.PurchaseId);
+			entity.HasIndex(x => new { x.UserId, x.ShopItemId, x.CancelledAtUtc });
+			entity.HasOne<ShopItem>().WithMany().HasForeignKey(x => x.ShopItemId).OnDelete(DeleteBehavior.Restrict);
 		});
 	}
 }

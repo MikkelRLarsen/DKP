@@ -17,7 +17,7 @@ public sealed class LootReserveQueries(DkpDbContext db) : ILootReserveQueries
 		await EnsureOfficerAsync(discordId, ct);
 		var setting = await db.GuildSettings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == 1, ct);
 		var defaultLimit = setting?.DefaultReserveLimit ?? 0;
-		return await db.Users.AsNoTracking().OrderBy(x => x.DiscordName).Select(user => new LootReserveMemberDto(user.Id,user.DiscordName,user.Characters.OrderByDescending(c => c.IsMain).ThenBy(c => c.LastName).ThenBy(c => c.FirstName).Select(c => new CharacterDto(c.Id,c.FirstName,c.LastName,c.IsMain)).ToArray(),defaultLimit + (user.ShopPurchases.Where(p => p.CancelledAtUtc == null && p.ShopItem.Key == "soft-reserve").Select(p => (int?)p.Quantity).Sum() ?? 0),user.RollBonus,user.Characters.Any())).ToArrayAsync(ct);
+		return await db.Users.AsNoTracking().OrderBy(x => x.DiscordName).Select(user => new LootReserveMemberDto(user.Id,user.DiscordName,user.Characters.OrderByDescending(c => c.IsMain).ThenBy(c => c.LastName).ThenBy(c => c.FirstName).Select(c => new CharacterDto(c.Id,c.FirstName,c.LastName,c.IsMain)).ToArray(),defaultLimit + (db.ShopPurchaseProjections.Where(p => p.UserId == user.Id && p.CancelledAtUtc == null && db.ShopItems.Where(i => i.Id == p.ShopItemId).Select(i => i.Key).FirstOrDefault() == "soft-reserve").Select(p => (int?)p.Quantity).Sum() ?? 0),user.RollBonus,user.Characters.Any())).ToArrayAsync(ct);
 	}
 	public async Task<LootReserveSettingsDto> GetSettingsAsync(string discordId, CancellationToken ct = default)
 	{
