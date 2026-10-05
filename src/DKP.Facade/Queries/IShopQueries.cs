@@ -4,6 +4,6 @@ public interface IShopQueries
 {
 	Task<IReadOnlyList<ShopItemDto>> GetActiveItemsAsync(CancellationToken cancellationToken = default);
 	Task<IReadOnlyList<ShopItemDto>> GetAllItemsAsync(CancellationToken cancellationToken = default);
-	Task<IReadOnlyList<ShopPurchaseDto>> GetPurchasesAsync(string authenticatedDiscordId, CancellationToken cancellationToken = default);
-	Task<IReadOnlyList<ShopPurchaseDto>> GetAllPurchasesAsync(string officerDiscordId, CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<ShopPurchaseDto>> GetPurchasesAsync(CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<ShopPurchaseDto>> GetAllPurchasesAsync(CancellationToken cancellationToken = default);
 }

@@ -1,13 +1,11 @@
 @page "/admin/shop/purchases"
 @attribute [Authorize(Roles = "Officer")]
-@using System.Security.Claims
 @using DKP.Facade.Commands
 @using DKP.Facade.Contracts
 @using DKP.Facade.Queries
 @inject IShopQueries ShopQueries
 @inject IShopCommands ShopCommands
 @inject IUserAdministrationQueries UserAdministrationQueries
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 
@@ -33,7 +31,7 @@
                 <RadzenText Text="Purchase for guild members" TextStyle="TextStyle.H5" />
                 <RadzenFormField Text="Shop item" Style="width:100%;">
                     <ChildContent>
-                        <RadzenDropDown TValue="Guid" @bind-Value="selectedItemId" Data="@items" TextProperty="Name" ValueProperty="Id" AllowFiltering="true" Style="width:100%;" />
+                        <RadzenDropDown TValue="Guid" @bind-Value="selectedItemId" Data="@items" TextProperty="Name" ValueProperty="Id" AllowFiltering="true" Style="width:100%;" Disabled="@saving" />
                     </ChildContent>
                 </RadzenFormField>
                 <RadzenFormField Text="Players" Style="width:100%;">
@@ -42,7 +40,7 @@
                     </ChildContent>
                 </RadzenFormField>
                 <RadzenFormField Text="Quantity" Style="max-width:18rem; width:100%;">
-                    <ChildContent><RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Style="width:100%;" /></ChildContent>
+                    <ChildContent><RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Style="width:100%;" Disabled="@saving" /></ChildContent>
                 </RadzenFormField>
                 <RadzenButton Text="Purchase for selected players" Icon="shopping_cart" ButtonStyle="ButtonStyle.Primary" Click="PurchaseForUsersAsync" Disabled="@saving" />
                 @if (saving)
@@ -90,7 +88,6 @@
     private int quantity = 1;
     private bool loading = true;
     private bool saving;
-    private string officerDiscordId = string.Empty;
 
     private ShopItemDto? SelectedItem => items.FirstOrDefault(x => x.Id == selectedItemId);
 
@@ -98,7 +95,6 @@
     {
         try
         {
-            officerDiscordId = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException("Not authenticated.");
             await ReloadAsync();
         }
         catch (Exception exception)
@@ -115,12 +111,13 @@
     {
         items = await ShopQueries.GetActiveItemsAsync();
         users = await UserAdministrationQueries.GetAllAsync();
-        purchases = await ShopQueries.GetAllPurchasesAsync(officerDiscordId);
+        purchases = await ShopQueries.GetAllPurchasesAsync();
         if (SelectedItem is null && items.Count > 0) selectedItemId = items[0].Id;
     }
 
     private async Task PurchaseForUsersAsync()
     {
+        if (saving) return;
         var targetIds = selectedUserIds.Distinct().ToArray();
         var item = SelectedItem;
         if (item is null || targetIds.Length == 0 || quantity <= 0)
@@ -129,16 +126,17 @@
             return;
         }
 
-        if (await DialogService.Confirm($"Purchase {quantity} {item.Name} for {targetIds.Length} player(s)?", "Confirm purchase") != true) return;
-
         saving = true;
         try
         {
-            await ShopCommands.PurchaseForUsersAsync(officerDiscordId, new AdminShopPurchaseRequest(item.Id, quantity, targetIds));
+            var request = new AdminShopPurchaseRequest(item.Id, quantity, targetIds);
+            if (await DialogService.Confirm($"Purchase {request.Quantity} {item.Name} for {targetIds.Length} player(s)?", "Confirm purchase") != true) return;
+
+            await ShopCommands.PurchaseForUsersAsync(request);
             selectedUserIds = [];
             quantity = 1;
-            await ReloadAsync();
             NotificationService.Notify(NotificationSeverity.Success, "Purchases completed", "The selected players received the shop item.");
+            await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
         }
         catch (Exception exception)
         {
@@ -152,14 +150,15 @@
 
     private async Task CancelAsync(ShopPurchaseDto purchase)
     {
-        if (await DialogService.Confirm($"Cancel this purchase and refund {purchase.TotalDkpCost} DKP to {purchase.UserName}?", "Confirm cancellation") != true) return;
-
+        if (saving) return;
         saving = true;
         try
         {
-            await ShopCommands.CancelAsync(officerDiscordId, purchase.Id);
-            await ReloadAsync();
+            if (await DialogService.Confirm($"Cancel this purchase and refund {purchase.TotalDkpCost} DKP to {purchase.UserName}?", "Confirm cancellation") != true) return;
+
+            await ShopCommands.CancelAsync(purchase.Id);
             NotificationService.Notify(NotificationSeverity.Success, "Purchase cancelled", "The purchase was cancelled and DKP was refunded.");
+            await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
         }
         catch (Exception exception)
         {

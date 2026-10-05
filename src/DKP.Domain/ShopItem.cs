@@ -10,7 +10,6 @@ public sealed class ShopItem
 		Price = price; MaxPerUser = maxPerUser; IsActive = true;
 		CreatedAtUtc = createdAtUtc; UpdatedAtUtc = createdAtUtc;
 		RollBonusValue = rollBonusValue;
-		Purchases = new List<ShopPurchase>();
 	}
 
 	public Guid Id { get; private set; }
@@ -23,7 +22,6 @@ public sealed class ShopItem
 	public DateTime CreatedAtUtc { get; private set; }
 	public DateTime UpdatedAtUtc { get; private set; }
 	public int? RollBonusValue { get; private set; }
-	public ICollection<ShopPurchase> Purchases { get; private set; } = new List<ShopPurchase>();
 
 	public void Update(string name, string description, int price, int maxPerUser, DateTime now)
 	{

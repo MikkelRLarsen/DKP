@@ -1,0 +1,225 @@
+@page "/activity"
+@attribute [Authorize]
+@implements IDisposable
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IGuildActivityQueries ActivityQueries
+@inject IGuildMemberQueries GuildMemberQueries
+
+<PageTitle>Guild Activity</PageTitle>
+
+<RadzenStack Gap="1.5rem">
+    <div>
+        <h1>Guild Activity</h1>
+        <RadzenText Text="DKP awards, purchases and refunds across the guild." TextStyle="TextStyle.Subtitle2" />
+    </div>
+
+    @if (loadingMembers)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        <RadzenText Text="Loading guild members..." />
+    }
+    else
+    {
+        @if (membersFailed)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Warning">The player filter could not be loaded. You can still browse guild activity.</RadzenAlert>
+        }
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenRow Gap="1rem">
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Player" Style="width:100%;">
+                            <ChildContent>
+                                <RadzenDropDown TValue="Guid?" @bind-Value="userId" Data="@players" TextProperty="Name" ValueProperty="Id"
+                                                AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                                Placeholder="All players" Disabled="@(membersFailed || loading)" Style="width:100%;" />
+                            </ChildContent>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Action" Style="width:100%;">
+                            <ChildContent>
+                                <RadzenDropDown TValue="string" @bind-Value="action" Data="@actions" TextProperty="Name" ValueProperty="Value"
+                                                AllowClear="true" Placeholder="All actions" Disabled="@loading" Style="width:100%;" />
+                            </ChildContent>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="From (UTC)" Style="width:100%;">
+                            <ChildContent><RadzenDatePicker TValue="DateTime?" @bind-Value="fromUtc" ShowTime="true" DateFormat="yyyy-MM-dd HH:mm" AllowClear="true" Disabled="@loading" Style="width:100%;" /></ChildContent>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="To (UTC)" Style="width:100%;">
+                            <ChildContent><RadzenDatePicker TValue="DateTime?" @bind-Value="toUtc" ShowTime="true" DateFormat="yyyy-MM-dd HH:mm" AllowClear="true" Disabled="@loading" Style="width:100%;" /></ChildContent>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                </RadzenRow>
+                <RadzenStack Orientation="Orientation.Horizontal" Gap=".75rem">
+                    <RadzenButton Text="Apply filters" Icon="filter_alt" Click="ApplyFiltersAsync" Disabled="@loading" />
+                    <RadzenButton Text="Clear filters" Icon="clear" ButtonStyle="ButtonStyle.Light" Click="ClearFiltersAsync" Disabled="@loading" />
+                </RadzenStack>
+                @if (validationError is not null)
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Warning">@validationError</RadzenAlert>
+                }
+            </RadzenStack>
+        </RadzenCard>
+
+        @if (loadFailed)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load guild activity. Please retry.</RadzenAlert>
+            <RadzenButton Text="Retry" Icon="refresh" Click="ReloadAsync" Disabled="@loading" />
+        }
+        <RadzenDataGrid @ref="grid" Data="@items" TItem="GuildActivityDto" Count="@totalCount" LoadData="LoadDataAsync"
+                        IsLoading="@loading" AllowPaging="true" PageSize="20" AllowSorting="true" AllowMultiColumnSorting="false" GotoFirstPageOnSort="true"
+                        ShowPagingSummary="true" EmptyText="@(loadFailed ? "Activity could not be loaded." : "No activity matches these filters.")">
+            <Columns>
+                <RadzenDataGridColumn TItem="GuildActivityDto" Property="CreatedAtUtc" Title="Date (UTC)" SortOrder="SortOrder.Descending">
+                    <Template Context="entry">@entry.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="GuildActivityDto" Property="UserName" Title="Player" Sortable="false" />
+                <RadzenDataGridColumn TItem="GuildActivityDto" Property="MainCharacterName" Title="Main character" Sortable="false" />
+                <RadzenDataGridColumn TItem="GuildActivityDto" Property="ActorName" Title="Performed by" Sortable="false" />
+                <RadzenDataGridColumn TItem="GuildActivityDto" Property="Action" Title="Action" Sortable="false">
+                    <Template Context="entry">@ActionName(entry.Action)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="GuildActivityDto" Property="Amount" Title="DKP" Sortable="false">
+                    <Template Context="entry">
+                        <RadzenBadge Text="@entry.Amount.ToString("+#;-#;0")" BadgeStyle="@(entry.Amount >= 0 ? BadgeStyle.Success : BadgeStyle.Danger)" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="GuildActivityDto" Property="Reason" Title="Reason" Sortable="false" />
+                <RadzenDataGridColumn TItem="GuildActivityDto" Property="ItemName" Title="Item" Sortable="false" />
+                <RadzenDataGridColumn TItem="GuildActivityDto" Property="Quantity" Title="Quantity" Sortable="false" />
+            </Columns>
+        </RadzenDataGrid>
+    }
+</RadzenStack>
+
+@code {
+    private RadzenDataGrid<GuildActivityDto>? grid;
+    private IReadOnlyList<GuildActivityDto> items = [];
+    private IReadOnlyList<PlayerOption> players = [];
+    private static readonly ActionOption[] actions =
+    [
+        new("manual", "Manual DKP"),
+        new("preset", "Preset award"),
+        new("purchase", "Purchase"),
+        new("cancellation", "Cancellation / refund")
+    ];
+    private Guid? userId;
+    private string? action;
+    private DateTime? fromUtc;
+    private DateTime? toUtc;
+    private GuildActivityRequest filters = new();
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly SemaphoreSlim queryGate = new(1, 1);
+    private int loadVersion;
+    private int totalCount;
+    private bool loadingMembers = true;
+    private bool membersFailed;
+    private bool loading;
+    private bool loadFailed;
+    private string? validationError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var members = await GuildMemberQueries.GetAllAsync(lifetime.Token);
+            players = members.Select(member =>
+            {
+                var main = member.Characters.FirstOrDefault(character => character.IsMain);
+                var name = main is null ? member.DiscordName : $"{main.FirstName} {main.LastName} ({member.DiscordName})";
+                return new PlayerOption(member.UserId, name);
+            }).OrderBy(player => player.Name).ToArray();
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception) { membersFailed = true; }
+        finally { loadingMembers = false; }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        if (loading) return;
+        validationError = null;
+        if (fromUtc.HasValue && toUtc.HasValue && fromUtc > toUtc)
+        {
+            validationError = "From must be earlier than or equal to To.";
+            return;
+        }
+        filters = new GuildActivityRequest(userId, string.IsNullOrWhiteSpace(action) ? null : action,
+            AsUtc(fromUtc), AsUtc(toUtc));
+        if (grid is not null)
+        {
+            grid.ResetLoadData();
+            await grid.FirstPage(true);
+        }
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        if (loading) return;
+        userId = null;
+        action = null;
+        fromUtc = null;
+        toUtc = null;
+        await ApplyFiltersAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (!loading && grid is not null)
+        {
+            grid.ResetLoadData();
+            await grid.Reload();
+        }
+    }
+
+    private async Task LoadDataAsync(LoadDataArgs args)
+    {
+        var version = ++loadVersion;
+        var request = new GuildActivityRequest(filters.UserId, filters.Action, filters.FromUtc, filters.ToUtc,
+            args.Skip ?? 0, args.Top ?? 20, args.Sorts?.FirstOrDefault()?.SortOrder != SortOrder.Ascending);
+        loading = true;
+        var entered = false;
+        try
+        {
+            await queryGate.WaitAsync(lifetime.Token);
+            entered = true;
+            if (version != loadVersion) return;
+            // The server supplies stable date ordering (including its tie-breaker) before paging.
+            var result = await ActivityQueries.GetAsync(request, lifetime.Token);
+            if (version != loadVersion) return;
+            items = result.Items;
+            totalCount = result.TotalCount;
+            loadFailed = false;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            if (version != loadVersion) return;
+            items = [];
+            totalCount = 0;
+            loadFailed = true;
+        }
+        finally
+        {
+            if (entered) queryGate.Release();
+            if (version == loadVersion) loading = false;
+        }
+    }
+
+    private static DateTime? AsUtc(DateTime? value) =>
+        value is DateTime date ? DateTime.SpecifyKind(date, DateTimeKind.Utc) : null;
+
+    private static string ActionName(string value) =>
+        actions.FirstOrDefault(option => option.Value == value)?.Name ?? value;
+
+    public void Dispose() => lifetime.Cancel();
+
+    private sealed record PlayerOption(Guid Id, string Name);
+    private sealed record ActionOption(string Value, string Name);
+}

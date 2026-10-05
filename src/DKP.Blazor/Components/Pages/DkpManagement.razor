@@ -1,6 +1,5 @@
 @page "/admin/dkp"
 @attribute [Authorize(Roles = "Officer")]
-@using System.Security.Claims
 @using DKP.Facade.Commands
 @using DKP.Facade.Contracts
 @using DKP.Facade.Queries
@@ -8,7 +7,6 @@
 @inject IDkpTransactionCommands DkpTransactionCommands
 @inject IDkpPresetQueries PresetQueries
 @inject IDkpPresetCommands PresetCommands
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 
@@ -41,34 +39,43 @@
                 }
                 <RadzenFormField Text="Player" Style="width: 100%;">
                     <ChildContent>
-                        <RadzenDropDown TValue="IEnumerable<Guid>" @bind-Value="selectedUserIds" Data="@users" TextProperty="DisplayName" ValueProperty="Id" Placeholder="Select players" Multiple="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Change="@OnTargetChangedAsync" Style="width: 100%;" />
+                        <RadzenDropDown TValue="IEnumerable<Guid>" @bind-Value="selectedUserIds" Data="@users" TextProperty="DisplayName" ValueProperty="Id" Placeholder="Select players" Multiple="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Disabled="@(saving || usageLoading)" Change="@OnTargetChangedAsync" Style="width: 100%;" />
                     </ChildContent>
                 </RadzenFormField>
                 <RadzenFormField Text="Preset (optional)" Style="width: 100%;">
                     <ChildContent>
-                        <RadzenDropDown TValue="Guid?" @bind-Value="selectedPresetId" Data="@activePresets" TextProperty="Name" ValueProperty="Id" Placeholder="Use custom amount and reason" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Change="@OnPresetChangedAsync" Style="width: 100%;" />
+                        <RadzenDropDown TValue="Guid?" @bind-Value="selectedPresetId" Data="@activePresets" TextProperty="Name" ValueProperty="Id" Placeholder="Use custom amount and reason" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Disabled="@(saving || usageLoading)" Change="@OnPresetChangedAsync" Style="width: 100%;" />
                     </ChildContent>
                 </RadzenFormField>
-                @if (selectedPresetId is Guid && presetUsage is not null)
+                @if (usageLoading)
                 {
-                    <RadzenAlert AlertStyle="@(presetUsage.IsAvailable ? AlertStyle.Info : AlertStyle.Warning)">
-                        Preset uses for selected player: @presetUsage.Applications / @presetUsage.MaxApplications.
-                        @(presetUsage.IsAvailable ? $"{presetUsage.Remaining} remaining." : "The lifetime limit has been reached.")
+                    <RadzenText Text="Checking preset usage for each selected player..." />
+                }
+                @if (usageFailed)
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Warning">Unable to check every player's preset usage. Retry before applying the preset.</RadzenAlert>
+                    <RadzenButton Text="Retry usage check" Icon="refresh" Click="@RefreshPresetUsageAsync" Disabled="@(saving || usageLoading)" />
+                }
+                @foreach (var entry in presetUsages)
+                {
+                    <RadzenAlert @key="entry.UserId" AlertStyle="@(entry.Usage.IsAvailable ? AlertStyle.Info : AlertStyle.Warning)">
+                        @entry.PlayerName: @entry.Usage.Applications / @entry.Usage.MaxApplications preset uses.
+                        @(entry.Usage.IsAvailable ? $"{entry.Usage.Remaining} remaining." : "The lifetime limit has been reached.")
                     </RadzenAlert>
                 }
                 <RadzenFormField Text="Amount" Style="width: 100%;">
                     <ChildContent>
-                        <RadzenNumeric @bind-Value="form.Amount" Min="1" ShowUpDown="false" Disabled="@(selectedPresetId is not null)" Style="width: 100%;" />
+                        <RadzenNumeric @bind-Value="form.Amount" Min="1" ShowUpDown="false" Disabled="@(saving || selectedPresetId is not null)" Style="width: 100%;" />
                     </ChildContent>
                 </RadzenFormField>
                 <RadzenFormField Text="Reason" Style="width: 100%;">
                     <ChildContent>
-                        <RadzenTextArea @bind-Value="form.Reason" MaxLength="500" Rows="4" Disabled="@(selectedPresetId is not null)" Style="width: 100%;" />
+                        <RadzenTextArea @bind-Value="form.Reason" MaxLength="500" Rows="4" Disabled="@(saving || selectedPresetId is not null)" Style="width: 100%;" />
                     </ChildContent>
                 </RadzenFormField>
                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem">
-                    <RadzenButton Text="Add DKP" Icon="add" ButtonStyle="ButtonStyle.Success" Click="@AddDkpAsync" Disabled="@saving" />
-                    <RadzenButton Text="Remove DKP" Icon="remove" ButtonStyle="ButtonStyle.Danger" Click="@RemoveDkpAsync" Disabled="@(saving || selectedPresetId is not null)" />
+                    <RadzenButton Text="Add DKP" Icon="add" ButtonStyle="ButtonStyle.Success" Click="@AddDkpAsync" Disabled="@(saving || usageLoading || !PresetAvailable)" />
+                    <RadzenButton Text="Remove DKP" Icon="remove" ButtonStyle="ButtonStyle.Danger" Click="@RemoveDkpAsync" Disabled="@(saving || usageLoading || selectedPresetId is not null)" />
                 </RadzenStack>
                 @if (saving)
                 {
@@ -80,26 +87,31 @@
 </RadzenStack>
 
 @code {
-    private IReadOnlyList<UserSummary> users = Array.Empty<UserSummary>();
-    private IReadOnlyList<DkpAwardPresetDto> presets = Array.Empty<DkpAwardPresetDto>();
+    private IReadOnlyList<UserSummary> users = [];
+    private IReadOnlyList<DkpAwardPresetDto> presets = [];
     private IReadOnlyList<DkpAwardPresetDto> activePresets => presets.Where(preset => preset.IsActive).ToArray();
-    private IEnumerable<Guid> selectedUserIds = Array.Empty<Guid>();
+    private IEnumerable<Guid> selectedUserIds = [];
     private Guid? selectedPresetId;
-    private DkpPresetUsageDto? presetUsage;
+    private IReadOnlyList<PlayerPresetUsage> presetUsages = [];
+    private readonly SemaphoreSlim usageGate = new(1, 1);
+    private int usageVersion;
+    private bool usageLoading;
+    private bool usageFailed;
     private readonly DkpForm form = new();
     private bool loading = true;
     private bool loadFailed;
     private bool saving;
     private bool operationSucceeded;
     private string operationMessage = string.Empty;
-    private string officerDiscordId = string.Empty;
+
+    private bool PresetAvailable => selectedPresetId is null ||
+        (!usageLoading && !usageFailed && presetUsages.Count == selectedUserIds.Distinct().Count()
+            && presetUsages.All(entry => entry.Usage.IsAvailable));
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            officerDiscordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             users = await DkpQueries.GetUsersAsync();
             presets = await PresetQueries.GetAllAsync();
         }
@@ -108,14 +120,12 @@
             loadFailed = true;
             NotificationService.Notify(NotificationSeverity.Error, "Unable to load members", "Please try again later.");
         }
-        finally
-        {
-            loading = false;
-        }
+        finally { loading = false; }
     }
 
     private async Task SubmitAsync(bool add)
     {
+        if (saving || usageLoading) return;
         operationMessage = string.Empty;
         var targetUserIds = selectedUserIds.Distinct().ToArray();
         if (targetUserIds.Length == 0)
@@ -123,9 +133,14 @@
             SetOperationError("Player required: select at least one player first.");
             return;
         }
-        if (selectedPresetId is not null && presetUsage is { IsAvailable: false })
+        if (!PresetAvailable)
         {
-            SetOperationError("This preset has reached its lifetime limit for the selected player.");
+            SetOperationError("Every selected player must have available preset uses. Check usage or remove players whose lifetime limit has been reached.");
+            return;
+        }
+        if (selectedPresetId is not null && !add)
+        {
+            SetOperationError("Presets can only be used to add DKP.");
             return;
         }
         if (form.Amount <= 0 || string.IsNullOrWhiteSpace(form.Reason))
@@ -135,51 +150,53 @@
         }
 
         var selectedPlayers = users.Where(user => targetUserIds.Contains(user.Id)).ToArray();
-        var playerText = selectedPlayers.Length == 1 ? selectedPlayers[0].DisplayName : $"{selectedPlayers.Length} selected players";
+        var playerText = selectedPlayers.Length == 1 ? selectedPlayers[0].DisplayName : $"{targetUserIds.Length} selected players";
         var action = add ? "add" : "remove";
-        var confirmed = await DialogService.Confirm(
-            $"Are you sure you want to {action} {form.Amount} DKP {(add ? "to" : "from")} {playerText}?\nReason: {form.Reason.Trim()}",
-            "Confirm DKP change",
-            new ConfirmOptions { OkButtonText = "Confirm", CancelButtonText = "Cancel" });
-        if (confirmed != true)
-        {
-            return;
-        }
-
+        var amount = form.Amount;
+        var reason = form.Reason.Trim();
+        var presetId = selectedPresetId;
         saving = true;
         try
         {
-            if (selectedPresetId is Guid presetId)
+            var confirmed = await DialogService.Confirm(
+                $"Are you sure you want to {action} {amount} DKP {(add ? "to" : "from")} {playerText}?\nReason: {reason}",
+                "Confirm DKP change",
+                new ConfirmOptions { OkButtonText = "Confirm", CancelButtonText = "Cancel" });
+            if (confirmed != true) return;
+
+            if (presetId is Guid id)
             {
-                if (!add)
-                {
-                    SetOperationError("Presets can only be used to add DKP.");
-                    return;
-                }
-                await PresetCommands.ApplyManyAsync(officerDiscordId, presetId, targetUserIds);
+                await PresetCommands.ApplyManyAsync(id, targetUserIds);
             }
             else
             {
-                var request = new CreateDkpTransactionsRequest(targetUserIds, form.Amount, form.Reason);
-                if (add)
-                {
-                    await DkpTransactionCommands.AddManyAsync(officerDiscordId, request);
-                }
-                else
-                {
-                    await DkpTransactionCommands.RemoveManyAsync(officerDiscordId, request);
-                }
+                var request = new CreateDkpTransactionsRequest(targetUserIds, amount, reason);
+                if (add) await DkpTransactionCommands.AddManyAsync(request);
+                else await DkpTransactionCommands.RemoveManyAsync(request);
             }
 
-            var balanceText = selectedPlayers.Length == 1
-                ? $" New balance: {(await DkpQueries.GetHistoryAsync(selectedPlayers[0].DiscordId))?.Balance.Amount ?? 0} DKP."
-                : string.Empty;
-            SetOperationSuccess($"{form.Amount} DKP {(add ? "added to" : "removed from")} {playerText}. The transactions were saved.{balanceText}");
-            selectedUserIds = Array.Empty<Guid>();
+            SetOperationSuccess($"{amount} DKP {(add ? "added to" : "removed from")} {playerText}. The transactions were saved.");
+            selectedUserIds = [];
             selectedPresetId = null;
-            presetUsage = null;
+            presetUsages = [];
+            usageFailed = false;
             form.Amount = 0;
             form.Reason = string.Empty;
+
+            if (selectedPlayers.Length == 1)
+            {
+                try
+                {
+                    var history = await DkpQueries.GetPlayerHistoryAsync(selectedPlayers[0].Id)
+                        ?? throw new InvalidOperationException("Player history could not be loaded.");
+                    operationMessage += $" New balance: {history.Balance.Amount} DKP.";
+                }
+                catch (Exception)
+                {
+                    operationMessage += " The new balance could not be loaded. Reload the page; do not repeat the saved operation.";
+                    NotificationService.Notify(NotificationSeverity.Warning, "Saved; refresh failed", operationMessage);
+                }
+            }
         }
         catch (ArgumentException exception)
         {
@@ -191,16 +208,13 @@
         }
         catch (KeyNotFoundException exception)
         {
-            SetOperationError($"Player not found: {exception.Message}");
+            SetOperationError($"Player or preset not found: {exception.Message}");
         }
         catch (Exception exception)
         {
             SetOperationError($"Unable to update DKP: {exception.Message}");
         }
-        finally
-        {
-            saving = false;
-        }
+        finally { saving = false; }
     }
 
     private Task AddDkpAsync() => SubmitAsync(true);
@@ -208,7 +222,7 @@
 
     private async Task OnTargetChangedAsync(object value)
     {
-        selectedUserIds = value is IEnumerable<Guid> ids ? ids : Array.Empty<Guid>();
+        selectedUserIds = value is IEnumerable<Guid> ids ? ids.ToArray() : [];
         await RefreshPresetUsageAsync();
     }
 
@@ -221,28 +235,42 @@
             form.Amount = preset.Amount;
             form.Reason = preset.Reason;
         }
-        presetUsage = null;
         await RefreshPresetUsageAsync();
     }
 
     private async Task RefreshPresetUsageAsync()
     {
-        var distinctUserIds = selectedUserIds.Distinct().ToArray();
-        if (distinctUserIds.Length == 1 && selectedPresetId is Guid presetId)
+        var version = ++usageVersion;
+        var targetIds = selectedUserIds.Distinct().ToArray();
+        var presetId = selectedPresetId;
+        presetUsages = [];
+        usageFailed = false;
+        usageLoading = true;
+        // Serialize selection changes as well as the individual player queries.
+        await usageGate.WaitAsync();
+        try
         {
-            try
+            if (version != usageVersion || presetId is not Guid id) return;
+            var results = new List<PlayerPresetUsage>();
+            foreach (var userId in targetIds)
             {
-                presetUsage = await PresetQueries.GetUsageAsync(officerDiscordId, distinctUserIds[0], presetId);
+                var usage = await PresetQueries.GetUsageAsync(userId, id);
+                if (version != usageVersion) return;
+                var playerName = users.FirstOrDefault(user => user.Id == userId)?.DisplayName ?? userId.ToString();
+                results.Add(new PlayerPresetUsage(userId, playerName, usage));
             }
-            catch (Exception exception)
-            {
-                presetUsage = null;
-                NotificationService.Notify(NotificationSeverity.Error, "Unable to load preset usage", exception.Message);
-            }
+            presetUsages = results;
         }
-        else
+        catch (Exception exception)
         {
-            presetUsage = null;
+            if (version != usageVersion) return;
+            usageFailed = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load preset usage", exception.Message);
+        }
+        finally
+        {
+            usageGate.Release();
+            if (version == usageVersion) usageLoading = false;
         }
     }
 
@@ -259,6 +287,8 @@
         operationMessage = message;
         NotificationService.Notify(NotificationSeverity.Error, "DKP update failed", message);
     }
+
+    private sealed record PlayerPresetUsage(Guid UserId, string PlayerName, DkpPresetUsageDto Usage);
 
     private sealed class DkpForm
     {

@@ -4,5 +4,5 @@ namespace DKP.Facade.Queries;
 
 public interface IShopPurchaseQueries
 {
-	Task<ActivePurchaseOverviewDto?> GetActiveOverviewAsync(string authenticatedDiscordId, CancellationToken cancellationToken = default);
+	Task<ActivePurchaseOverviewDto?> GetActiveOverviewAsync(CancellationToken cancellationToken = default);
 }

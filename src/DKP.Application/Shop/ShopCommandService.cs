@@ -1,28 +1,101 @@
-using System.Text.Json;
 using DKP.Application.Authentication;
 using DKP.Application.Persistence;
-using DKP.Application.SoftReserves;
 using DKP.Domain;
 using DKP.Facade.Commands;
 using DKP.Facade.Contracts;
 namespace DKP.Application.Shop;
-public sealed class ShopCommandService(IUserRepository users, IShopRepository shop, IEventLedgerRepository ledger, ISoftReserveSettings softReserveSettings, TimeProvider time) : IShopCommands
+
+public sealed class ShopCommandService(CommandContext context, IShopRepository catalog, IEventLedgerRepository ledger, TimeProvider time) : IShopCommands
 {
-	private async Task<User> Actor(string id, CancellationToken ct) => await users.FindByDiscordIdAsync(id, ct) ?? throw new UnauthorizedAccessException("Authenticated user does not exist.");
-	private static void Officer(User u) { if (u.Role != UserRole.Officer || u.IsBlocked) throw new UnauthorizedAccessException("Only active Officers can perform this action."); }
-	private static ShopItemDto Dto(ShopItem x) => new(x.Id,x.Key,x.Name,x.Description,x.Price,x.MaxPerUser,x.IsActive);
-	public async Task<ShopItemDto> CreateItemAsync(string actor, ShopItemInput input, CancellationToken ct = default) { var a=await Actor(actor,ct); Officer(a); Validate(input); var now=time.GetUtcNow().UtcDateTime; var item=new ShopItem(input.Key.Trim(),input.Name.Trim(),input.Description.Trim(),input.Price,input.MaxPerUser,now); await shop.AddItemAsync(item,ct); await shop.SaveChangesAsync(ct); return Dto(item); }
-	public async Task<ShopItemDto> UpdateItemAsync(string actor, Guid id, ShopItemInput input, CancellationToken ct = default) { var a=await Actor(actor,ct); Officer(a); Validate(input); var item=await shop.FindItemAsync(id,ct)??throw new KeyNotFoundException("Shop item not found."); item.Update(input.Name.Trim(),input.Description.Trim(),input.Price,input.MaxPerUser,time.GetUtcNow().UtcDateTime); await shop.SaveChangesAsync(ct); return Dto(item); }
-	public async Task SetActiveAsync(string actor, Guid id, bool active, CancellationToken ct = default) { var a=await Actor(actor,ct); Officer(a); var item=await shop.FindItemAsync(id,ct)??throw new KeyNotFoundException("Shop item not found."); item.SetActive(active,time.GetUtcNow().UtcDateTime); await shop.SaveChangesAsync(ct); }
-	public async Task<IReadOnlyList<ShopPurchaseDto>> PurchaseAsync(string actor, ShopPurchaseRequest request, CancellationToken ct = default) { var a=await Actor(actor,ct); return await PurchaseForUsersAsync(actor,new AdminShopPurchaseRequest(request.ShopItemId,request.Quantity,[a.Id]),ct); }
-	public async Task<IReadOnlyList<ShopPurchaseDto>> PurchaseForUsersAsync(string actorId, AdminShopPurchaseRequest request, CancellationToken ct = default)
-	{
-		var actor=await Actor(actorId,ct); if(actor.IsBlocked)throw new UnauthorizedAccessException("Blocked users cannot purchase."); if(request.TargetUserIds.Count==0||request.Quantity<=0)throw new ArgumentException("At least one user and a positive quantity are required."); if(actor.Role!=UserRole.Officer&&request.TargetUserIds.Any(x=>x!=actor.Id))throw new UnauthorizedAccessException("Members may only purchase for themselves.");
-		var item=await shop.FindItemAsync(request.ShopItemId,ct)??throw new KeyNotFoundException("Shop item not found."); if(!item.IsActive)throw new InvalidOperationException("Shop item is inactive."); var max=item.Key=="soft-reserve"?softReserveSettings.MaxReserves:item.MaxPerUser; var targets=new List<User>();
-		foreach(var id in request.TargetUserIds.Distinct()){var user=await users.FindByIdAsync(id,ct)??throw new KeyNotFoundException("Target user not found.");if(user.IsBlocked)throw new InvalidOperationException("A selected user is blocked.");targets.Add(user);}
-		return await ledger.WithUserLocksAsync(targets.Select(x=>x.Id).ToArray(),async()=>{foreach(var user in targets){if(item.RollBonusValue is not null&&await ledger.HasActiveRollBonusAsync(user.Id,ct))throw new InvalidOperationException($"{user.DiscordName} already has an active RollBonus.");var current=await ledger.GetActiveQuantityAsync(user.Id,item.Id,ct);if(current+request.Quantity>max)throw new InvalidOperationException($"{user.DiscordName} exceeds the maximum quantity of {max}.");var cost=checked(item.Price*request.Quantity);if(await ledger.GetBalanceAsync(user.Id,ct)<cost)throw new InvalidOperationException($"{user.DiscordName} has insufficient DKP.");}
-			var result=new List<ShopPurchaseDto>();var now=time.GetUtcNow().UtcDateTime;foreach(var user in targets){var cost=checked(item.Price*request.Quantity);var purchaseId=Guid.NewGuid();var correlation=Guid.NewGuid();var purchasePayload=JsonSerializer.Serialize(new{purchaseId,userId=user.Id,itemId=item.Id,quantity=request.Quantity,totalCost=cost,actorId});var debitPayload=JsonSerializer.Serialize(new{userId=user.Id,amount=-cost,reason=$"Purchase: {item.Name} x{request.Quantity}",actorId});var purchaseEvent=new DkpEvent("ShopPurchase",purchaseId,0,"ShopPurchaseCreated",user.Id,actor.Id,now,correlation,purchasePayload);var debitEvent=new DkpEvent("UserBalance",user.Id,await ledger.GetNextSequenceAsync("UserBalance",user.Id,ct),"DkpDebited",user.Id,actor.Id,now,Guid.NewGuid(),debitPayload);await ledger.AppendAsync([purchaseEvent,debitEvent],ct);await ledger.AddPurchaseProjectionAsync(new ShopPurchaseProjection(purchaseId,user.Id,item.Id,request.Quantity,cost,actor.Id,now),ct);await ledger.ApplyBalanceAsync(user.Id,-cost,debitEvent.Id,now,ct);if(item.RollBonusValue is not null)user.SetRollBonus(item.RollBonusValue.Value);result.Add(new ShopPurchaseDto(purchaseId,user.Id,user.DiscordName,user.Characters.FirstOrDefault(c=>c.IsMain) is{ } c?$"{c.FirstName} {c.LastName}":null,item.Id,item.Name,request.Quantity,cost,now,null));}await ledger.SaveChangesAsync(ct);return (IReadOnlyList<ShopPurchaseDto>)result;},ct);
-	}
-	public async Task CancelAsync(string actorId, Guid purchaseId, CancellationToken ct = default){var actor=await Actor(actorId,ct);var purchase=await ledger.GetPurchaseAsync(purchaseId,ct)??throw new KeyNotFoundException("Purchase not found.");if(purchase.UserId!=actor.Id&&actor.Role!=UserRole.Officer)throw new UnauthorizedAccessException("You cannot cancel this purchase.");var item=await shop.FindItemAsync(purchase.ShopItemId,ct);await ledger.WithUserLocksAsync([purchase.UserId],async()=>{var current=await ledger.GetPurchaseAsync(purchaseId,ct)??throw new KeyNotFoundException("Purchase not found.");if(current.CancelledAtUtc is not null)throw new InvalidOperationException("The purchase has already been cancelled.");var now=time.GetUtcNow().UtcDateTime;var cancelPayload=JsonSerializer.Serialize(new{purchaseId,refund=current.TotalDkpCost,actorId});var creditPayload=JsonSerializer.Serialize(new{userId=current.UserId,amount=current.TotalDkpCost,reason="Purchase cancellation",actorId});var cancelEvent=new DkpEvent("ShopPurchase",purchaseId,await ledger.GetNextSequenceAsync("ShopPurchase",purchaseId,ct),"ShopPurchaseCancelled",current.UserId,actor.Id,now,Guid.NewGuid(),cancelPayload);var creditEvent=new DkpEvent("UserBalance",current.UserId,await ledger.GetNextSequenceAsync("UserBalance",current.UserId,ct),"DkpCredited",current.UserId,actor.Id,now,Guid.NewGuid(),creditPayload);await ledger.AppendAsync([cancelEvent,creditEvent],ct);await ledger.CancelPurchaseProjectionAsync(purchaseId,now,ct);await ledger.ApplyBalanceAsync(current.UserId,current.TotalDkpCost,creditEvent.Id,now,ct);var user=await users.FindByIdAsync(current.UserId,ct);if(item?.RollBonusValue is not null)user?.SetRollBonus(0);await ledger.SaveChangesAsync(ct);return true;},ct);}
-	private static void Validate(ShopItemInput i){if(string.IsNullOrWhiteSpace(i.Key)||string.IsNullOrWhiteSpace(i.Name)||i.Description is null)throw new ArgumentException("Key, name and description are required.");if(i.Price<=0||i.MaxPerUser<=0)throw new ArgumentException("Price and maximum must be positive.");}
+    private static ShopItemDto Dto(ShopItem i) => new(i.Id, i.Key, i.Name, i.Description, i.Price, i.MaxPerUser, i.IsActive);
+    private static void Validate(ShopItemInput input)
+    {
+        if (string.IsNullOrWhiteSpace(input.Key) || input.Key.Trim().Length > 64 ||
+            string.IsNullOrWhiteSpace(input.Name) || input.Name.Trim().Length > 128 ||
+            input.Description is null || input.Description.Trim().Length > 500 ||
+            input.Price < 0 || input.MaxPerUser <= 0)
+            throw new ArgumentException("Invalid item: key/name, nonnegative price and positive maximum are required.");
+    }
+    public Task<ShopItemDto> CreateItemAsync(ShopItemInput input, CancellationToken ct = default)
+        => context.ExecuteAsync([], true, async _ =>
+        {
+            Validate(input);
+            var item = new ShopItem(input.Key.Trim(), input.Name.Trim(), input.Description.Trim(), input.Price, input.MaxPerUser, time.GetUtcNow().UtcDateTime);
+            await catalog.AddItemAsync(item, ct);
+            return Dto(item);
+        }, ct);
+    public Task<ShopItemDto> UpdateItemAsync(Guid itemId, ShopItemInput input, CancellationToken ct = default)
+        => context.ExecuteAsync([], true, async _ =>
+        {
+            Validate(input);
+            var item = await catalog.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Item not found.");
+            if (item.Key != input.Key.Trim()) throw new ArgumentException("Item key is immutable.");
+            if (item.RollBonusValue != null && input.MaxPerUser != 1) throw new ArgumentException("RollBonus permits only one active unit across all tiers.");
+            item.Update(input.Name.Trim(), input.Description.Trim(), input.Price, input.MaxPerUser, time.GetUtcNow().UtcDateTime);
+            return Dto(item);
+        }, ct);
+    public Task SetActiveAsync(Guid itemId, bool active, CancellationToken ct = default)
+        => context.ExecuteAsync([], true, async _ =>
+        {
+            var item = await catalog.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Item not found.");
+            item.SetActive(active, time.GetUtcNow().UtcDateTime);
+            return true;
+        }, ct);
+
+    public Task<IReadOnlyList<ShopPurchaseDto>> PurchaseAsync(ShopPurchaseRequest request, CancellationToken ct = default)
+        => context.ExecuteAsync<IReadOnlyList<ShopPurchaseDto>>([], false,
+            actor => PurchaseInsideTransactionAsync(actor, [actor.Id], request.ShopItemId, request.Quantity, ct), ct);
+
+    public Task<IReadOnlyList<ShopPurchaseDto>> PurchaseForUsersAsync(AdminShopPurchaseRequest request, CancellationToken ct = default)
+    {
+        var ids = CommandContext.Targets(request.TargetUserIds);
+        return context.ExecuteAsync<IReadOnlyList<ShopPurchaseDto>>(ids, true,
+            actor => PurchaseInsideTransactionAsync(actor, ids, request.ShopItemId, request.Quantity, ct), ct);
+    }
+
+    private async Task<IReadOnlyList<ShopPurchaseDto>> PurchaseInsideTransactionAsync(User actor, Guid[] ids, Guid itemId, int quantity, CancellationToken ct)
+    {
+        if (quantity <= 0) throw new ArgumentException("Quantity must be positive.");
+        var item = await catalog.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Item not found.");
+        if (!item.IsActive) throw new InvalidOperationException("Item is inactive.");
+        if (item.RollBonusValue != null && quantity != 1) throw new ArgumentException("Only one RollBonus unit can be purchased.");
+        var cost = checked(item.Price * quantity);
+        var users = new List<User>();
+        foreach (var id in ids)
+        {
+            var target = await context.TargetAsync(id, ct);
+            if (await ledger.GetBalanceAsync(id, ct) < cost)
+                throw new InvalidOperationException($"{target.DiscordName}: insufficient DKP ({cost} required).");
+            var active = await ledger.GetActiveQuantityAsync(id, item.Id, ct);
+            if ((long)active + quantity > item.MaxPerUser)
+                throw new InvalidOperationException($"{target.DiscordName}: maximum {item.MaxPerUser} for {item.Name} (already owns {active}).");
+            if (item.RollBonusValue != null && await ledger.HasActiveRollBonusAsync(id, ct))
+                throw new InvalidOperationException($"{target.DiscordName}: already has an active RollBonus.");
+            users.Add(target);
+        }
+        var now = time.GetUtcNow().UtcDateTime;
+        var operationId = Guid.NewGuid();
+        var result = new List<ShopPurchaseDto>();
+        foreach (var user in users)
+        {
+            var purchaseId = Guid.NewGuid();
+            await ledger.PostAsync(user.Id, actor.Id, operationId, now,
+                new PurchasePlaced(purchaseId, item.Id, item.Key, item.Name, quantity, item.Price, item.RollBonusValue), ct);
+            result.Add(new(purchaseId, user.Id, user.DiscordName, null, item.Id, item.Name, quantity, cost, now, null));
+        }
+        return result;
+    }
+
+    public Task CancelAsync(Guid purchaseId, CancellationToken ct = default)
+        => context.ExecuteAsync([], false, async actor =>
+        {
+            var purchase = await ledger.GetPurchaseAsync(purchaseId, ct) ?? throw new KeyNotFoundException("Purchase not found.");
+            if (actor.Id != purchase.UserId && actor.Role != Domain.UserRole.Officer)
+                throw new UnauthorizedAccessException("You can only cancel your own purchases.");
+            await context.TargetAsync(purchase.UserId, ct);
+            if (purchase.CancelledAtUtc != null) throw new InvalidOperationException("Purchase already cancelled.");
+            await ledger.PostAsync(purchase.UserId, actor.Id, Guid.NewGuid(), time.GetUtcNow().UtcDateTime,
+                new PurchaseCancelled(purchaseId, purchase.TotalDkpCost, $"Refund: {purchase.Quantity} x {purchase.ItemName}"), ct);
+            return true;
+        }, ct);
 }

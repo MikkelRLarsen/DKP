@@ -1,14 +1,11 @@
 @page "/admin/users"
 @attribute [Authorize(Roles = "Officer")]
-@using DKP.Domain
-@using System.Security.Claims
 @using DKP.Facade.Commands
 @using DKP.Facade.Contracts
 @using DKP.Facade.Queries
 @inject IUserAdministrationQueries UserAdministrationQueries
 @inject IUserRoleCommands UserRoleCommands
 @inject IUserBlockCommands UserBlockCommands
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 
@@ -35,7 +32,7 @@
     {
         <RadzenCard>
             <RadzenFormField Text="Block reason (optional)" Style="max-width: 32rem; width: 100%; margin-bottom: 1rem;">
-                <ChildContent><RadzenTextBox @bind-Value="blockReason" MaxLength="500" Placeholder="Reason used when blocking a member" Style="width:100%;" /></ChildContent>
+                <ChildContent><RadzenTextBox @bind-Value="blockReason" MaxLength="500" Placeholder="Reason used when blocking a member" Style="width:100%;" Disabled="@saving" /></ChildContent>
             </RadzenFormField>
             <RadzenDataGrid Data="@users" TItem="UserSummary" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No users found." Responsive="true">
                 <Columns>
@@ -74,7 +71,6 @@
 
 @code {
     private IReadOnlyList<UserSummary> users = Array.Empty<UserSummary>();
-    private string officerDiscordId = string.Empty;
     private bool loading = true;
     private bool loadFailed;
     private bool saving;
@@ -84,8 +80,6 @@
     {
         try
         {
-            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            officerDiscordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             users = await UserAdministrationQueries.GetAllAsync();
         }
         catch (Exception)
@@ -101,20 +95,22 @@
 
     private async Task ChangeRoleAsync(UserSummary user)
     {
+        if (saving) return;
         var newRole = user.Role == UserRole.Officer ? UserRole.Member : UserRole.Officer;
         var roleName = newRole == UserRole.Officer ? "Officer" : "Member";
-        var confirmed = await DialogService.Confirm($"Are you sure you want to set {user.DisplayName} as {roleName}?", "Confirm role change", new ConfirmOptions { OkButtonText = "Confirm", CancelButtonText = "Cancel" });
-        if (confirmed != true)
-        {
-            return;
-        }
-
         saving = true;
         try
         {
-            await UserRoleCommands.SetRoleAsync(officerDiscordId, new SetUserRoleRequest(user.Id, newRole));
-            users = await UserAdministrationQueries.GetAllAsync();
+            var confirmed = await DialogService.Confirm($"Are you sure you want to set {user.DisplayName} as {roleName}?", "Confirm role change", new ConfirmOptions { OkButtonText = "Confirm", CancelButtonText = "Cancel" });
+            if (confirmed != true)
+            {
+                return;
+            }
+
+            if (!await UserRoleCommands.SetRoleAsync(new SetUserRoleRequest(user.Id, newRole)))
+                throw new KeyNotFoundException("The selected user no longer exists.");
             NotificationService.Notify(NotificationSeverity.Success, "Role updated", $"{user.DisplayName} is now a {roleName}.");
+            await MutationFeedback.RefreshAsync(async () => users = await UserAdministrationQueries.GetAllAsync(), NotificationService);
         }
         catch (UnauthorizedAccessException)
         {
@@ -140,14 +136,16 @@
 
     private async Task BlockAsync(UserSummary user)
     {
-        if (await DialogService.Confirm($"Are you sure you want to block {user.DisplayName}?", "Confirm member block", new ConfirmOptions { OkButtonText = "Block", CancelButtonText = "Cancel" }) != true) return;
-
+        if (saving) return;
         saving = true;
         try
         {
-            await UserBlockCommands.BlockAsync(officerDiscordId, new BlockUserRequest(user.Id, blockReason));
-            users = await UserAdministrationQueries.GetAllAsync();
+            if (await DialogService.Confirm($"Are you sure you want to block {user.DisplayName}?", "Confirm member block", new ConfirmOptions { OkButtonText = "Block", CancelButtonText = "Cancel" }) != true) return;
+
+            if (!await UserBlockCommands.BlockAsync(new BlockUserRequest(user.Id, blockReason)))
+                throw new KeyNotFoundException("The selected user no longer exists.");
             NotificationService.Notify(NotificationSeverity.Success, "Member blocked", $"{user.DisplayName} can no longer log in or use DKP features.");
+            await MutationFeedback.RefreshAsync(async () => users = await UserAdministrationQueries.GetAllAsync(), NotificationService);
         }
         catch (Exception exception)
         {
@@ -161,14 +159,16 @@
 
     private async Task UnblockAsync(UserSummary user)
     {
-        if (await DialogService.Confirm($"Remove the block from {user.DisplayName}?", "Confirm unblock") != true) return;
-
+        if (saving) return;
         saving = true;
         try
         {
-            await UserBlockCommands.UnblockAsync(officerDiscordId, user.Id);
-            users = await UserAdministrationQueries.GetAllAsync();
+            if (await DialogService.Confirm($"Remove the block from {user.DisplayName}?", "Confirm unblock") != true) return;
+
+            if (!await UserBlockCommands.UnblockAsync(user.Id))
+                throw new KeyNotFoundException("The selected user no longer exists.");
             NotificationService.Notify(NotificationSeverity.Success, "Member unblocked", $"{user.DisplayName} can log in again.");
+            await MutationFeedback.RefreshAsync(async () => users = await UserAdministrationQueries.GetAllAsync(), NotificationService);
         }
         catch (Exception exception)
         {

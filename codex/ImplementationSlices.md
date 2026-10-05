@@ -21,6 +21,7 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 10 | Admin shop-overview og køb for brugere | Færdig |
 | 11 | Guild membership ved OAuth og blokering af medlemmer | Færdig |
 | 12 | DKP management presets | Færdig |
+| 12a | Legacy cleanup og event-konsolidering | Under implementering |
 | 13 | DKP acquisition overview | Planlagt |
 | 13a | Achievement-baserede DKP awards | Planlagt |
 | 13b | Achievement-gated shop-items | Planlagt |
@@ -625,6 +626,25 @@ Leveret:
 - Lifetime-limit håndhæves serverside og atomisk sammen med DKP-event og usage-record.
 - Deaktiverede presets vises ikke som valgmulighed til nye awards.
 - Officer authorization håndhæves både på UI, query og commands.
+
+## Slice 12a – Legacy cleanup og event-konsolidering
+
+Status: Under implementering. Baseline: funktionalitet til og med Slice 12.
+
+Godkendt plan:
+
+- Brugeren nulstiller selv databasen. Erstat migrationskæden med én initial migration til tom PostgreSQL; ingen automatisk sletning af den eksisterende database.
+- Fjern legacy transaction/purchase entities, repositories, SoftReserve commands/queries, konfiguration, DI og fallback-læsninger. Tidligere slice-beskrivelser ovenfor er historisk papirspor og erstattes teknisk af denne slice.
+- Typed, versionsmærkede events er eneste kilde til balance, køb, refundering og preset-forbrug. Ret event-id/correlation-id, og forbind preset-projections med faktiske events.
+- Samme projector anvendes live og ved atomisk replay. Commands bruger friske contexts, fælles transaktionsgrænse og brugerlåse; event-store er append-only.
+- Shop Catalog styrer pris/maksimum, også Soft Reserve (seed 10 DKP / 2). Seed RollBonus 10/20/30/40 med pris 10/30/60/120 og DefaultReserveLimit 0. Historiske køb snapshotter pris, navn og bonus.
+- Facade bliver rent kontraktlag uden Domain-reference. Actor kommer fra authenticated current-user-kontrakt; server-side rolle, blokering og ejerskab håndhæves.
+- Ret dashboard, Guild Members, Player Details, My DKP, shop, aktive køb og LootReserve til fælles event-baserede projections. Bevar multiselect, main character og preset-forbrug pr. spiller.
+- Tilføj /activity for aktive medlemmer med spiller-, handlings- og datofiltre, server-pagination og én række pr. handling/spiller.
+- Fjern skabelonsider/ubrugte dependencies. Omskriv legacy-tests og tilføj PostgreSQL-tests for rollback, concurrency, replay, migrations og authorization samt arkitekturkontrol.
+- Aflever først efter build og relevante tests; dokumentér smoke-test og konkrete begrænsninger. OAuth-loop og bot forbliver backlog; Slice 13+ er ikke del af oprydningen.
+
+Fund: Guild/Player queries læser legacy; blandede fallback-kilder; forkert event-id i bulk; preset uden event-reference; ikke-atomisk replay; forskellige SoftReserve-priskilder; Facade afhænger af Domain; nuværende 32 tests dækker primært legacy/InMemory.
 
 ## Slice 13 – DKP acquisition overview
 

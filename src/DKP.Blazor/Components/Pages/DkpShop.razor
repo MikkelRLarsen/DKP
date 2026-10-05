@@ -1,13 +1,11 @@
 @page "/dkp-shop"
 @attribute [Authorize]
-@using System.Security.Claims
 @using DKP.Facade.Commands
 @using DKP.Facade.Contracts
 @using DKP.Facade.Queries
 @inject IDkpQueries DkpQueries
 @inject IShopQueries ShopQueries
 @inject IShopCommands ShopCommands
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 
@@ -15,10 +13,11 @@
 <RadzenStack Gap="1rem">
     <h1>DKP Shop</h1>
     @if (loading) { <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" /> }
+    else if (loadFailed) { <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load the shop. Please reload the page.</RadzenAlert> }
     else {
         <RadzenCard><RadzenText Text="Current DKP" TextStyle="TextStyle.Overline" /><RadzenText Text="@balance.ToString("+#;-#;0")" Style="font-size:2.5rem;font-weight:700;" /></RadzenCard>
-        <RadzenCard><RadzenStack Gap=".75rem"><RadzenText Text="Purchase" TextStyle="TextStyle.H5" /><RadzenDropDown TValue="Guid" @bind-Value="selectedItemId" Data="@items" TextProperty="Name" ValueProperty="Id" AllowFiltering="true" Style="width:100%;" />
-            @if (selectedItem is not null) { <RadzenText Text="@(selectedItem.Description + $" Cost: {selectedItem.Price} DKP per unit.")" /><RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Max="@selectedItem.MaxPerUser" /><RadzenButton Text="Purchase" Icon="shopping_cart" Click="PurchaseAsync" Disabled="@saving" /> }
+        <RadzenCard><RadzenStack Gap=".75rem"><RadzenText Text="Purchase" TextStyle="TextStyle.H5" /><RadzenDropDown TValue="Guid" @bind-Value="selectedItemId" Data="@items" TextProperty="Name" ValueProperty="Id" Disabled="@saving" AllowFiltering="true" Style="width:100%;" />
+            @if (selectedItem is not null) { <RadzenText Text="@(selectedItem.Description + $" Cost: {selectedItem.Price} DKP per unit.")" /><RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Max="@selectedItem.MaxPerUser" Disabled="@saving" /><RadzenButton Text="Purchase" Icon="shopping_cart" Click="PurchaseAsync" Disabled="@saving" /> }
         </RadzenStack></RadzenCard>
         <RadzenCard><RadzenText Text="My purchases" TextStyle="TextStyle.H5" /><RadzenDataGrid Data="@purchases" TItem="ShopPurchaseDto" AllowPaging="true" AllowSorting="true" EmptyText="No purchases found."><Columns><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="ItemName" Title="Item" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="Quantity" Title="Quantity" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="TotalDkpCost" Title="DKP" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="CreatedAtUtc" Title="Date" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Status"><Template Context="p"><RadzenBadge Text="@(p.IsCancelled ? "Cancelled" : "Active")" /></Template></RadzenDataGridColumn><RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Actions"><Template Context="p">@if(!p.IsCancelled){<RadzenButton Text="Cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(()=>CancelAsync(p))" Disabled="@saving" />}</Template></RadzenDataGridColumn></Columns></RadzenDataGrid></RadzenCard>
     }
@@ -31,11 +30,70 @@
     private int quantity = 1;
     private int balance;
     private bool loading = true;
+    private bool loadFailed;
     private bool saving;
     private ShopItemDto? selectedItem => items.FirstOrDefault(x => x.Id == selectedItemId);
-    protected override async Task OnInitializedAsync() { try { await ReloadAsync(); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to load shop", ex.Message); } finally { loading = false; } }
-    private async Task<string> DiscordIdAsync() => (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException("Not authenticated.");
-    private async Task ReloadAsync() { var id = await DiscordIdAsync(); var history = await DkpQueries.GetHistoryAsync(id) ?? throw new InvalidOperationException("DKP history was not found."); balance = history.Balance.Amount; items = await ShopQueries.GetActiveItemsAsync(); purchases = await ShopQueries.GetPurchasesAsync(id); var current = selectedItem; if (current is null && items.Count > 0) selectedItemId = items[0].Id; }
-    private async Task PurchaseAsync() { var item = selectedItem; if (item is null || quantity < 1) return; if (await DialogService.Confirm($"Purchase {quantity} {item.Name} for {item.Price * quantity} DKP?", "Confirm purchase") != true) return; saving = true; try { await ShopCommands.PurchaseAsync(await DiscordIdAsync(), new ShopPurchaseRequest(item.Id, quantity)); quantity = 1; await ReloadAsync(); NotificationService.Notify(NotificationSeverity.Success, "Purchase completed", "The purchase was completed."); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Purchase failed", ex.Message); } finally { saving = false; } }
-    private async Task CancelAsync(ShopPurchaseDto purchase) { if (await DialogService.Confirm($"Cancel and refund {purchase.TotalDkpCost} DKP?", "Confirm cancellation") != true) return; saving = true; try { await ShopCommands.CancelAsync(await DiscordIdAsync(), purchase.Id); await ReloadAsync(); NotificationService.Notify(NotificationSeverity.Success, "Purchase cancelled", "DKP was refunded."); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Cancellation failed", ex.Message); } finally { saving = false; } }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { await ReloadAsync(); }
+        catch (Exception exception)
+        {
+            loadFailed = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load shop", exception.Message);
+        }
+        finally { loading = false; }
+    }
+
+    private async Task ReloadAsync()
+    {
+        var history = await DkpQueries.GetHistoryAsync()
+            ?? throw new InvalidOperationException("DKP history was not found.");
+        balance = history.Balance.Amount;
+        items = await ShopQueries.GetActiveItemsAsync();
+        purchases = await ShopQueries.GetPurchasesAsync();
+        if (selectedItem is null && items.Count > 0) selectedItemId = items[0].Id;
+    }
+
+    private async Task PurchaseAsync()
+    {
+        if (saving) return;
+        var item = selectedItem;
+        if (item is null || quantity < 1) return;
+        var request = new ShopPurchaseRequest(item.Id, quantity);
+        saving = true;
+        try
+        {
+            if (await DialogService.Confirm($"Purchase {request.Quantity} {item.Name} for {(long)item.Price * request.Quantity} DKP?", "Confirm purchase") != true) return;
+
+            await ShopCommands.PurchaseAsync(request);
+            quantity = 1;
+            NotificationService.Notify(NotificationSeverity.Success, "Purchase completed", "The purchase was saved.");
+            await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Purchase failed", exception.Message);
+        }
+        finally { saving = false; }
+    }
+
+    private async Task CancelAsync(ShopPurchaseDto purchase)
+    {
+        if (saving) return;
+        saving = true;
+        try
+        {
+            if (await DialogService.Confirm($"Cancel and refund {purchase.TotalDkpCost} DKP?", "Confirm cancellation") != true) return;
+
+            await ShopCommands.CancelAsync(purchase.Id);
+            NotificationService.Notify(NotificationSeverity.Success, "Purchase cancelled", "The cancellation was saved and DKP was refunded.");
+            await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Cancellation failed", exception.Message);
+        }
+        finally { saving = false; }
+    }
 }

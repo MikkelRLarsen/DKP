@@ -4,8 +4,8 @@ namespace DKP.Facade.Commands;
 
 public interface IDkpTransactionCommands
 {
-	Task<DkpTransactionDto> AddAsync(string officerDiscordId, CreateDkpTransactionRequest request, CancellationToken cancellationToken = default);
-	Task<DkpTransactionDto> RemoveAsync(string officerDiscordId, CreateDkpTransactionRequest request, CancellationToken cancellationToken = default);
-	Task<IReadOnlyList<DkpTransactionDto>> AddManyAsync(string officerDiscordId, CreateDkpTransactionsRequest request, CancellationToken cancellationToken = default);
-	Task<IReadOnlyList<DkpTransactionDto>> RemoveManyAsync(string officerDiscordId, CreateDkpTransactionsRequest request, CancellationToken cancellationToken = default);
+	Task<DkpTransactionDto> AddAsync(CreateDkpTransactionRequest request, CancellationToken cancellationToken = default);
+	Task<DkpTransactionDto> RemoveAsync(CreateDkpTransactionRequest request, CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<DkpTransactionDto>> AddManyAsync(CreateDkpTransactionsRequest request, CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<DkpTransactionDto>> RemoveManyAsync(CreateDkpTransactionsRequest request, CancellationToken cancellationToken = default);
 }

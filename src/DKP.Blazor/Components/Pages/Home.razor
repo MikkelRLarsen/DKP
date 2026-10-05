@@ -1,24 +1,26 @@
 @page "/"
 @attribute [Authorize]
-@using System.Security.Claims
 @using DKP.Facade.Commands
 @using DKP.Facade.Contracts
 @using DKP.Facade.Queries
 @inject IAccountQueries AccountQueries
 @inject ICharacterCommands CharacterCommands
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 
 <PageTitle>Dashboard</PageTitle>
 
-@if (dashboard is null)
+@if (loading)
 {
     <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
         <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
         <RadzenText Text="Loading dashboard..." />
     </RadzenStack>
+}
+else if (dashboard is null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load your dashboard. Please reload the page.</RadzenAlert>
 }
 else
 {
@@ -93,8 +95,8 @@ else
                                     {
                                         <RadzenButton Text="Set as main" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => SetMainAsync(character))" Disabled="@saving" />
                                     }
-                                    <RadzenButton Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => BeginEdit(character))" />
-                                    <RadzenButton Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(() => DeleteAsync(character))" />
+                                    <RadzenButton Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => BeginEdit(character))" Disabled="@saving" />
+                                    <RadzenButton Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(() => DeleteAsync(character))" Disabled="@saving" />
                                 </RadzenStack>
                             </Template>
                         </RadzenDataGridColumn>
@@ -110,7 +112,7 @@ else
                     <RadzenColumn Size="12" SizeMD="5">
                         <RadzenFormField Text="First name" Style="width: 100%;">
                             <ChildContent>
-                                <RadzenTextBox Name="FirstName" @bind-Value="form.FirstName" Style="width: 100%;" MaxLength="64" />
+                                <RadzenTextBox Name="FirstName" @bind-Value="form.FirstName" Style="width: 100%;" MaxLength="64" Disabled="@saving" />
                             </ChildContent>
                             <Helper>
                                 <RadzenRequiredValidator Component="FirstName" Text="First name is required" />
@@ -120,7 +122,7 @@ else
                     <RadzenColumn Size="12" SizeMD="5">
                         <RadzenFormField Text="Last name" Style="width: 100%;">
                             <ChildContent>
-                                <RadzenTextBox Name="LastName" @bind-Value="form.LastName" Style="width: 100%;" MaxLength="64" />
+                                <RadzenTextBox Name="LastName" @bind-Value="form.LastName" Style="width: 100%;" MaxLength="64" Disabled="@saving" />
                             </ChildContent>
                             <Helper>
                                 <RadzenRequiredValidator Component="LastName" Text="Last name is required" />
@@ -145,17 +147,31 @@ else
     private readonly CharacterForm form = new();
     private Guid? editingId;
     private bool saving;
-    private string discordId = string.Empty;
+    private bool loading = true;
 
     protected override async Task OnInitializedAsync()
     {
-        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        discordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-        dashboard = await AccountQueries.GetDashboardAsync(discordId);
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load dashboard", exception.Message);
+        }
+        finally
+        {
+            loading = false;
+        }
     }
+
+    private async Task ReloadAsync() =>
+        dashboard = await AccountQueries.GetDashboardAsync()
+            ?? throw new InvalidOperationException("Your dashboard could not be loaded.");
 
     private void BeginEdit(CharacterDto character)
     {
+        if (saving) return;
         editingId = character.Id;
         form.FirstName = character.FirstName;
         form.LastName = character.LastName;
@@ -170,28 +186,30 @@ else
 
     private async Task SaveAsync(CharacterForm _)
     {
+        if (saving) return;
         saving = true;
         try
         {
             if (editingId is Guid id)
             {
-                await CharacterCommands.UpdateAsync(discordId, id, new CharacterInput(form.FirstName, form.LastName));
+                if (await CharacterCommands.UpdateAsync(id, new CharacterInput(form.FirstName, form.LastName)) is null)
+                    throw new InvalidOperationException("The character no longer exists.");
                 NotificationService.Notify(NotificationSeverity.Success, "Saved", "Character updated.");
             }
             else
             {
-                await CharacterCommands.CreateAsync(discordId, new CharacterInput(form.FirstName, form.LastName));
+                await CharacterCommands.CreateAsync(new CharacterInput(form.FirstName, form.LastName));
                 NotificationService.Notify(NotificationSeverity.Success, "Saved", "Character added.");
             }
 
             CancelEdit();
-            dashboard = await AccountQueries.GetDashboardAsync(discordId);
+            await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
         }
         catch (ArgumentException exception)
         {
             NotificationService.Notify(NotificationSeverity.Error, "Validation error", exception.Message);
         }
-        catch (InvalidOperationException exception)
+        catch (Exception exception)
         {
             NotificationService.Notify(NotificationSeverity.Error, "Unable to save", exception.Message);
         }
@@ -203,31 +221,43 @@ else
 
     private async Task DeleteAsync(CharacterDto character)
     {
-        var confirmed = await DialogService.Confirm($"Delete {character.FirstName} {character.LastName}?", "Confirm deletion", new ConfirmOptions { OkButtonText = "Delete", CancelButtonText = "Cancel" });
-        if (confirmed != true)
+        if (saving) return;
+        saving = true;
+        try
         {
-            return;
-        }
+            var confirmed = await DialogService.Confirm($"Delete {character.FirstName} {character.LastName}?", "Confirm deletion", new ConfirmOptions { OkButtonText = "Delete", CancelButtonText = "Cancel" });
+            if (confirmed != true) return;
 
-        if (await CharacterCommands.DeleteAsync(discordId, character.Id))
-        {
+            if (!await CharacterCommands.DeleteAsync(character.Id))
+                throw new InvalidOperationException("The character no longer exists.");
+
+            if (editingId == character.Id) CancelEdit();
             NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Character removed.");
-            dashboard = await AccountQueries.GetDashboardAsync(discordId);
+            await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to delete character", exception.Message);
+        }
+        finally
+        {
+            saving = false;
         }
     }
 
     private async Task SetMainAsync(CharacterDto character)
     {
+        if (saving) return;
         saving = true;
         try
         {
-            if (await CharacterCommands.SetMainCharacterAsync(discordId, character.Id))
-            {
-                NotificationService.Notify(NotificationSeverity.Success, "Main character updated", $"{character.FirstName} {character.LastName} is now your main character.");
-                dashboard = await AccountQueries.GetDashboardAsync(discordId);
-            }
+            if (!await CharacterCommands.SetMainCharacterAsync(character.Id))
+                throw new InvalidOperationException("The character no longer exists.");
+
+            NotificationService.Notify(NotificationSeverity.Success, "Main character updated", $"{character.FirstName} {character.LastName} is now your main character.");
+            await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
         }
-        catch (InvalidOperationException exception)
+        catch (Exception exception)
         {
             NotificationService.Notify(NotificationSeverity.Error, "Unable to set main character", exception.Message);
         }

@@ -1,10 +1,8 @@
 @page "/my-purchases"
 @attribute [Authorize]
-@using System.Security.Claims
 @using DKP.Facade.Contracts
 @using DKP.Facade.Queries
 @inject IShopPurchaseQueries ShopPurchaseQueries
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NotificationService NotificationService
 
 <PageTitle>My Purchases</PageTitle>
@@ -89,14 +87,7 @@ else
     {
         try
         {
-            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var discordId = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrWhiteSpace(discordId))
-            {
-                throw new InvalidOperationException("The authenticated Discord user could not be identified.");
-            }
-
-            overview = await ShopPurchaseQueries.GetActiveOverviewAsync(discordId);
+            overview = await ShopPurchaseQueries.GetActiveOverviewAsync();
         }
         catch (Exception exception)
         {

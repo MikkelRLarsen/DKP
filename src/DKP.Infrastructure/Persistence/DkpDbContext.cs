@@ -1,157 +1,122 @@
 using DKP.Domain;
 using Microsoft.EntityFrameworkCore;
-
 namespace DKP.Infrastructure.Persistence;
 
 public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbContext(options)
 {
-	public DbSet<User> Users => Set<User>();
-	public DbSet<Character> Characters => Set<Character>();
-	public DbSet<DkpTransaction> DkpTransactions => Set<DkpTransaction>();
-	public DbSet<SoftReservePurchase> SoftReservePurchases => Set<SoftReservePurchase>();
-	public DbSet<ShopItem> ShopItems => Set<ShopItem>();
-	public DbSet<ShopPurchase> ShopPurchases => Set<ShopPurchase>();
-	public DbSet<DkpAwardPreset> DkpAwardPresets => Set<DkpAwardPreset>();
-	public DbSet<DkpAwardPresetApplication> DkpAwardPresetApplications => Set<DkpAwardPresetApplication>();
-	public DbSet<GuildSetting> GuildSettings => Set<GuildSetting>();
-	public DbSet<DkpEvent> DkpEvents => Set<DkpEvent>();
-	public DbSet<DkpBalanceProjection> DkpBalanceProjections => Set<DkpBalanceProjection>();
-	public DbSet<ShopPurchaseProjection> ShopPurchaseProjections => Set<ShopPurchaseProjection>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<Character> Characters => Set<Character>();
+    public DbSet<ShopItem> ShopItems => Set<ShopItem>();
+    public DbSet<DkpAwardPreset> DkpAwardPresets => Set<DkpAwardPreset>();
+    public DbSet<DkpAwardPresetApplication> DkpAwardPresetApplications => Set<DkpAwardPresetApplication>();
+    public DbSet<GuildSetting> GuildSettings => Set<GuildSetting>();
+    public DbSet<DkpEvent> DkpEvents => Set<DkpEvent>();
+    public DbSet<DkpBalanceProjection> DkpBalanceProjections => Set<DkpBalanceProjection>();
+    public DbSet<ShopPurchaseProjection> ShopPurchaseProjections => Set<ShopPurchaseProjection>();
+    public DbSet<LedgerEntryProjection> LedgerEntries => Set<LedgerEntryProjection>();
 
-	protected override void OnModelCreating(ModelBuilder modelBuilder)
-	{
-		modelBuilder.Entity<User>(entity =>
-		{
-			entity.HasKey(user => user.Id);
-			entity.HasIndex(user => user.DiscordId).IsUnique();
-			entity.Property(user => user.DiscordId).HasMaxLength(32).IsRequired();
-			entity.Property(user => user.DiscordName).HasMaxLength(128).IsRequired();
-			entity.Property(user => user.AvatarUrl).HasMaxLength(512);
-			entity.Property(user => user.Role).HasConversion<string>().HasMaxLength(32).IsRequired();
-			entity.Property(user => user.BlockReason).HasMaxLength(500);
-			entity.Property(user => user.RollBonus).IsRequired();
-			entity.HasIndex(user => user.IsBlocked);
-			entity.HasMany(user => user.Characters)
-				.WithOne(character => character.User)
-				.HasForeignKey(character => character.UserId)
-				.OnDelete(DeleteBehavior.Cascade);
-		});
+    private void GuardEvents()
+    {
+        if (ChangeTracker.Entries<DkpEvent>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            throw new InvalidOperationException("Ledger events are append-only.");
+    }
+    public override int SaveChanges(bool acceptAllChangesOnSuccess) { GuardEvents(); return base.SaveChanges(acceptAllChangesOnSuccess); }
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    { GuardEvents(); return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken); }
 
-		modelBuilder.Entity<Character>(entity =>
-		{
-			entity.HasKey(character => character.Id);
-			entity.Property(character => character.FirstName).HasMaxLength(64).IsRequired();
-			entity.Property(character => character.LastName).HasMaxLength(64).IsRequired();
-			entity.HasIndex(character => new { character.UserId, character.FirstName, character.LastName }).IsUnique();
-			entity.HasIndex(character => new { character.UserId, character.IsMain })
-				.IsUnique()
-				.HasFilter("\"IsMain\" = TRUE");
-		});
-
-		modelBuilder.Entity<DkpTransaction>(entity =>
-		{
-			entity.HasKey(transaction => transaction.Id);
-			entity.Property(transaction => transaction.Amount).IsRequired();
-			entity.Property(transaction => transaction.Reason).HasMaxLength(500).IsRequired();
-			entity.Property(transaction => transaction.CreatedAtUtc).IsRequired();
-			entity.HasIndex(transaction => new { transaction.UserId, transaction.CreatedAtUtc });
-			entity.HasIndex(transaction => transaction.CreatedByUserId);
-			entity.HasOne(transaction => transaction.User)
-				.WithMany(user => user.DkpTransactions)
-				.HasForeignKey(transaction => transaction.UserId)
-				.OnDelete(DeleteBehavior.Restrict);
-			entity.HasOne(transaction => transaction.CreatedByUser)
-				.WithMany(user => user.CreatedDkpTransactions)
-				.HasForeignKey(transaction => transaction.CreatedByUserId)
-				.OnDelete(DeleteBehavior.Restrict);
-		});
-
-		modelBuilder.Entity<SoftReservePurchase>(entity =>
-		{
-			entity.HasKey(purchase => purchase.Id);
-			entity.Property(purchase => purchase.Quantity).IsRequired();
-			entity.Property(purchase => purchase.DkpCost).IsRequired();
-			entity.Property(purchase => purchase.CreatedAtUtc).IsRequired();
-			entity.Property(purchase => purchase.CancelledAtUtc);
-			entity.HasIndex(purchase => purchase.UserId);
-			entity.HasOne(purchase => purchase.User)
-				.WithMany(user => user.SoftReservePurchases)
-				.HasForeignKey(purchase => purchase.UserId)
-				.OnDelete(DeleteBehavior.Cascade);
-		});
-
-		modelBuilder.Entity<ShopItem>(entity =>
-		{
-			entity.HasKey(item => item.Id);
-			entity.HasIndex(item => item.Key).IsUnique();
-			entity.Property(item => item.Key).HasMaxLength(64).IsRequired();
-			entity.Property(item => item.Name).HasMaxLength(128).IsRequired();
-			entity.Property(item => item.Description).HasMaxLength(500).IsRequired();
-			entity.Property(item => item.Price).IsRequired();
-			entity.Property(item => item.MaxPerUser).IsRequired();
-			entity.Property(item => item.CreatedAtUtc).IsRequired();
-			entity.Property(item => item.UpdatedAtUtc).IsRequired();
-			entity.Property(item => item.RollBonusValue);
-		});
-
-		modelBuilder.Entity<ShopPurchase>(entity =>
-		{
-			entity.HasKey(purchase => purchase.Id);
-			entity.Property(purchase => purchase.Quantity).IsRequired();
-			entity.Property(purchase => purchase.TotalDkpCost).IsRequired();
-			entity.HasIndex(purchase => new { purchase.UserId, purchase.ShopItemId });
-			entity.HasIndex(purchase => purchase.CreatedAtUtc);
-			entity.HasOne(purchase => purchase.User).WithMany(user => user.ShopPurchases).HasForeignKey(purchase => purchase.UserId).OnDelete(DeleteBehavior.Restrict);
-			entity.HasOne(purchase => purchase.ShopItem).WithMany(item => item.Purchases).HasForeignKey(purchase => purchase.ShopItemId).OnDelete(DeleteBehavior.Restrict);
-			entity.HasOne(purchase => purchase.CreatedByUser).WithMany(user => user.CreatedShopPurchases).HasForeignKey(purchase => purchase.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
-		});
-
-		modelBuilder.Entity<DkpAwardPreset>(entity =>
-		{
-			entity.HasKey(preset => preset.Id);
-			entity.HasIndex(preset => preset.Name).IsUnique();
-			entity.Property(preset => preset.Name).HasMaxLength(128).IsRequired();
-			entity.Property(preset => preset.Reason).HasMaxLength(500).IsRequired();
-		});
-
-		modelBuilder.Entity<DkpAwardPresetApplication>(entity =>
-		{
-			entity.HasKey(application => application.Id);
-			entity.HasIndex(application => new { application.PresetId, application.UserId });
-			entity.HasOne(application => application.Preset).WithMany().HasForeignKey(application => application.PresetId).OnDelete(DeleteBehavior.Restrict);
-			entity.HasOne(application => application.User).WithMany().HasForeignKey(application => application.UserId).OnDelete(DeleteBehavior.Restrict);
-			entity.HasOne(application => application.DkpTransaction).WithMany().HasForeignKey(application => application.DkpTransactionId).OnDelete(DeleteBehavior.Restrict).IsRequired(false);
-			entity.HasOne(application => application.AppliedByUser).WithMany().HasForeignKey(application => application.AppliedByUserId).OnDelete(DeleteBehavior.Restrict);
-		});
-
-		modelBuilder.Entity<GuildSetting>(entity =>
-		{
-			entity.HasKey(setting => setting.Id);
-			entity.Property(setting => setting.DefaultReserveLimit).IsRequired();
-		});
-
-		modelBuilder.Entity<DkpEvent>(entity =>
-		{
-			entity.HasKey(x => x.Id);
-			entity.Property(x => x.AggregateType).HasMaxLength(64).IsRequired();
-			entity.Property(x => x.EventType).HasMaxLength(128).IsRequired();
-			entity.Property(x => x.Payload).HasColumnType("jsonb").IsRequired();
-			entity.HasIndex(x => new { x.AggregateType, x.AggregateId, x.Sequence }).IsUnique();
-			entity.HasIndex(x => x.CorrelationId).IsUnique();
-			entity.HasIndex(x => new { x.UserId, x.OccurredAtUtc });
-		});
-
-		modelBuilder.Entity<DkpBalanceProjection>(entity =>
-		{
-			entity.HasKey(x => x.UserId);
-			entity.Property(x => x.Balance).IsRequired();
-		});
-
-		modelBuilder.Entity<ShopPurchaseProjection>(entity =>
-		{
-			entity.HasKey(x => x.PurchaseId);
-			entity.HasIndex(x => new { x.UserId, x.ShopItemId, x.CancelledAtUtc });
-			entity.HasOne<ShopItem>().WithMany().HasForeignKey(x => x.ShopItemId).OnDelete(DeleteBehavior.Restrict);
-		});
-	}
+    protected override void OnModelCreating(ModelBuilder model)
+    {
+        model.Entity<User>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.DiscordId).IsUnique();
+            e.Property(x => x.DiscordId).HasMaxLength(32);
+            e.Property(x => x.DiscordName).HasMaxLength(128);
+            e.Property(x => x.AvatarUrl).HasMaxLength(512);
+            e.Property(x => x.Role).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.BlockReason).HasMaxLength(500);
+            e.HasMany(x => x.Characters).WithOne(x => x.User).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<Character>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.FirstName).HasMaxLength(64);
+            e.Property(x => x.LastName).HasMaxLength(64);
+            e.HasIndex(x => new { x.UserId, x.FirstName, x.LastName }).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.IsMain }).IsUnique().HasFilter("\"IsMain\" = TRUE");
+        });
+        model.Entity<ShopItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.Key).IsUnique();
+            e.Property(x => x.Key).HasMaxLength(64);
+            e.Property(x => x.Name).HasMaxLength(128);
+            e.Property(x => x.Description).HasMaxLength(500);
+        });
+        model.Entity<DkpAwardPreset>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.Name).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(128);
+            e.Property(x => x.Reason).HasMaxLength(500);
+        });
+        model.Entity<DkpAwardPresetApplication>(e =>
+        {
+            e.HasKey(x => x.DkpEventId);
+            e.HasOne<DkpEvent>().WithOne().HasForeignKey<DkpAwardPresetApplication>(x => x.DkpEventId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.PresetId, x.UserId });
+            e.HasOne<DkpAwardPreset>().WithMany().HasForeignKey(x => x.PresetId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.AppliedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<DkpEvent>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.AggregateType).HasMaxLength(64);
+            e.Property(x => x.EventType).HasMaxLength(128);
+            e.Property(x => x.Payload).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.AggregateType, x.AggregateId, x.Sequence }).IsUnique();
+            e.HasIndex(x => x.CorrelationId);
+            e.HasIndex(x => new { x.UserId, x.OccurredAtUtc });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<DkpBalanceProjection>(e =>
+        {
+            e.HasKey(x => x.UserId);
+            e.HasOne<User>().WithOne().HasForeignKey<DkpBalanceProjection>(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<DkpEvent>().WithMany().HasForeignKey(x => x.LastEventId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<ShopPurchaseProjection>(e =>
+        {
+            e.HasKey(x => x.PurchaseId);
+            e.HasIndex(x => new { x.UserId, x.ShopItemId, x.CancelledAtUtc });
+            e.Property(x => x.ItemKey).HasMaxLength(64);
+            e.Property(x => x.ItemName).HasMaxLength(128);
+            e.HasOne<ShopItem>().WithMany().HasForeignKey(x => x.ShopItemId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<DkpEvent>().WithOne().HasForeignKey<ShopPurchaseProjection>(x => x.PurchaseEventId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<DkpEvent>().WithOne().HasForeignKey<ShopPurchaseProjection>(x => x.CancellationEventId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<LedgerEntryProjection>(e =>
+        {
+            e.HasKey(x => x.EventId);
+            e.Property(x => x.Action).HasMaxLength(32);
+            e.Property(x => x.Reason).HasMaxLength(500);
+            e.Property(x => x.ItemName).HasMaxLength(128);
+            e.HasIndex(x => new { x.CreatedAtUtc, x.EventId });
+            e.HasIndex(x => new { x.UserId, x.Sequence }).IsUnique();
+            e.HasIndex(x => new { x.Action, x.CreatedAtUtc });
+            e.HasOne<DkpEvent>().WithOne().HasForeignKey<LedgerEntryProjection>(x => x.EventId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<GuildSetting>().HasKey(x => x.Id);
+        model.Entity<GuildSetting>().HasData(new { Id = 1, DefaultReserveLimit = 0 });
+        var seedTime = new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Utc);
+        model.Entity<ShopItem>().HasData(new { Id = Guid.Parse("00000000-0000-0000-0000-000000000008"), Key = "soft-reserve", Name = "Soft Reserve", Description = "Additional Soft Reserve", Price = 10, MaxPerUser = 2, IsActive = true, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)null });
+        foreach (var (bonus, price) in new[] { (10, 10), (20, 30), (30, 60), (40, 120) })
+            model.Entity<ShopItem>().HasData(new { Id = Guid.Parse($"00000000-0000-0000-0000-{bonus:D12}"), Key = $"roll-bonus-{bonus}", Name = $"RollBonus {bonus}", Description = $"Roll bonus +{bonus}", Price = price, MaxPerUser = 1, IsActive = true, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)bonus });
+    }
 }

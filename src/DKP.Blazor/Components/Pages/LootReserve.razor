@@ -1,12 +1,10 @@
 @page "/admin/loot-reserve"
 @attribute [Authorize(Roles = "Officer")]
-@using System.Security.Claims
 @using DKP.Facade.Commands
 @using DKP.Facade.Contracts
 @using DKP.Facade.Queries
 @inject ILootReserveQueries LootReserveQueries
 @inject ILootReserveCommands LootReserveCommands
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NotificationService NotificationService
 @inject IJSRuntime JS
 
@@ -87,9 +85,8 @@
     {
         try
         {
-            var discordId = await GetDiscordIdAsync();
-            var members = await LootReserveQueries.GetMembersAsync(discordId);
-            var settings = await LootReserveQueries.GetSettingsAsync(discordId);
+            var members = await LootReserveQueries.GetMembersAsync();
+            var settings = await LootReserveQueries.GetSettingsAsync();
             defaultReserveLimit = settings.DefaultReserveLimit;
             rows = members.Select(member => new LootReserveRow(member)).ToList();
         }
@@ -100,16 +97,13 @@
         finally { loading = false; }
     }
 
-    private async Task<string> GetDiscordIdAsync()
-        => (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? throw new UnauthorizedAccessException("The authenticated Discord user could not be identified.");
-
     private async Task SaveSettingsAsync()
     {
+        if (saving) return;
         saving = true;
         try
         {
-            var result = await LootReserveCommands.UpdateSettingsAsync(await GetDiscordIdAsync(), new UpdateLootReserveSettingsRequest(defaultReserveLimit));
+            var result = await LootReserveCommands.UpdateSettingsAsync(new UpdateLootReserveSettingsRequest(defaultReserveLimit));
             defaultReserveLimit = result.DefaultReserveLimit;
             NotificationService.Notify(NotificationSeverity.Success, "Settings saved", "Default ReserveLimit updated.");
         }
@@ -146,7 +140,7 @@
         public Guid UserId { get; } = source.UserId;
         public string DiscordName { get; } = source.DiscordName;
         public IReadOnlyList<LootReserveCharacter> Characters { get; } = source.Characters.Select(x => new LootReserveCharacter(x)).ToArray();
-        public Guid? SelectedCharacterId { get; set; } = source.Characters.FirstOrDefault()?.Id;
+        public Guid? SelectedCharacterId { get; set; } = (source.Characters.FirstOrDefault(character => character.IsMain) ?? source.Characters.FirstOrDefault())?.Id;
         public int ReserveLimit { get; set; } = source.ReserveLimit;
         public int RollBonus { get; set; } = source.RollBonus;
         public bool Struck { get; set; }

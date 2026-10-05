@@ -3,10 +3,11 @@ namespace DKP.Domain;
 public sealed class DkpEvent
 {
 	private DkpEvent() { }
-	public DkpEvent(string aggregateType, Guid aggregateId, long sequence, string eventType, Guid userId, Guid actorUserId, DateTime occurredAtUtc, Guid correlationId, string payload)
+	public DkpEvent(string aggregateType, Guid aggregateId, long sequence, string eventType, Guid userId, Guid actorUserId, DateTime occurredAtUtc, Guid correlationId, string payload, int version = 1)
 	{
-		Id = Guid.NewGuid(); AggregateType = aggregateType; AggregateId = aggregateId; Sequence = sequence; EventType = eventType; UserId = userId; ActorUserId = actorUserId; OccurredAtUtc = occurredAtUtc; CorrelationId = correlationId; Payload = payload;
+		Version = version; Id = Guid.NewGuid(); AggregateType = aggregateType; AggregateId = aggregateId; Sequence = sequence; EventType = eventType; UserId = userId; ActorUserId = actorUserId; OccurredAtUtc = occurredAtUtc; CorrelationId = correlationId; Payload = payload;
 	}
+	public int Version { get; private set; }
 	public Guid Id { get; private set; }
 	public string AggregateType { get; private set; } = string.Empty;
 	public Guid AggregateId { get; private set; }
