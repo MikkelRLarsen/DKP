@@ -28,15 +28,18 @@ public sealed class DkpAwardRequestQueries(QuerySession session) : IDkpAwardRequ
         if (rows.Length == 0) return [];
         var userIds = rows.SelectMany(x => new[] { x.UserId, x.ReviewedByUserId ?? Guid.Empty }).Where(x => x != Guid.Empty).Distinct().ToArray();
         var users = await db.Users.AsNoTracking().Include(x => x.Characters).Where(x => userIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
-        var presetIds = rows.Select(x => x.PresetId).Distinct().ToArray();
+        var presetIds = rows.Where(x => x.PresetId is not null).Select(x => x.PresetId!.Value).Distinct().ToArray();
         var presets = await db.DkpAwardPresets.AsNoTracking().Where(x => presetIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
+        var achievementIds = rows.Where(x => x.AchievementId is not null).Select(x => x.AchievementId!.Value).Distinct().ToArray();
+        var achievements = await db.AchievementDefinitions.AsNoTracking().Where(x => achievementIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
         return rows.Select(row =>
         {
             var user = users[row.UserId];
-            var preset = presets[row.PresetId];
+            var preset = row.PresetId is Guid presetId ? presets[presetId] : null;
+            var achievement = row.AchievementId is Guid achievementId ? achievements[achievementId] : null;
             var reviewer = row.ReviewedByUserId is Guid reviewerId && users.TryGetValue(reviewerId, out var reviewerUser) ? reviewerUser.DiscordName : null;
             var main = user.Characters.FirstOrDefault(x => x.IsMain);
-            return new DkpAwardRequestDto(row.Id, row.UserId, user.DiscordName, main is null ? null : $"{main.FirstName} {main.LastName}", row.PresetId, preset.Name, preset.Amount, row.Quantity, preset.Reason, row.Comment, ToStatus(row.Status), row.CreatedAtUtc, row.ReviewedAtUtc, reviewer, row.ReviewComment, row.DkpEventIds);
+            return new DkpAwardRequestDto(row.Id, row.UserId, user.DiscordName, main is null ? null : $"{main.FirstName} {main.LastName}", row.PresetId, row.AchievementId, achievement?.Name ?? preset!.Name, achievement?.DkpAmount ?? preset!.Amount, row.Quantity, achievement?.Description ?? preset!.Reason, row.Comment, ToStatus(row.Status), row.CreatedAtUtc, row.ReviewedAtUtc, reviewer, row.ReviewComment, row.DkpEventIds);
         }).ToArray();
     }
 

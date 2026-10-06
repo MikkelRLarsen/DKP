@@ -68,8 +68,10 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.Property(x => x.DkpEventIdsJson).HasColumnType("jsonb");
             e.HasIndex(x => new { x.UserId, x.PresetId, x.Status });
             e.HasIndex(x => new { x.UserId, x.PresetId }).IsUnique().HasFilter("\"Status\" = 'Pending'");
+            e.HasIndex(x => new { x.UserId, x.AchievementId }).IsUnique().HasFilter("\"Status\" = 'Pending'");
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<DkpAwardPreset>().WithMany().HasForeignKey(x => x.PresetId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<AchievementDefinition>().WithMany().HasForeignKey(x => x.AchievementId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<DkpEvent>().WithMany().HasForeignKey(x => x.DkpEventId).OnDelete(DeleteBehavior.Restrict);
         });

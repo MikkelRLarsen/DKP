@@ -829,6 +829,16 @@ Kendte begrænsninger:
 - En modifier forbruges ved en succesfuld LootReserve consume-batch, ikke ved blot at generere tekst.
 - Der kræves ingen migration, fordi modifiers gemmes som JSON events i den eksisterende event-store.
 
+## Slice 13g – Achievement requests fra medlemslisten
+
+Status: Implementeret.
+
+Medlemmer kan nu anmode om aktive achievements fra `/my-achievements`, både når de er Available og Previously revoked. Der oprettes højst én pending request pr. bruger og achievement, og medlemmet kan annullere sin egen pending request. Officers kan se, godkende og afvise achievement requests direkte på `/admin/achievements`.
+
+Ved godkendelse oprettes et positivt `DkpPosted`-event med achievement-reference samt den tilhørende `UserAchievement`. Officer-authorization, aktivt achievement, eksisterende achievement og request-status valideres serverside. Preset requests fortsætter med at bruge det samme request-flow.
+
+Migration: `20261006201039_Slice13gAchievementRequests` tilføjer achievement-reference, relation og unique pending-index til `DkpAwardRequests`.
+
 ## Slice 14 – Deployment og production hardening
 
 Status: Planlagt.

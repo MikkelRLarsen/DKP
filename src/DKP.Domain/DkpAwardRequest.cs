@@ -14,11 +14,13 @@ public sealed class DkpAwardRequest
 {
     private DkpAwardRequest() { }
 
-    public DkpAwardRequest(Guid userId, Guid presetId, int quantity, string? comment, DateTime now)
+    public DkpAwardRequest(Guid userId, Guid? presetId, Guid? achievementId, int quantity, string? comment, DateTime now)
     {
+        if ((presetId is null) == (achievementId is null)) throw new ArgumentException("Exactly one request source is required.");
         Id = Guid.NewGuid();
         UserId = userId;
         PresetId = presetId;
+        AchievementId = achievementId;
         Quantity = quantity;
         Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
         Status = DkpAwardRequestStatus.Pending;
@@ -27,7 +29,8 @@ public sealed class DkpAwardRequest
 
     public Guid Id { get; private set; }
     public Guid UserId { get; private set; }
-    public Guid PresetId { get; private set; }
+    public Guid? PresetId { get; private set; }
+    public Guid? AchievementId { get; private set; }
     public int Quantity { get; private set; }
     public string? Comment { get; private set; }
     public DkpAwardRequestStatus Status { get; private set; }

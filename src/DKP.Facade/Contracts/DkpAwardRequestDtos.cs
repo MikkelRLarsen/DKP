@@ -8,7 +8,7 @@ public enum DkpAwardRequestStatus
     Cancelled
 }
 
-public sealed record CreateDkpAwardRequestRequest(Guid PresetId, int Quantity, string? Comment);
+public sealed record CreateDkpAwardRequestRequest(Guid? PresetId, int Quantity, string? Comment, Guid? AchievementId = null);
 public sealed record ReviewDkpAwardRequestRequest(string? Comment);
 
 public sealed record DkpAwardRequestDto(
@@ -16,7 +16,8 @@ public sealed record DkpAwardRequestDto(
     Guid UserId,
     string DiscordName,
     string? MainCharacter,
-    Guid PresetId,
+    Guid? PresetId,
+    Guid? AchievementId,
     string PresetName,
     int Amount,
     int Quantity,

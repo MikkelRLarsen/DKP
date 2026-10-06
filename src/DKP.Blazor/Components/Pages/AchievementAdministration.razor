@@ -5,6 +5,8 @@
 @using DKP.Facade.Queries
 @inject IAchievementQueries AchievementQueries
 @inject IAchievementCommands AchievementCommands
+@inject IDkpAwardRequestQueries RequestQueries
+@inject IDkpAwardRequestCommands RequestCommands
 @inject IUserAdministrationQueries UserQueries
 @inject NotificationService NotificationService
 @inject DialogService DialogService
@@ -48,12 +50,34 @@
     <RadzenDataGrid Data="@userAchievements" TItem="UserAchievementDto" AllowPaging="true" AllowSorting="true" EmptyText="No achievement grants found.">
         <Columns><RadzenDataGridColumn TItem="UserAchievementDto" Property="DiscordName" Title="Player" /><RadzenDataGridColumn TItem="UserAchievementDto" Property="AchievementName" Title="Achievement" /><RadzenDataGridColumn TItem="UserAchievementDto" Property="DkpAmount" Title="DKP" /><RadzenDataGridColumn TItem="UserAchievementDto" Property="IsActive" Title="Active" /><RadzenDataGridColumn TItem="UserAchievementDto" Title="Action" Sortable="false"><Template Context="item">@if (item.IsActive) { <RadzenButton Text="Revoke" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => RevokeAsync(item))" Disabled="@busy" /> }</Template></RadzenDataGridColumn></Columns>
     </RadzenDataGrid>
+    <RadzenCard>
+        <RadzenText Text="Achievement requests" TextStyle="TextStyle.H5" />
+        <RadzenDataGrid Data="@achievementRequests" TItem="DkpAwardRequestDto" AllowPaging="true" AllowSorting="true" AllowFiltering="true" EmptyText="No achievement requests found." Style="margin-top:1rem;">
+            <Columns>
+                <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="DiscordName" Title="Player" />
+                <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="MainCharacter" Title="Main character" />
+                <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="PresetName" Title="Achievement" />
+                <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Amount" Title="DKP" />
+                <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Comment" Title="Comment" />
+                <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Status" Title="Status" />
+                <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="CreatedAtUtc" Title="Created"><Template Context="item">@item.CreatedAtUtc.ToLocalTime().ToString("g")</Template></RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="DkpAwardRequestDto" Title="Actions" Sortable="false" Filterable="false"><Template Context="item">
+                    @if (item.Status == DkpAwardRequestStatus.Pending)
+                    {
+                        <RadzenButton Text="Approve" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" Click="@(() => ApproveRequestAsync(item))" Disabled="@busy" />
+                        <RadzenButton Text="Reject" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => RejectRequestAsync(item))" Disabled="@busy" />
+                    }
+                </Template></RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    </RadzenCard>
 </RadzenStack>
 
 @code {
     private IReadOnlyList<AchievementDefinitionDto> definitions = [];
     private IReadOnlyList<UserSummary> users = [];
     private IReadOnlyList<UserAchievementDto> userAchievements = [];
+    private IReadOnlyList<DkpAwardRequestDto> achievementRequests = [];
     private IEnumerable<Guid> selectedUserIds = [];
     private Guid? selectedAchievementId;
     private Guid? editingId;
@@ -61,12 +85,14 @@
     private readonly Form form = new();
     private IEnumerable<AchievementDefinitionDto> activeDefinitions => definitions.Where(x => x.IsActive);
     protected override async Task OnInitializedAsync() { await ReloadAsync(); }
-    private async Task ReloadAsync() { definitions = await AchievementQueries.GetDefinitionsAsync(); users = (await UserQueries.GetAllAsync()).Where(x => !x.IsBlocked).ToArray(); userAchievements = await AchievementQueries.GetUserAchievementsAsync(); }
+    private async Task ReloadAsync() { definitions = await AchievementQueries.GetDefinitionsAsync(); users = (await UserQueries.GetAllAsync()).Where(x => !x.IsBlocked).ToArray(); userAchievements = await AchievementQueries.GetUserAchievementsAsync(); achievementRequests = (await RequestQueries.GetAllRequestsAsync()).Where(x => x.AchievementId is not null).ToArray(); }
     private void BeginEdit(AchievementDefinitionDto item) { editingId = item.Id; form.Key = item.Key; form.Name = item.Name; form.Description = item.Description; form.DkpAmount = item.DkpAmount; }
     private void CancelEdit() { editingId = null; form.Reset(); }
     private async Task SaveAsync() { if (busy) return; busy = true; try { var input = new AchievementInput(form.Key, form.Name, form.Description, form.DkpAmount); if (editingId is Guid id) await AchievementCommands.UpdateAsync(id, input); else await AchievementCommands.CreateAsync(input); CancelEdit(); await ReloadAsync(); NotificationService.Notify(NotificationSeverity.Success, "Saved", "Achievement definition saved."); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to save", ex.Message); } finally { busy = false; } }
     private async Task ToggleAsync(AchievementDefinitionDto item) { if (busy || await DialogService.Confirm($"{(item.IsActive ? "Deactivate" : "Activate")} {item.Name}?", "Confirm") != true) return; busy = true; try { await AchievementCommands.SetActiveAsync(item.Id, !item.IsActive); await ReloadAsync(); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to update", ex.Message); } finally { busy = false; } }
     private async Task GrantAsync() { if (busy || selectedAchievementId is not Guid achievementId) return; busy = true; try { var result = await AchievementCommands.GrantAsync(achievementId, selectedUserIds.ToArray()); selectedUserIds = []; await ReloadAsync(); NotificationService.Notify(NotificationSeverity.Success, "Achievement granted", $"Granted to {result.Count} player(s)."); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to grant achievement", ex.Message); } finally { busy = false; } }
     private async Task RevokeAsync(UserAchievementDto item) { if (busy || await DialogService.Confirm($"Revoke {item.AchievementName} from {item.DiscordName}?", "Confirm revoke") != true) return; busy = true; try { await AchievementCommands.RevokeAsync(item.Id); await ReloadAsync(); NotificationService.Notify(NotificationSeverity.Success, "Achievement revoked", "The DKP was reversed."); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to revoke achievement", ex.Message); } finally { busy = false; } }
+    private async Task ApproveRequestAsync(DkpAwardRequestDto request) { if (busy || await DialogService.Confirm($"Approve {request.PresetName} for {request.DiscordName}?", "Approve request") != true) return; busy = true; try { await RequestCommands.ApproveAsync(request.Id, new ReviewDkpAwardRequestRequest(null)); await ReloadAsync(); NotificationService.Notify(NotificationSeverity.Success, "Request approved", "The achievement was granted."); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to approve request", ex.Message); } finally { busy = false; } }
+    private async Task RejectRequestAsync(DkpAwardRequestDto request) { if (busy || await DialogService.Confirm($"Reject {request.PresetName} for {request.DiscordName}?", "Reject request") != true) return; busy = true; try { await RequestCommands.RejectAsync(request.Id, new ReviewDkpAwardRequestRequest(null)); await ReloadAsync(); NotificationService.Notify(NotificationSeverity.Success, "Request rejected", "The request was rejected."); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to reject request", ex.Message); } finally { busy = false; } }
     private sealed class Form { public string Key { get; set; } = ""; public string Name { get; set; } = ""; public string Description { get; set; } = ""; public int DkpAmount { get; set; } = 1; public void Reset() { Key = Name = Description = ""; DkpAmount = 1; } }
 }

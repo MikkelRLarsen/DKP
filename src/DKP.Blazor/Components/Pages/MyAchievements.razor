@@ -1,9 +1,13 @@
 @page "/my-achievements"
 @attribute [Authorize]
 @using DKP.Facade.Contracts
+@using DKP.Facade.Commands
 @using DKP.Facade.Queries
 @inject IAchievementQueries AchievementQueries
+@inject IDkpAwardRequestQueries RequestQueries
+@inject IDkpAwardRequestCommands RequestCommands
 @inject NotificationService NotificationService
+@inject DialogService DialogService
 
 <PageTitle>My Achievements</PageTitle>
 @if (loading)
@@ -28,6 +32,36 @@ else
             }
         </RadzenCard>
         <RadzenCard>
+            <RadzenText Text="Achievements you can obtain" TextStyle="TextStyle.H5" />
+            <RadzenText Text="All currently active guild achievements are listed below." TextStyle="TextStyle.Body2" />
+            @if (definitions.Count == 0)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" Style="margin-top:1rem;">No achievements are currently available.</RadzenAlert>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@definitions" TItem="AchievementDefinitionDto" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" Style="margin-top:1rem;">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="AchievementDefinitionDto" Property="Name" Title="Achievement" />
+                        <RadzenDataGridColumn TItem="AchievementDefinitionDto" Property="Description" Title="Description" />
+                        <RadzenDataGridColumn TItem="AchievementDefinitionDto" Property="DkpAmount" Title="DKP" />
+                        <RadzenDataGridColumn TItem="AchievementDefinitionDto" Title="Status" Sortable="false"><Template Context="definition"><RadzenBadge Text="@StatusFor(definition)" BadgeStyle="@StatusStyle(definition)" /></Template></RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="AchievementDefinitionDto" Title="Action" Sortable="false" Filterable="false"><Template Context="definition">
+                            @if (PendingFor(definition.Id) is { } pending)
+                            {
+                                <RadzenBadge Text="Request pending" BadgeStyle="BadgeStyle.Warning" />
+                                <RadzenButton Text="Cancel request" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => CancelAsync(pending))" Disabled="@busy" />
+                            }
+                            else if (CanRequest(definition))
+                            {
+                                <RadzenButton Text="Request DKP" Icon="send" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@(() => RequestAsync(definition))" Disabled="@busy" />
+                            }
+                        </Template></RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+        <RadzenCard>
             <RadzenText Text="Achievement history" TextStyle="TextStyle.H5" />
             @if (!achievements.Any(x => !x.IsActive))
             {
@@ -43,11 +77,40 @@ else
 
 @code {
     private IReadOnlyList<UserAchievementDto> achievements = [];
+    private IReadOnlyList<AchievementDefinitionDto> definitions = [];
+    private IReadOnlyList<DkpAwardRequestDto> requests = [];
     private bool loading = true;
+    private bool busy;
     protected override async Task OnInitializedAsync()
     {
-        try { achievements = await AchievementQueries.GetUserAchievementsAsync(); }
+        try
+        {
+            achievements = await AchievementQueries.GetUserAchievementsAsync();
+            definitions = await AchievementQueries.GetDefinitionsAsync();
+            requests = await RequestQueries.GetMyRequestsAsync();
+        }
         catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to load achievements", ex.Message); }
         finally { loading = false; }
+    }
+    private DkpAwardRequestDto? PendingFor(Guid achievementId) => requests.FirstOrDefault(x => x.AchievementId == achievementId && x.Status == DkpAwardRequestStatus.Pending);
+    private bool CanRequest(AchievementDefinitionDto definition) => !achievements.Any(x => x.AchievementId == definition.Id && x.IsActive);
+    private string StatusFor(AchievementDefinitionDto definition) => PendingFor(definition.Id) is not null ? "Request pending" : achievements.Any(x => x.AchievementId == definition.Id && x.IsActive) ? "Obtained" : achievements.Any(x => x.AchievementId == definition.Id) ? "Previously revoked" : "Available";
+    private BadgeStyle StatusStyle(AchievementDefinitionDto definition) => StatusFor(definition) switch { "Obtained" => BadgeStyle.Success, "Previously revoked" => BadgeStyle.Light, "Request pending" => BadgeStyle.Warning, _ => BadgeStyle.Info };
+    private async Task RequestAsync(AchievementDefinitionDto definition)
+    {
+        if (busy || !CanRequest(definition) || PendingFor(definition.Id) is not null) return;
+        if (await DialogService.Confirm($"Request {definition.Name} for {definition.DkpAmount} DKP?", "Request achievement") != true) return;
+        busy = true;
+        try { await RequestCommands.CreateAsync(new CreateDkpAwardRequestRequest(null, 1, null, definition.Id)); requests = await RequestQueries.GetMyRequestsAsync(); NotificationService.Notify(NotificationSeverity.Success, "Request sent", "An Officer must approve the achievement request."); }
+        catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to request achievement", ex.Message); }
+        finally { busy = false; }
+    }
+    private async Task CancelAsync(DkpAwardRequestDto request)
+    {
+        if (busy || await DialogService.Confirm($"Cancel request for {request.PresetName}?", "Cancel request") != true) return;
+        busy = true;
+        try { await RequestCommands.CancelAsync(request.Id); requests = await RequestQueries.GetMyRequestsAsync(); NotificationService.Notify(NotificationSeverity.Success, "Request cancelled", "The request was cancelled."); }
+        catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to cancel request", ex.Message); }
+        finally { busy = false; }
     }
 }
