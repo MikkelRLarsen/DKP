@@ -1,22 +1,16 @@
 using DKP.Application.Persistence;
+using DKP.Domain;
 using Microsoft.EntityFrameworkCore;
+
 namespace DKP.Infrastructure.Persistence;
 
-public sealed class EventProjectionRebuilder(CommandUnitOfWork session) : IEventProjectionRebuilder
+/// <summary>Validates and replays the append-only event stream without database writes.</summary>
+public sealed class EventProjectionRebuilder(IDbContextFactory<DkpDbContext> factory) : IEventProjectionRebuilder
 {
-    public Task RebuildAsync(CancellationToken cancellationToken = default)
-        => session.ExecuteAsync([], async () =>
-        {
-            var db = session.Db;
-            await db.LedgerEntries.ExecuteDeleteAsync(cancellationToken);
-            await db.DkpAwardPresetApplications.ExecuteDeleteAsync(cancellationToken);
-            await db.ShopPurchaseProjections.ExecuteDeleteAsync(cancellationToken);
-            await db.DkpBalanceProjections.ExecuteDeleteAsync(cancellationToken);
-            var events = await db.DkpEvents.AsNoTracking()
-                .OrderBy(x => x.AggregateType).ThenBy(x => x.AggregateId).ThenBy(x => x.Sequence)
-                .ToListAsync(cancellationToken);
-            foreach (var entry in events)
-                await LedgerProjector.ApplyAsync(db, entry, cancellationToken);
-            return true;
-        }, cancellationToken);
+    public async Task RebuildAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(cancellationToken);
+        var events = await db.DkpEvents.AsNoTracking().ToArrayAsync(cancellationToken);
+        _ = LedgerReplayState.Replay(events);
+    }
 }

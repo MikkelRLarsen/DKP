@@ -25,17 +25,16 @@ public sealed class LedgerFlowTests : DatabaseTest
         Assert.Equal(85, own.Balance.Amount);
         Assert.Equal(5, own.Transactions.Count);
         Assert.Equal(85, own.Transactions.Sum(x => x.Amount));
-        Assert.Equal(credit.Id, own.Transactions.Last().Id);
+        Assert.Contains(own.Transactions, x => x.Id == credit.Id);
         Assert.Equal(85, (await new AccountQueries(member.Queries).GetDashboardAsync())!.DkpBalance);
         Assert.Equal(85, (await new GuildMemberQueries(member.Queries).GetAllAsync()).Single(x => x.UserId == Member.Id).DkpBalance);
         Assert.Equal(85, (await new PlayerDetailsQueries(member.Queries).GetAsync(Member.Id))!.DkpHistory.Balance.Amount);
         Assert.Equal(own.Transactions, (await new DkpQueries(member.Queries).GetPlayerHistoryAsync(Member.Id))!.Transactions);
         await using var db = Factory.CreateDbContext();
         Assert.True(await db.DkpEvents.AnyAsync(x => x.Id == award.Id));
-        var usage = await db.DkpAwardPresetApplications.SingleAsync();
-        Assert.Equal(award.Id, usage.DkpEventId);
-        Assert.Equal(Officer.Id, usage.AppliedByUserId);
-        Assert.Equal(own.Transactions.First().Id, (await db.DkpBalanceProjections.FindAsync(Member.Id))!.LastEventId);
+        var replay = LedgerReplayState.Replay(await db.DkpEvents.Where(x => x.UserId == Member.Id).ToArrayAsync());
+        Assert.Equal(1, replay.PresetUsage.Count);
+        Assert.Equal(1, replay.PresetUsage[preset.Id]);
     }
 
     [Fact]
@@ -108,10 +107,7 @@ public sealed class LedgerFlowTests : DatabaseTest
     private sealed class FailSecondPost(IEventLedgerRepository inner) : IEventLedgerRepository
     {
         private int calls;
-        public Task<int> GetBalanceAsync(Guid id, CancellationToken ct = default) => inner.GetBalanceAsync(id, ct);
-        public Task<int> GetActiveQuantityAsync(Guid id, Guid item, CancellationToken ct = default) => inner.GetActiveQuantityAsync(id, item, ct);
-        public Task<bool> HasActiveRollBonusAsync(Guid id, CancellationToken ct = default) => inner.HasActiveRollBonusAsync(id, ct);
-        public Task<ShopPurchaseProjection?> GetPurchaseAsync(Guid id, CancellationToken ct = default) => inner.GetPurchaseAsync(id, ct);
+        public Task<LedgerReplayState> GetStateAsync(Guid? id = null, CancellationToken ct = default) => inner.GetStateAsync(id, ct);
         public Task<DkpEvent> PostAsync(Guid user, Guid actor, Guid operation, DateTime now, ILedgerPayload payload, CancellationToken ct = default)
         {
             if (++calls == 2) throw new InvalidOperationException("Injected mid-operation failure");

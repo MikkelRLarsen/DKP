@@ -55,7 +55,8 @@ public sealed class DkpPresetCommandService(CommandContext context, IPresetRepos
             foreach (var id in ids)
             {
                 var target = await context.TargetAsync(id, ct);
-                if (await presets.GetUsageCountAsync(presetId, id, ct) >= preset.MaxApplicationsPerUser)
+                var state = await ledger.GetStateAsync(id, ct);
+                if (state.PresetUsage.GetValueOrDefault(presetId) >= preset.MaxApplicationsPerUser)
                     throw new InvalidOperationException($"{target.DiscordName}: preset lifetime limit reached.");
             }
             var operationId = Guid.NewGuid();

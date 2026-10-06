@@ -64,12 +64,13 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
         foreach (var id in ids)
         {
             var target = await context.TargetAsync(id, ct);
-            if (await ledger.GetBalanceAsync(id, ct) < cost)
+            var state = await ledger.GetStateAsync(id, ct);
+            if (state.Balance < cost)
                 throw new InvalidOperationException($"{target.DiscordName}: insufficient DKP ({cost} required).");
-            var active = await ledger.GetActiveQuantityAsync(id, item.Id, ct);
+            var active = state.ActiveQuantity(item.Id);
             if ((long)active + quantity > item.MaxPerUser)
                 throw new InvalidOperationException($"{target.DiscordName}: maximum {item.MaxPerUser} for {item.Name} (already owns {active}).");
-            if (item.RollBonusValue != null && await ledger.HasActiveRollBonusAsync(id, ct))
+            if (item.RollBonusValue != null && state.HasActiveRollBonus())
                 throw new InvalidOperationException($"{target.DiscordName}: already has an active RollBonus.");
             users.Add(target);
         }
@@ -89,7 +90,8 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
     public Task CancelAsync(Guid purchaseId, CancellationToken ct = default)
         => context.ExecuteAsync([], false, async actor =>
         {
-            var purchase = await ledger.GetPurchaseAsync(purchaseId, ct) ?? throw new KeyNotFoundException("Purchase not found.");
+            var state = await ledger.GetStateAsync(null, ct);
+            var purchase = state.Purchases.Values.SingleOrDefault(x => x.PurchaseId == purchaseId) ?? throw new KeyNotFoundException("Purchase not found.");
             if (actor.Id != purchase.UserId && actor.Role != Domain.UserRole.Officer)
                 throw new UnauthorizedAccessException("You can only cancel your own purchases.");
             await context.TargetAsync(purchase.UserId, ct);

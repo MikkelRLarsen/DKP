@@ -21,7 +21,7 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 10 | Admin shop-overview og køb for brugere | Færdig |
 | 11 | Guild membership ved OAuth og blokering af medlemmer | Færdig |
 | 12 | DKP management presets | Færdig |
-| 12a | Legacy cleanup og event-konsolidering | Implementeret; automatiseret verificeret |
+| 12a | Legacy cleanup og event-konsolidering | Implementeret; event-store uden persisted projections |
 | 13 | DKP acquisition overview | Planlagt |
 | 13a | Achievement-baserede DKP awards | Planlagt |
 | 13b | Achievement-gated shop-items | Planlagt |
@@ -629,7 +629,7 @@ Leveret:
 
 ## Slice 12a – Legacy cleanup og event-konsolidering
 
-Status: Implementeret og automatiseret verificeret 2026-10-06. Baseline: funktionalitet til og med Slice 12. Manuel browser-/Discord-gennemgang er fortsat et afleveringscheck; se begrænsninger nedenfor.
+Status: Implementeret og automatiseret verificeret 2026-10-06. Baseline: funktionalitet til og med Slice 12. DKP-, shop-, preset- og aktivitetsstate beregnes nu ved load fra `DkpEvents`; der gemmes ingen persisted projections. Manuel browser-/Discord-gennemgang er fortsat et afleveringscheck; se begrænsninger nedenfor.
 
 Godkendt plan:
 
@@ -691,6 +691,7 @@ De slettede legacy-filer/migrationer kan genfindes i Git-historikken.
 - Host-smoke tester server-rendering og authorization, ikke en browsers JavaScript/SignalR-interaktion. Gennemgå efter eget database-reset: login, DKP multiselect/confirmation, køb/annullering, aktivitetens paging/filtre og clipboard. Rigtigt Discord-login og addon-paste er ikke udført i denne verifikation.
 - Den fælles advisory lock serialiserer writes for guilden; det er et bevidst korrekthedsvalg. Ved større trafik kan låsegranularitet optimeres med tilsvarende PostgreSQL-concurrency-tests.
 - Replay er en intern Application persistence-kontrakt, ikke et offentligt endpoint eller en ny administrationsside. Den læser eventlisten i hukommelsen; streaming/batching er et senere skaleringsbehov.
+- `DkpBalanceProjection`, `ShopPurchaseProjection`, `LedgerEntryProjection` og `DkpAwardPresetApplication` er fjernet fra den aktive model. `RemovePersistedProjections` fjerner de tidligere tabeller; event-store er den eneste autoritative kilde.
 - Discord OAuth-loopet og bot-sikkerhedsintegrationen forbliver de kendte backlog-punkter. Slice 13, 13a, 13b og 14 er ikke implementeret her.
 
 ## Slice 13 – DKP acquisition overview

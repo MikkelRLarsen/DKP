@@ -74,7 +74,8 @@ public sealed class ShopAndPresetTests : DatabaseTest
         Assert.Equal(10, await BalanceAsync(Member.Id));
         Assert.Equal(10, await BalanceAsync(Other.Id));
         await using var db = Factory.CreateDbContext();
-        Assert.All(await db.ShopPurchaseProjections.ToListAsync(), p => Assert.Equal(Officer.Id, p.CreatedByUserId));
+        var purchaseEvents = await db.DkpEvents.Where(x => x.EventType == "PurchasePlaced").ToArrayAsync();
+        Assert.All(purchaseEvents, p => Assert.Equal(Officer.Id, p.ActorUserId));
         await admin.Shop.CancelAsync(results[0].Id);
         Assert.Equal(30, await BalanceAsync(results[0].UserId));
     }
@@ -111,7 +112,7 @@ public sealed class ShopAndPresetTests : DatabaseTest
         var queries = new DkpPresetQueries(admin.Queries);
         Assert.Equal(2, (await queries.GetUsageAsync(Member.Id, preset.Id)).Applications);
         Assert.Empty(await new DkpPresetQueries(As("member").Queries).GetAvailableSourcesAsync());
-        await new DKP.Infrastructure.Persistence.EventProjectionRebuilder(admin.Session).RebuildAsync();
+        await new DKP.Infrastructure.Persistence.EventProjectionRebuilder(admin.Factory).RebuildAsync();
         Assert.Equal(2, (await queries.GetUsageAsync(Member.Id, preset.Id)).Applications);
         Assert.All((await new DkpQueries(As("member").Queries).GetHistoryAsync())!.Transactions, x => Assert.Equal("Quest complete", x.Reason));
         await admin.Presets.UpdateAsync(preset.Id, new("Quest edited", 20, "Changed reason", 5));

@@ -24,7 +24,7 @@ public sealed class ReplayAndActivityTests : DatabaseTest
         var history = (await new DkpQueries(member.Queries).GetHistoryAsync())!;
         var beforeActivity = await new GuildActivityQueries(member.Queries).GetAsync(new(Take: 200));
         await admin.Shop.UpdateItemAsync(BonusId(30), new("roll-bonus-30", "Renamed", "", 80, 1));
-        var rebuilder = new EventProjectionRebuilder(admin.Session);
+        var rebuilder = new EventProjectionRebuilder(admin.Factory);
         await rebuilder.RebuildAsync();
         await rebuilder.RebuildAsync();
         var after = (await new DkpQueries(member.Queries).GetHistoryAsync())!;
@@ -33,9 +33,11 @@ public sealed class ReplayAndActivityTests : DatabaseTest
         Assert.Equal(beforeActivity.Items, (await new GuildActivityQueries(member.Queries).GetAsync(new(Take: 200))).Items);
         Assert.Equal(30, (await new ShopPurchaseQueries(member.Queries).GetActiveOverviewAsync())!.RollBonus);
         await using var db = Factory.CreateDbContext();
-        Assert.Equal(2, await db.DkpAwardPresetApplications.CountAsync());
+        var presetEvents = (await db.DkpEvents.Where(x => x.EventType == "DkpPosted").ToArrayAsync()).Where(x => x.Payload.Contains(preset.Id.ToString())).ToArray();
+        Assert.Equal(2, presetEvents.Length);
         Assert.Single(await db.DkpEvents.Select(x => x.OccurredAtUtc).Distinct().ToListAsync());
-        Assert.Equal("RollBonus 30", (await db.ShopPurchaseProjections.SingleAsync(x => x.RollBonusValue != null)).ItemName);
+        var bonusEvents = await db.DkpEvents.ToArrayAsync();
+        Assert.Contains(bonusEvents, x => x.Payload.Contains("RollBonus 30"));
     }
 
     [Fact]
@@ -51,11 +53,9 @@ public sealed class ReplayAndActivityTests : DatabaseTest
                 DateTime.UtcNow, Guid.NewGuid(), "{}"));
             await db.SaveChangesAsync();
         }
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new EventProjectionRebuilder(rig.Session).RebuildAsync());
-        var after = (await new DkpQueries(rig.Queries).GetHistoryAsync())!;
-        Assert.Equal(before.Balance, after.Balance);
-        Assert.Equal(before.Transactions, after.Transactions);
-        Assert.Single(await new ShopQueries(rig.Queries).GetPurchasesAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new EventProjectionRebuilder(rig.Factory).RebuildAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new DkpQueries(rig.Queries).GetHistoryAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new ShopQueries(rig.Queries).GetPurchasesAsync());
     }
 
     [Fact]
@@ -71,15 +71,15 @@ public sealed class ReplayAndActivityTests : DatabaseTest
                 new PurchaseCancelled(purchase.Id, 10, "Duplicate refund")));
             await db.SaveChangesAsync();
         }
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new EventProjectionRebuilder(member.Session).RebuildAsync());
-        Assert.Equal(100, await BalanceAsync(Member.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new EventProjectionRebuilder(member.Factory).RebuildAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BalanceAsync(Member.Id));
     }
 
     [Fact]
     public async Task Replay_and_concurrent_command_are_serialized()
     {
         await FundAsync(Member.Id);
-        var replay = new EventProjectionRebuilder(As("officer").Session).RebuildAsync();
+        var replay = new EventProjectionRebuilder(As("officer").Factory).RebuildAsync();
         var purchase = As("member").Shop.PurchaseAsync(new(SoftReserveId, 2));
         await Task.WhenAll(replay, purchase);
         Assert.Equal(80, await BalanceAsync(Member.Id));
@@ -137,7 +137,7 @@ public sealed class ReplayAndActivityTests : DatabaseTest
     public async Task New_baseline_has_no_pending_changes_and_expected_seed_and_relations()
     {
         await using var db = Factory.CreateDbContext();
-        Assert.Single(await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(2, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
         Assert.False(db.Database.HasPendingModelChanges());
         Assert.Equal(0, (await db.GuildSettings.SingleAsync()).DefaultReserveLimit);
@@ -147,6 +147,6 @@ public sealed class ReplayAndActivityTests : DatabaseTest
         Assert.Equal(new[] { 10, 30, 60, 120 }, await db.ShopItems.Where(x => x.RollBonusValue != null).OrderBy(x => x.RollBonusValue).Select(x => x.Price).ToArrayAsync());
         Assert.DoesNotContain(db.Model.GetEntityTypes(), e => new[] { "DkpTransaction", "SoftReservePurchase", "ShopPurchase" }.Contains(e.ClrType.Name));
         Assert.DoesNotContain(db.Model.FindEntityType(typeof(User))!.GetProperties(), p => p.Name == "RollBonus");
-        Assert.NotNull(db.Model.FindEntityType(typeof(DkpAwardPresetApplication))!.FindPrimaryKey());
+        Assert.Null(db.Model.FindEntityType("DkpAwardPresetApplication"));
     }
 }

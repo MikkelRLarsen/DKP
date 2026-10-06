@@ -73,7 +73,7 @@ public abstract class DatabaseTest : IAsyncLifetime
     public async Task<int> BalanceAsync(Guid id)
     {
         await using var db = Factory.CreateDbContext();
-        return await db.DkpBalanceProjections.Where(x => x.UserId == id).Select(x => x.Balance).SingleOrDefaultAsync();
+        return LedgerReplayState.Replay(await db.DkpEvents.Where(x => x.UserId == id).ToArrayAsync()).Balance;
     }
 }
 
@@ -98,6 +98,7 @@ public sealed class TestRig
 {
     public TestRig(TestDbFactory factory, string? id)
     {
+        Factory = factory;
         Session = new(factory);
         Users = new(Session);
         Context = new(new TestIdentity(id), Users, Session);
@@ -113,6 +114,7 @@ public sealed class TestRig
         Settings = new(Context, new GuildSettingsRepository(Session));
     }
     public CommandUnitOfWork Session { get; }
+    public TestDbFactory Factory { get; }
     public UserRepository Users { get; }
     public CommandContext Context { get; }
     public EventLedgerRepository Ledger { get; }

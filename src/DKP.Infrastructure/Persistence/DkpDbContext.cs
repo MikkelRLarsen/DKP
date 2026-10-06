@@ -8,12 +8,8 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<Character> Characters => Set<Character>();
     public DbSet<ShopItem> ShopItems => Set<ShopItem>();
     public DbSet<DkpAwardPreset> DkpAwardPresets => Set<DkpAwardPreset>();
-    public DbSet<DkpAwardPresetApplication> DkpAwardPresetApplications => Set<DkpAwardPresetApplication>();
     public DbSet<GuildSetting> GuildSettings => Set<GuildSetting>();
     public DbSet<DkpEvent> DkpEvents => Set<DkpEvent>();
-    public DbSet<DkpBalanceProjection> DkpBalanceProjections => Set<DkpBalanceProjection>();
-    public DbSet<ShopPurchaseProjection> ShopPurchaseProjections => Set<ShopPurchaseProjection>();
-    public DbSet<LedgerEntryProjection> LedgerEntries => Set<LedgerEntryProjection>();
 
     private void GuardEvents()
     {
@@ -60,15 +56,6 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.Property(x => x.Name).HasMaxLength(128);
             e.Property(x => x.Reason).HasMaxLength(500);
         });
-        model.Entity<DkpAwardPresetApplication>(e =>
-        {
-            e.HasKey(x => x.DkpEventId);
-            e.HasOne<DkpEvent>().WithOne().HasForeignKey<DkpAwardPresetApplication>(x => x.DkpEventId).OnDelete(DeleteBehavior.Restrict);
-            e.HasIndex(x => new { x.PresetId, x.UserId });
-            e.HasOne<DkpAwardPreset>().WithMany().HasForeignKey(x => x.PresetId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.AppliedByUserId).OnDelete(DeleteBehavior.Restrict);
-        });
         model.Entity<DkpEvent>(e =>
         {
             e.HasKey(x => x.Id);
@@ -78,37 +65,6 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.HasIndex(x => new { x.AggregateType, x.AggregateId, x.Sequence }).IsUnique();
             e.HasIndex(x => x.CorrelationId);
             e.HasIndex(x => new { x.UserId, x.OccurredAtUtc });
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
-        });
-        model.Entity<DkpBalanceProjection>(e =>
-        {
-            e.HasKey(x => x.UserId);
-            e.HasOne<User>().WithOne().HasForeignKey<DkpBalanceProjection>(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne<DkpEvent>().WithMany().HasForeignKey(x => x.LastEventId).OnDelete(DeleteBehavior.Restrict);
-        });
-        model.Entity<ShopPurchaseProjection>(e =>
-        {
-            e.HasKey(x => x.PurchaseId);
-            e.HasIndex(x => new { x.UserId, x.ShopItemId, x.CancelledAtUtc });
-            e.Property(x => x.ItemKey).HasMaxLength(64);
-            e.Property(x => x.ItemName).HasMaxLength(128);
-            e.HasOne<ShopItem>().WithMany().HasForeignKey(x => x.ShopItemId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne<DkpEvent>().WithOne().HasForeignKey<ShopPurchaseProjection>(x => x.PurchaseEventId).OnDelete(DeleteBehavior.Restrict);
-            e.HasOne<DkpEvent>().WithOne().HasForeignKey<ShopPurchaseProjection>(x => x.CancellationEventId).OnDelete(DeleteBehavior.Restrict);
-        });
-        model.Entity<LedgerEntryProjection>(e =>
-        {
-            e.HasKey(x => x.EventId);
-            e.Property(x => x.Action).HasMaxLength(32);
-            e.Property(x => x.Reason).HasMaxLength(500);
-            e.Property(x => x.ItemName).HasMaxLength(128);
-            e.HasIndex(x => new { x.CreatedAtUtc, x.EventId });
-            e.HasIndex(x => new { x.UserId, x.Sequence }).IsUnique();
-            e.HasIndex(x => new { x.Action, x.CreatedAtUtc });
-            e.HasOne<DkpEvent>().WithOne().HasForeignKey<LedgerEntryProjection>(x => x.EventId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
         });
