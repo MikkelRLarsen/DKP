@@ -5,7 +5,10 @@
 @using DKP.Facade.Queries
 @inject ILootReserveQueries LootReserveQueries
 @inject ILootReserveCommands LootReserveCommands
+@inject ILootReserveConsumptionCommands LootReserveConsumptionCommands
+@inject ILootReserveConsumptionQueries LootReserveConsumptionQueries
 @inject NotificationService NotificationService
+@inject DialogService DialogService
 @inject IJSRuntime JS
 
 <PageTitle>LootReserve Export</PageTitle>
@@ -29,6 +32,10 @@
                 </RadzenFormField>
                 <RadzenButton Text="Save default" Icon="save" Click="SaveSettingsAsync" Disabled="@saving" />
                 <RadzenButton Text="Generate text" Icon="description" ButtonStyle="ButtonStyle.Primary" Click="GenerateText" />
+                @if (!string.IsNullOrEmpty(exportText))
+                {
+                    <RadzenButton Text="Use SR and RollBonus" Icon="shopping_cart_checkout" ButtonStyle="ButtonStyle.Warning" Click="ConsumeAsync" Disabled="@consumeBusy" />
+                }
                 <RadzenButton Text="Copy CSV text" Icon="content_copy" ButtonStyle="ButtonStyle.Success" Click="CopyTextAsync" Disabled="@string.IsNullOrEmpty(exportText)" />
             </RadzenStack>
         </RadzenCard>
@@ -70,6 +77,20 @@
                 <RadzenTextArea @bind-Value="exportText" Rows="10" Style="width:100%;font-family:monospace;" />
             </RadzenCard>
         }
+
+        @if (latestBatch is not null)
+        {
+            <RadzenCard>
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem" Wrap="FlexWrap.Wrap">
+                    <RadzenText Text="Latest consumption" TextStyle="TextStyle.H5" />
+                    <RadzenText Text="@LatestSummary" />
+                    @if (latestBatch.CanRevert)
+                    {
+                        <RadzenButton Text="Revert latest consumption" Icon="undo" ButtonStyle="ButtonStyle.Danger" Click="RevertAsync" Disabled="@consumeBusy" />
+                    }
+                </RadzenStack>
+            </RadzenCard>
+        }
     }
 </RadzenStack>
 
@@ -80,6 +101,11 @@
     private int defaultReserveLimit;
     private bool loading = true;
     private bool saving;
+    private bool consumeBusy;
+    private LootReserveConsumptionBatchDto? latestBatch;
+    private string LatestSummary => latestBatch is null
+        ? string.Empty
+        : $"{latestBatch.CreatedAtUtc.ToLocalTime():g} · {latestBatch.PlayerCount} players · {latestBatch.SoftReserveQuantity} SoftReserves · {latestBatch.RollBonusCount} RollBonus";
 
     protected override async Task OnInitializedAsync()
     {
@@ -89,6 +115,7 @@
             var settings = await LootReserveQueries.GetSettingsAsync();
             defaultReserveLimit = settings.DefaultReserveLimit;
             rows = members.Select(member => new LootReserveRow(member)).ToList();
+            latestBatch = await LootReserveConsumptionQueries.GetLatestConsumptionBatchAsync();
         }
         catch (Exception exception)
         {
@@ -123,6 +150,60 @@
         lines.AddRange(included.Select(row => string.Join(',', Csv(row.SelectedCharacter!.FirstName), Csv(row.SelectedCharacter.LastName), row.ReserveLimit, row.RollBonus)));
         exportText = string.Join("\r\n", lines);
         NotificationService.Notify(NotificationSeverity.Success, "Text generated", "The export text is ready to copy.");
+    }
+
+    private async Task ConsumeAsync()
+    {
+        if (consumeBusy || string.IsNullOrEmpty(exportText)) return;
+        var selectedIds = rows.Where(row => row.IsReady && !row.Struck).Select(row => row.UserId).Distinct().ToArray();
+        if (selectedIds.Length == 0) return;
+
+        consumeBusy = true;
+        try
+        {
+            var preview = await LootReserveConsumptionCommands.PreviewConsumeAsync(selectedIds);
+            var skipped = rows.Count(row => !row.IsReady || row.Struck);
+            var message = $"This will consume {preview.Batch.SoftReserveQuantity} SoftReserves for {preview.Batch.PlayerCount} players and {preview.Batch.RollBonusCount} RollBonus value(s). {skipped} row(s) will be skipped. Continue?";
+            if (await DialogService.Confirm(message, "Use SR and RollBonus") != true) return;
+
+            var result = await LootReserveConsumptionCommands.ConsumeAsync(selectedIds);
+            latestBatch = result.Batch;
+            exportText = null;
+            await ReloadRowsAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Consumption completed", $"Batch {result.Batch.BatchId} was created.");
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to consume LootReserve", exception.Message);
+        }
+        finally { consumeBusy = false; }
+    }
+
+    private async Task RevertAsync()
+    {
+        if (consumeBusy || latestBatch is null) return;
+        if (await DialogService.Confirm("Revert latest LootReserve consumption?", "Confirm revert") != true) return;
+
+        consumeBusy = true;
+        try
+        {
+            await LootReserveConsumptionCommands.RevertLatestAsync();
+            exportText = null;
+            await ReloadRowsAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Consumption reverted", "The latest LootReserve consumption was reverted.");
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to revert consumption", exception.Message);
+        }
+        finally { consumeBusy = false; }
+    }
+
+    private async Task ReloadRowsAsync()
+    {
+        var members = await LootReserveQueries.GetMembersAsync();
+        rows = members.Select(member => new LootReserveRow(member)).ToList();
+        latestBatch = await LootReserveConsumptionQueries.GetLatestConsumptionBatchAsync();
     }
 
     private async Task CopyTextAsync()

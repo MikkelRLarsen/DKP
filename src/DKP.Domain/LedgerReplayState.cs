@@ -5,11 +5,14 @@ public sealed class LedgerReplayState
     private readonly Dictionary<Guid, LedgerPurchaseState> purchases = [];
     private readonly Dictionary<Guid, int> presetUsage = [];
     private readonly List<LedgerActivityState> activities = [];
+    private readonly Dictionary<Guid, LedgerConsumptionState> consumptions = [];
+    private readonly HashSet<Guid> revertedConsumptions = [];
 
     public int Balance { get; private set; }
     public IReadOnlyDictionary<Guid, LedgerPurchaseState> Purchases => purchases;
     public IReadOnlyDictionary<Guid, int> PresetUsage => presetUsage;
     public IReadOnlyList<LedgerActivityState> Activities => activities;
+    public IReadOnlyDictionary<Guid, LedgerConsumptionState> Consumptions => consumptions;
 
     public static LedgerReplayState Replay(IEnumerable<DkpEvent> events)
     {
@@ -51,14 +54,46 @@ public sealed class LedgerReplayState
                     state.Balance = checked(state.Balance + cancellation.Amount);
                     state.activities.Add(LedgerActivityState.From(entry, cancellation, existing));
                     break;
+
+                case LootReserveConsumed consumed:
+                    if (state.consumptions.Values.Any(x => x.BatchId == consumed.ConsumeBatchId))
+                        throw new InvalidOperationException($"Duplicate consume batch {consumed.ConsumeBatchId}.");
+                    var sourcePurchases = consumed.SourcePurchaseIds.Select(id =>
+                        state.purchases.TryGetValue(id, out var purchase) ? purchase : throw new InvalidOperationException($"Consumption references unknown purchase {id}."))
+                        .ToArray();
+                    if (sourcePurchases.Any(x => x.CancelledAtUtc is not null || x.IsConsumed))
+                        throw new InvalidOperationException("Consumption references an inactive purchase.");
+                    if (sourcePurchases.Any(x => x.ItemKey != "soft-reserve" && x.RollBonusValue is null))
+                        throw new InvalidOperationException("Consumption references a non-LootReserve purchase.");
+                    var softQuantity = sourcePurchases.Where(x => x.ItemKey == "soft-reserve").Sum(x => x.Quantity);
+                    var bonusPurchases = sourcePurchases.Where(x => x.RollBonusValue is not null).ToArray();
+                    if (bonusPurchases.Length > 1)
+                        throw new InvalidOperationException("Consumption references multiple RollBonus purchases.");
+                    var rollBonus = bonusPurchases.Select(x => x.RollBonusValue).SingleOrDefault();
+                    if (softQuantity != consumed.SoftReserveQuantity || rollBonus != consumed.RollBonusValue)
+                        throw new InvalidOperationException("Consumption payload does not match its purchases.");
+                    if (softQuantity == 0 && rollBonus is null)
+                        throw new InvalidOperationException("Consumption contains no active LootReserve state.");
+                    foreach (var purchase in sourcePurchases) purchase.Consume();
+                    state.consumptions.Add(entry.Id, new LedgerConsumptionState(entry.Id, consumed.ConsumeBatchId, entry.UserId, consumed.SourcePurchaseIds, entry.OccurredAtUtc));
+                    break;
+
+                case LootReserveConsumptionReverted reverted:
+                    if (!state.consumptions.TryGetValue(reverted.RevertedConsumeEventId, out var consumption) || consumption.BatchId != reverted.ConsumeBatchId)
+                        throw new InvalidOperationException("Revert references an unknown consumption.");
+                    if (!state.revertedConsumptions.Add(reverted.RevertedConsumeEventId))
+                        throw new InvalidOperationException("Consumption was already reverted.");
+                    foreach (var purchaseId in consumption.SourcePurchaseIds)
+                        state.purchases[purchaseId].Restore();
+                    break;
             }
         }
 
         return state;
     }
 
-    public int ActiveQuantity(Guid itemId) => purchases.Values.Where(x => x.ShopItemId == itemId && x.CancelledAtUtc is null).Sum(x => x.Quantity);
-    public bool HasActiveRollBonus() => purchases.Values.Any(x => x.RollBonusValue is not null && x.CancelledAtUtc is null);
+    public int ActiveQuantity(Guid itemId) => purchases.Values.Where(x => x.ShopItemId == itemId && x.CancelledAtUtc is null).Sum(x => x.ActiveQuantity);
+    public bool HasActiveRollBonus() => purchases.Values.Any(x => x.RollBonusValue is not null && x.CancelledAtUtc is null && !x.IsConsumed);
 }
 
 public sealed class LedgerPurchaseState
@@ -93,13 +128,20 @@ public sealed class LedgerPurchaseState
     public Guid PurchaseEventId { get; }
     public DateTime? CancelledAtUtc { get; private set; }
     public Guid? CancellationEventId { get; private set; }
+    public bool IsConsumed { get; private set; }
+    public int ActiveQuantity => IsConsumed ? 0 : Quantity;
 
     public void Cancel(DkpEvent entry)
     {
         CancelledAtUtc = entry.OccurredAtUtc;
         CancellationEventId = entry.Id;
     }
+
+    public void Consume() => IsConsumed = true;
+    public void Restore() => IsConsumed = false;
 }
+
+public sealed record LedgerConsumptionState(Guid EventId, Guid BatchId, Guid UserId, IReadOnlyList<Guid> SourcePurchaseIds, DateTime CreatedAtUtc);
 
 public sealed record LedgerActivityState(Guid EventId, Guid UserId, Guid ActorUserId, string Action, int Amount, string Reason, string? ItemName, int? Quantity, DateTime CreatedAtUtc)
 {

@@ -749,6 +749,34 @@ Leveret:
 - Migrationerne `20261006182056_Slice13cDkpAwardRequests` og `20261006182802_Slice13cRequestQuantity` tilføjer request-tabellen, quantity, event-reference-data, relationer og unique pending-index.
 - Tests dækker create/cancel, approve/reject, authorization, duplicate requests, limit recheck, usage og host-routes.
 
+## Slice 13d – Consume LootReserve og revert seneste batch
+
+Status: Implementeret.
+
+Leveret:
+
+- Officer kan efter `Generate text` previewe og consume aktive SoftReserves og RollBonus for alle ikke-strikede, export-klare spillere.
+- Consume bruger event-store state og ignorerer midlertidige ReserveLimit/RollBonus-overrides fra export-editoren.
+- Nye immutable `LootReserveConsumed`-events deler en `ConsumeBatchId` og indeholder de konkrete purchase IDs.
+- `LootReserveConsumptionReverted` opretter modgående state uden at ændre eller slette historiske events.
+- Kun seneste ikke-reverterede batch kan reverteres; dobbelt-revert og ugyldige purchase references afvises under command-locken.
+- Replay beregner consumed/restored purchase-state i memory. Persisted projections bruges ikke.
+- LootReserve-, shop- og aktive purchase-queries udelader consumed state, mens revert genskaber den oprindelige aktive state.
+- UI viser preview/confirmation, loading/error states, seneste batch og `Revert latest consumption`.
+
+Der er ikke oprettet en migration: Slice 13d udvider kun JSON-payloads i den eksisterende event-store og ændrer ikke EF-schemaet.
+
+Verifikation:
+
+- Solution build passerer med `dotnet build DKP.slnx -p:UseAppHost=false --no-restore`.
+- Eksisterende tests bevares; der bør suppleres med PostgreSQL-tests for consume/revert og replay, hvis der senere opstår en separat test-fixture til LootReserve-flowet.
+
+Kendte begrænsninger:
+
+- “Striket” og “export-ready” er UI-state; backend modtager kun de valgte bruger-ID’er og genvaliderer den faktiske event-state.
+- Consume bruger hele den aktive SoftReserve-purchase quantity og hele den aktive RollBonus-enhed pr. bruger.
+- Consume/revert er Officer-only og påvirker ikke DKP-balance eller historiske køb.
+
 ## Slice 14 – Deployment og production hardening
 
 Status: Planlagt.

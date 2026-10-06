@@ -10,6 +10,16 @@ public sealed record PurchasePlaced([property: JsonRequired] Guid PurchaseId, [p
     public string Reason => $"Purchased {Quantity} x {ItemName}";
 }
 public sealed record PurchaseCancelled([property: JsonRequired] Guid PurchaseId, [property: JsonRequired] int Amount, [property: JsonRequired] string Reason) : ILedgerPayload;
+public sealed record LootReserveConsumed([property: JsonRequired] Guid ConsumeBatchId, [property: JsonRequired] int SoftReserveQuantity, int? RollBonusValue, [property: JsonRequired] IReadOnlyList<Guid> SourcePurchaseIds) : ILedgerPayload
+{
+    public int Amount => 0;
+    public string Reason => "LootReserve consumed";
+}
+public sealed record LootReserveConsumptionReverted([property: JsonRequired] Guid ConsumeBatchId, [property: JsonRequired] Guid RevertedConsumeEventId) : ILedgerPayload
+{
+    public int Amount => 0;
+    public string Reason => "LootReserve consumption reverted";
+}
 
 /// <summary>The versioned event protocol. All writers and replay use this codec.</summary>
 public static class LedgerEvents
@@ -21,6 +31,8 @@ public static class LedgerEvents
             DkpPosted => nameof(DkpPosted),
             PurchasePlaced => nameof(PurchasePlaced),
             PurchaseCancelled => nameof(PurchaseCancelled),
+            LootReserveConsumed => nameof(LootReserveConsumed),
+            LootReserveConsumptionReverted => nameof(LootReserveConsumptionReverted),
             _ => throw new InvalidOperationException("Unknown ledger payload.")
         };
         var result = new DkpEvent("UserLedger", userId, sequence, type, userId, actorId, now, operationId,
@@ -40,6 +52,8 @@ public static class LedgerEvents
             nameof(DkpPosted) => JsonSerializer.Deserialize<DkpPosted>(entry.Payload)!,
             nameof(PurchasePlaced) => JsonSerializer.Deserialize<PurchasePlaced>(entry.Payload)!,
             nameof(PurchaseCancelled) => JsonSerializer.Deserialize<PurchaseCancelled>(entry.Payload)!,
+            nameof(LootReserveConsumed) => JsonSerializer.Deserialize<LootReserveConsumed>(entry.Payload)!,
+            nameof(LootReserveConsumptionReverted) => JsonSerializer.Deserialize<LootReserveConsumptionReverted>(entry.Payload)!,
             _ => throw new InvalidOperationException($"Unknown event type: {entry.EventType}.")
         };
         if (payload is null || string.IsNullOrWhiteSpace(payload.Reason) || payload.Reason.Length > 500)
@@ -53,6 +67,10 @@ public static class LedgerEvents
             throw new InvalidOperationException("Invalid purchase.");
         if (payload is PurchaseCancelled c && (c.PurchaseId == Guid.Empty || c.Amount < 0))
             throw new InvalidOperationException("Invalid cancellation.");
+        if (payload is LootReserveConsumed consumed && (consumed.ConsumeBatchId == Guid.Empty || consumed.SoftReserveQuantity < 0 || consumed.SourcePurchaseIds.Count == 0 || consumed.SourcePurchaseIds.Any(x => x == Guid.Empty) || consumed.SourcePurchaseIds.Count != consumed.SourcePurchaseIds.Distinct().Count()))
+            throw new InvalidOperationException("Invalid LootReserve consumption.");
+        if (payload is LootReserveConsumptionReverted reverted && (reverted.ConsumeBatchId == Guid.Empty || reverted.RevertedConsumeEventId == Guid.Empty))
+            throw new InvalidOperationException("Invalid LootReserve revert.");
         return payload;
     }
 }

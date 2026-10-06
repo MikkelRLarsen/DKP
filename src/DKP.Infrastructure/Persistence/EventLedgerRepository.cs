@@ -26,4 +26,5 @@ public sealed class EventLedgerRepository(CommandUnitOfWork session) : IEventLed
         Db.DkpEvents.Add(entry);
         return entry;
     }
+    public async Task<IReadOnlyList<DkpEvent>> GetAllEventsAsync(CancellationToken ct = default) => await Db.DkpEvents.AsNoTracking().ToArrayAsync(ct);
 }

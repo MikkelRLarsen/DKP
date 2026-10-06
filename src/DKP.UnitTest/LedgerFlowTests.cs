@@ -108,6 +108,7 @@ public sealed class LedgerFlowTests : DatabaseTest
     {
         private int calls;
         public Task<LedgerReplayState> GetStateAsync(Guid? id = null, CancellationToken ct = default) => inner.GetStateAsync(id, ct);
+        public Task<IReadOnlyList<DkpEvent>> GetAllEventsAsync(CancellationToken ct = default) => inner.GetAllEventsAsync(ct);
         public Task<DkpEvent> PostAsync(Guid user, Guid actor, Guid operation, DateTime now, ILedgerPayload payload, CancellationToken ct = default)
         {
             if (++calls == 2) throw new InvalidOperationException("Injected mid-operation failure");
