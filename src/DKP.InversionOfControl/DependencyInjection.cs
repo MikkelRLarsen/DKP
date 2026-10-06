@@ -6,11 +6,11 @@ using DKP.Application.Characters;
 using DKP.Application.DkpTransactions;
 using DKP.Application.Persistence;
 using DKP.Application.Users;
-using DKP.Application.SoftReserves;
+using DKP.Facade.Contracts;
 using DKP.Application.Shop;
 using DKP.Application.Presets;
 using DKP.Application.LootReserve;
-using DKP.Facade;
+
 using DKP.Facade.Commands;
 using DKP.Facade.Queries;
 using DKP.Infrastructure.Persistence;
@@ -20,7 +20,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.WebUtilities;
@@ -53,18 +53,21 @@ public static class DependencyInjection
 				"Missing or invalid Discord:GuildId. Configure the Discord server ID with User Secrets or the Discord__GuildId environment variable.");
 		}
 
-		services.SetupDatabase(configuration, connectionString);
+		services.SetupDatabase(connectionString);
 		services.AddSingleton(TimeProvider.System);
+        services.AddScoped<CommandUnitOfWork>();
+        services.AddScoped<ICommandUnitOfWork>(sp => sp.GetRequiredService<CommandUnitOfWork>());
+        services.AddScoped<CommandContext>();
+        services.AddScoped<ICurrentUser, AuthenticatedCurrentUser>();
+        services.AddScoped<QuerySession>();
+        services.AddScoped<IGuildActivityQueries, GuildActivityQueries>();
 		services.AddScoped<IUserRepository, UserRepository>();
 		services.AddScoped<ICharacterRepository, CharacterRepository>();
-		services.AddScoped<IDkpTransactionRepository, DkpTransactionRepository>();
-		services.AddScoped<ISoftReservePurchaseRepository, SoftReservePurchaseRepository>();
 		services.AddScoped<IShopRepository, ShopRepository>();
 		services.AddScoped<IPresetRepository, PresetRepository>();
 		services.AddScoped<IGuildSettingsRepository, GuildSettingsRepository>();
 		services.AddScoped<IEventLedgerRepository, EventLedgerRepository>();
 		services.AddScoped<IEventProjectionRebuilder, EventProjectionRebuilder>();
-		services.AddScoped<ISoftReserveSettings, ConfigurationSoftReserveSettings>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
 		services.AddScoped<IDkpQueries, DkpQueries>();
 		services.AddScoped<IGuildMemberQueries, GuildMemberQueries>();
@@ -72,15 +75,7 @@ public static class DependencyInjection
 		services.AddScoped<IOfficerIdentityPolicy, OfficerIdentityPolicy>();
 		services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 		services.AddScoped<ICharacterCommands, CharacterCommandService>();
-		// DkpTransactionCommandService keeps a legacy constructor for older unit tests/contracts.
-		// Use an explicit factory so the container always selects the event-sourced path.
-		services.AddScoped<IDkpTransactionCommands>(serviceProvider =>
-			new DkpTransactionCommandService(
-				serviceProvider.GetRequiredService<IUserRepository>(),
-				serviceProvider.GetRequiredService<IEventLedgerRepository>(),
-				serviceProvider.GetRequiredService<TimeProvider>()));
-		services.AddScoped<ISoftReserveCommands, SoftReserveCommandService>();
-		services.AddScoped<ISoftReserveQueries, SoftReserveQueries>();
+		services.AddScoped<IDkpTransactionCommands, DkpTransactionCommandService>();
 		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();
 		services.AddScoped<IUserBlockCommands, UserBlockCommandService>();
 		services.AddScoped<IUserAdministrationQueries, UserAdministrationQueries>();
@@ -107,10 +102,10 @@ public static class DependencyInjection
 				OnValidatePrincipal = async context =>
 				{
 					var discordId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-					var userRepository = context.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
+					await using var db = await context.HttpContext.RequestServices.GetRequiredService<IDbContextFactory<DkpDbContext>>().CreateDbContextAsync(context.HttpContext.RequestAborted);
 					var user = string.IsNullOrWhiteSpace(discordId)
 						? null
-						: await userRepository.FindByDiscordIdAsync(discordId, context.HttpContext.RequestAborted);
+						: await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.DiscordId == discordId, context.HttpContext.RequestAborted);
 					if (user is null || user.IsBlocked)
 					{
 						context.RejectPrincipal();
@@ -186,9 +181,8 @@ public static class DependencyInjection
 						return;
 					}
 
-					var existingUser = await context.HttpContext.RequestServices
-						.GetRequiredService<IUserRepository>()
-						.FindByDiscordIdAsync(discordId, context.HttpContext.RequestAborted);
+					await using var loginDb = await context.HttpContext.RequestServices.GetRequiredService<IDbContextFactory<DkpDbContext>>().CreateDbContextAsync(context.HttpContext.RequestAborted);
+                    var existingUser = await loginDb.Users.AsNoTracking().SingleOrDefaultAsync(x => x.DiscordId == discordId, context.HttpContext.RequestAborted);
 					if (existingUser?.IsBlocked == true)
 					{
 						FailAuthentication(context, "blocked");
@@ -226,9 +220,9 @@ public static class DependencyInjection
 		context.NoResult();
 	}
 
-	private static IServiceCollection SetupDatabase(this IServiceCollection services, IConfiguration configuration, string connectionString)
+	private static IServiceCollection SetupDatabase(this IServiceCollection services, string connectionString)
 	{
-		services.AddDbContext<DkpDbContext>(options =>
+		services.AddDbContextFactory<DkpDbContext>(options =>
 		{
 			options.UseNpgsql(
 				connectionString,
@@ -242,7 +236,10 @@ public static class DependencyInjection
 	{
 		using var scope = app.Services.CreateScope();
 		var dbContext = scope.ServiceProvider.GetRequiredService<DkpDbContext>();
-		var pendingMigrations = dbContext.Database.GetPendingMigrations().ToArray();
+		var knownMigrations = dbContext.Database.GetMigrations().ToHashSet(StringComparer.Ordinal);
+        if (dbContext.Database.GetAppliedMigrations().Any(migration => !knownMigrations.Contains(migration)))
+            throw new InvalidOperationException("Slice 12a requires a new empty database. The previous migration chain is not compatible. Back up and reset the database manually; no data has been deleted.");
+        var pendingMigrations = dbContext.Database.GetPendingMigrations().ToArray();
 
 		if (pendingMigrations.Length == 0)
 		{

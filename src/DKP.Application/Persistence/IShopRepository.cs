@@ -4,5 +4,4 @@ public interface IShopRepository
 {
     Task<ShopItem?> FindItemAsync(Guid id, CancellationToken cancellationToken = default);
     Task AddItemAsync(ShopItem item, CancellationToken cancellationToken = default);
-    Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }

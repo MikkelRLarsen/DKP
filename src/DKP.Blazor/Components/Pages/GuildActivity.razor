@@ -79,7 +79,9 @@
                 <RadzenDataGridColumn TItem="GuildActivityDto" Property="CreatedAtUtc" Title="Date (UTC)" SortOrder="SortOrder.Descending">
                     <Template Context="entry">@entry.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="GuildActivityDto" Property="UserName" Title="Player" Sortable="false" />
+                <RadzenDataGridColumn TItem="GuildActivityDto" Property="UserName" Title="Player" Sortable="false">
+                    <Template Context="entry"><RadzenLink Path="@($"/members/{entry.UserId}")" Text="@entry.UserName" /></Template>
+                </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="GuildActivityDto" Property="MainCharacterName" Title="Main character" Sortable="false" />
                 <RadzenDataGridColumn TItem="GuildActivityDto" Property="ActorName" Title="Performed by" Sortable="false" />
                 <RadzenDataGridColumn TItem="GuildActivityDto" Property="Action" Title="Action" Sortable="false">

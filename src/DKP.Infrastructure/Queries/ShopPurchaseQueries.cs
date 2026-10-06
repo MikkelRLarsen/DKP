@@ -1,66 +1,22 @@
-using DKP.Application.SoftReserves;
 using DKP.Facade.Contracts;
 using DKP.Facade.Queries;
-using DKP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-
 namespace DKP.Infrastructure.Queries;
-
-public sealed class ShopPurchaseQueries(DkpDbContext db, ISoftReserveSettings softReserveSettings) : IShopPurchaseQueries
+public sealed class ShopPurchaseQueries(QuerySession session) : IShopPurchaseQueries
 {
-	public async Task<ActivePurchaseOverviewDto?> GetActiveOverviewAsync(string authenticatedDiscordId, CancellationToken ct = default)
-	{
-		var userId = await db.Users.AsNoTracking()
-			.Where(x => x.DiscordId == authenticatedDiscordId && !x.IsBlocked)
-			.Select(x => (Guid?)x.Id)
-			.SingleOrDefaultAsync(ct);
-
-		if (userId is null)
-		{
-			return null;
-		}
-
-		var items = await db.ShopItems.AsNoTracking()
-			.Where(x => x.IsActive || db.ShopPurchaseProjections.Any(p => p.UserId == userId.Value && p.ShopItemId == x.Id && p.CancelledAtUtc == null))
-			.Select(x => new { x.Id, x.Key, x.Name, x.Price, x.MaxPerUser, x.RollBonusValue })
-			.ToArrayAsync(ct);
-
-		var activePurchases = await (from purchase in db.ShopPurchaseProjections.AsNoTracking()
-				join item in db.ShopItems.AsNoTracking() on purchase.ShopItemId equals item.Id
-				where purchase.UserId == userId.Value && purchase.CancelledAtUtc == null
-				select new { item.Key, item.RollBonusValue, purchase.Quantity })
-			.ToArrayAsync(ct);
-
-		var rollBonus = activePurchases
-			.Where(x => x.RollBonusValue is not null)
-			.Select(x => x.RollBonusValue!.Value)
-			.OrderByDescending(x => x)
-			.FirstOrDefault();
-
-		var overviewItems = items
-			.Where(x => x.RollBonusValue is null)
-			.Select(item =>
-			{
-				var quantity = activePurchases.Where(x => x.Key == item.Key).Sum(x => x.Quantity);
-				var maximum = item.Key == "soft-reserve" ? softReserveSettings.MaxReserves : item.MaxPerUser;
-				var remaining = Math.Max(0, maximum - quantity);
-				var price = item.Key == "soft-reserve" ? softReserveSettings.DkpCost : item.Price;
-				return new ActivePurchaseItemDto(item.Key, item.Name, quantity, maximum, remaining, price, null);
-			})
-			.OrderBy(x => x.Key == "soft-reserve" ? 0 : 1)
-			.ThenBy(x => x.Name)
-			.ToArray();
-
-		if (!overviewItems.Any(x => x.Key == "soft-reserve"))
-		{
-			var softReserveQuantity = activePurchases.Where(x => x.Key == "soft-reserve").Sum(x => x.Quantity);
-			overviewItems = overviewItems
-				.Append(new ActivePurchaseItemDto("soft-reserve", "Soft Reserve", softReserveQuantity, softReserveSettings.MaxReserves, Math.Max(0, softReserveSettings.MaxReserves - softReserveQuantity), softReserveSettings.DkpCost, null))
-				.OrderBy(x => x.Key == "soft-reserve" ? 0 : 1)
-				.ThenBy(x => x.Name)
-				.ToArray();
-		}
-
-		return new ActivePurchaseOverviewDto(overviewItems, rollBonus);
-	}
+    public Task<ActivePurchaseOverviewDto?> GetActiveOverviewAsync(CancellationToken ct = default)
+        => session.ReadAsync<ActivePurchaseOverviewDto?>(false, async (db, actor) =>
+        {
+            var active = await db.ShopPurchaseProjections.Where(p => p.UserId == actor.Id && p.CancelledAtUtc == null).ToListAsync(ct);
+            var items = await db.ShopItems.OrderBy(i => i.Name).ThenBy(i => i.Id).ToListAsync(ct);
+            var result = items.Where(i => i.Key == "soft-reserve" || active.Any(p => p.ShopItemId == i.Id))
+                .Select(i =>
+                {
+                    var owned = active.Where(p => p.ShopItemId == i.Id).ToArray();
+                    var quantity = owned.Sum(p => p.Quantity);
+                    return new ActivePurchaseItemDto(i.Key, i.Name, quantity, i.MaxPerUser,
+                        Math.Max(0, i.MaxPerUser - quantity), i.Price, owned.FirstOrDefault()?.RollBonusValue ?? i.RollBonusValue);
+                }).ToArray();
+            return new(result, active.Sum(p => p.RollBonusValue ?? 0));
+        }, ct);
 }

@@ -1,14 +1,15 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 namespace DKP.Domain;
 
 public interface ILedgerPayload { int Amount { get; } string Reason { get; } }
-public sealed record DkpPosted(int Amount, string Reason, Guid? PresetId = null) : ILedgerPayload;
-public sealed record PurchasePlaced(Guid PurchaseId, Guid ItemId, string ItemKey, string ItemName, int Quantity, int UnitPrice, int? RollBonusValue) : ILedgerPayload
+public sealed record DkpPosted([property: JsonRequired] int Amount, [property: JsonRequired] string Reason, Guid? PresetId = null) : ILedgerPayload;
+public sealed record PurchasePlaced([property: JsonRequired] Guid PurchaseId, [property: JsonRequired] Guid ItemId, [property: JsonRequired] string ItemKey, [property: JsonRequired] string ItemName, [property: JsonRequired] int Quantity, [property: JsonRequired] int UnitPrice, [property: JsonRequired] int? RollBonusValue) : ILedgerPayload
 {
     public int Amount => checked(-Quantity * UnitPrice);
     public string Reason => $"Purchased {Quantity} x {ItemName}";
 }
-public sealed record PurchaseCancelled(Guid PurchaseId, int Amount, string Reason) : ILedgerPayload;
+public sealed record PurchaseCancelled([property: JsonRequired] Guid PurchaseId, [property: JsonRequired] int Amount, [property: JsonRequired] string Reason) : ILedgerPayload;
 
 /// <summary>The versioned event protocol. All writers and replay use this codec.</summary>
 public static class LedgerEvents

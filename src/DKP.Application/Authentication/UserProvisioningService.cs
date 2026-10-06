@@ -6,9 +6,11 @@ namespace DKP.Application.Authentication;
 public sealed class UserProvisioningService(
 	IUserRepository users,
 	IOfficerIdentityPolicy officerIdentityPolicy,
-	TimeProvider timeProvider) : IUserProvisioningService
+	TimeProvider timeProvider,
+	ICommandUnitOfWork unitOfWork) : IUserProvisioningService
 {
-	public async Task<User> ProvisionAsync(DiscordUserProfile profile, CancellationToken cancellationToken = default)
+	public Task<User> ProvisionAsync(DiscordUserProfile profile, CancellationToken cancellationToken = default)
+		=> unitOfWork.ExecuteAsync([], async () =>
 	{
 		if (string.IsNullOrWhiteSpace(profile.DiscordId))
 		{
@@ -32,13 +34,10 @@ public sealed class UserProvisioningService(
 		}
 		else
 		{
-			var role = officerIdentityPolicy.IsOfficer(profile.DiscordId)
-				? UserRole.Officer
-				: user.Role;
+			if (user.IsBlocked) throw new UnauthorizedAccessException("This user is blocked.");
+			var role = officerIdentityPolicy.IsOfficer(profile.DiscordId) ? UserRole.Officer : user.Role;
 			user.UpdateProfile(profile.DiscordName, profile.AvatarUrl, role);
 		}
-
-		await users.SaveChangesAsync(cancellationToken);
 		return user;
-	}
+	}, cancellationToken);
 }

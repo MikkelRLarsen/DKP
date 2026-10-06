@@ -1,28 +1,21 @@
-using DKP.Application.Authentication;
-using DKP.Domain;
 using DKP.Facade.Contracts;
 using DKP.Facade.Queries;
-using DKP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 namespace DKP.Infrastructure.Queries;
-public sealed class LootReserveQueries(DkpDbContext db) : ILootReserveQueries
+public sealed class LootReserveQueries(QuerySession session) : ILootReserveQueries
 {
-	private async Task EnsureOfficerAsync(string discordId, CancellationToken ct)
-	{
-		var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.DiscordId == discordId, ct) ?? throw new UnauthorizedAccessException("The authenticated user does not exist.");
-		if (user.Role != UserRole.Officer) throw new UnauthorizedAccessException("Only Officers can view LootReserve exports.");
-	}
-	public async Task<IReadOnlyList<LootReserveMemberDto>> GetMembersAsync(string discordId, CancellationToken ct = default)
-	{
-		await EnsureOfficerAsync(discordId, ct);
-		var setting = await db.GuildSettings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == 1, ct);
-		var defaultLimit = setting?.DefaultReserveLimit ?? 0;
-		return await db.Users.AsNoTracking().OrderBy(x => x.DiscordName).Select(user => new LootReserveMemberDto(user.Id,user.DiscordName,user.Characters.OrderByDescending(c => c.IsMain).ThenBy(c => c.LastName).ThenBy(c => c.FirstName).Select(c => new CharacterDto(c.Id,c.FirstName,c.LastName,c.IsMain)).ToArray(),defaultLimit + (db.ShopPurchaseProjections.Where(p => p.UserId == user.Id && p.CancelledAtUtc == null && db.ShopItems.Where(i => i.Id == p.ShopItemId).Select(i => i.Key).FirstOrDefault() == "soft-reserve").Select(p => (int?)p.Quantity).Sum() ?? 0),user.RollBonus,user.Characters.Any())).ToArrayAsync(ct);
-	}
-	public async Task<LootReserveSettingsDto> GetSettingsAsync(string discordId, CancellationToken ct = default)
-	{
-		await EnsureOfficerAsync(discordId, ct);
-		var setting = await db.GuildSettings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == 1, ct);
-		return new LootReserveSettingsDto(setting?.DefaultReserveLimit ?? 0);
-	}
+    public Task<LootReserveSettingsDto> GetSettingsAsync(CancellationToken ct = default)
+        => session.ReadAsync(true, async (db, _) => new LootReserveSettingsDto(await db.GuildSettings.Select(x => x.DefaultReserveLimit).SingleAsync(ct)), ct);
+    public Task<IReadOnlyList<LootReserveMemberDto>> GetMembersAsync(CancellationToken ct = default)
+        => session.ReadAsync<IReadOnlyList<LootReserveMemberDto>>(true, async (db, _) =>
+        {
+            var defaultLimit = await db.GuildSettings.Select(x => x.DefaultReserveLimit).SingleAsync(ct);
+            return await db.Users.Where(u => !u.IsBlocked).OrderBy(u => u.DiscordName).ThenBy(u => u.Id)
+                .Select(u => new LootReserveMemberDto(u.Id, u.DiscordName,
+                    u.Characters.OrderByDescending(c => c.IsMain).ThenBy(c => c.LastName).ThenBy(c => c.FirstName).ThenBy(c => c.Id)
+                        .Select(c => new CharacterDto(c.Id, c.FirstName, c.LastName, c.IsMain)).ToList(),
+                    defaultLimit + db.ShopPurchaseProjections.Where(p => p.UserId == u.Id && p.CancelledAtUtc == null && p.ItemKey == "soft-reserve").Sum(p => p.Quantity),
+                    db.ShopPurchaseProjections.Where(p => p.UserId == u.Id && p.CancelledAtUtc == null).Sum(p => p.RollBonusValue ?? 0),
+                    u.Characters.Any())).ToArrayAsync(ct);
+        }, ct);
 }

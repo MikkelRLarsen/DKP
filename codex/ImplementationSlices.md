@@ -21,7 +21,7 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 10 | Admin shop-overview og køb for brugere | Færdig |
 | 11 | Guild membership ved OAuth og blokering af medlemmer | Færdig |
 | 12 | DKP management presets | Færdig |
-| 12a | Legacy cleanup og event-konsolidering | Under implementering |
+| 12a | Legacy cleanup og event-konsolidering | Implementeret; automatiseret verificeret |
 | 13 | DKP acquisition overview | Planlagt |
 | 13a | Achievement-baserede DKP awards | Planlagt |
 | 13b | Achievement-gated shop-items | Planlagt |
@@ -629,7 +629,7 @@ Leveret:
 
 ## Slice 12a – Legacy cleanup og event-konsolidering
 
-Status: Under implementering. Baseline: funktionalitet til og med Slice 12.
+Status: Implementeret og automatiseret verificeret 2026-10-06. Baseline: funktionalitet til og med Slice 12. Manuel browser-/Discord-gennemgang er fortsat et afleveringscheck; se begrænsninger nedenfor.
 
 Godkendt plan:
 
@@ -645,6 +645,53 @@ Godkendt plan:
 - Aflever først efter build og relevante tests; dokumentér smoke-test og konkrete begrænsninger. OAuth-loop og bot forbliver backlog; Slice 13+ er ikke del af oprydningen.
 
 Fund: Guild/Player queries læser legacy; blandede fallback-kilder; forkert event-id i bulk; preset uden event-reference; ikke-atomisk replay; forskellige SoftReserve-priskilder; Facade afhænger af Domain; nuværende 32 tests dækker primært legacy/InMemory.
+
+### Leveret
+
+- De ovenstående fund er rettet. Legacy-entities, repositories, SoftReserve-konfiguration og fallback-queries er fjernet. Historiske beskrivelser af `DkpTransaction`, `SoftReservePurchase`, `ShopPurchase`, `User.RollBonus` og gamle migrationer beskriver ikke længere den aktuelle løsning.
+- `DkpEvents` bruger version 1 med typed payloads: `DkpPosted`, `PurchasePlaced` og `PurchaseCancelled`. Køb/debitering er én hændelse; annullering/refundering er én hændelse. Preset-id gemmes i DKP-eventet.
+- Balance, purchase-state, lifetime preset-usage og historik/aktivitet er genopbyggelige projections. Faktiske event-id'er anvendes overalt; bulk-operationer deler et operations-/correlation-id.
+- `LedgerProjector` anvendes ved både append og replay. Replay sorterer efter aggregate/sequence og afbryder atomisk ved ugyldige events. Ingen nye events skrives under replay.
+- `CommandUnitOfWork` opretter en frisk context/transaction pr. operation. Alle writes og replay koordineres med én PostgreSQL advisory transaction lock samt sorterede target-brugerlåse. Rollback efterlader ingen context, som næste command genbruger. Der foretages ikke automatisk genforsøg efter fejl eller usikkert commit-resultat.
+- EF-afvisning af event-ændringer/-sletninger suppleres af en PostgreSQL-trigger, så set-baserede UPDATE/DELETE heller ikke kan omskrive ledgeren.
+- Facade er uden Domain/EF-reference. `ICurrentUser` får identitet fra serverens `AuthenticationStateProvider`; alle commands og queries kontrollerer aktiv bruger i databasen. Officer-rolle, blokering og karakter-/købsejerskab kontrolleres serverside.
+- Alle saldo-/historik-/købsoversigter anvender samme projections. Shop Catalog er eneste kilde til aktuelle priser og item-id-baserede maksimum. Historiske købsnavne/priser/bonus kommer fra events.
+- `/activity` har server-pagination, stabil sortering, spiller-/handlings-/UTC-datofiltre, links til spiller og loading/empty/error states.
+- DKP Management bevarer multiselect, Discord/main-character-navn og preset-forbrug pr. valgt spiller. Mutationer har dobbeltklik-guard; fejl ved refresh efter et gemt command vises som refresh-advarsel, ikke som fejlet lagring.
+- Counter/Weather, ubrugte package-versioner og EF Design-reference i Blazor er fjernet. `AddMigration.ps1` anvender nu Infrastructure som både target og design-time startup; webhost og Discord-secrets kræves ikke til generering.
+
+### Database og opstart
+
+Den eneste migration er nu `20261006164533_InitialEventLedger`. Den indeholder alle tabeller/projections og deterministiske seeds: Soft Reserve 10 DKP / maksimum 2, RollBonus 10/20/30/40 til 10/30/60/120 DKP, DefaultReserveLimit 0.
+
+**Breaking change:** Denne baseline kræver en tom database. Der findes ingen datakonvertering fra tidligere slices. Tag backup af ønskede data, og nulstil selv databasen eller peg `ConnectionStrings:DefaultConnection` på en ny tom database. Implementeringen har ikke nulstillet den eksisterende applikationsdatabase. Cold-start-migrering bevares og giver en tydelig fejl, hvis gamle migrationer registreres.
+
+Fremtidige migrationer:
+
+```powershell
+.\AddMigration.ps1 -m NavnPåÆndring
+dotnet ef migrations has-pending-model-changes --project src/DKP.Infrastructure --startup-project src/DKP.Infrastructure
+```
+
+De slettede legacy-filer/migrationer kan genfindes i Git-historikken.
+
+### Verifikation
+
+- `dotnet build DKP.slnx -p:UseAppHost=false`: solution verificeres sammen med test-build.
+- `dotnet test DKP.slnx -p:UseAppHost=false`: **43 bestået, 0 fejlet, 0 sprunget over**.
+- PostgreSQL-tests migrerer en ny isoleret `dkp_slice12a_<guid>`-database pr. testcase og sletter kun denne igen. Standard er den lokale Compose PostgreSQL; alternativ admin-forbindelse kan angives i miljøvariablen `DKP_TEST_ADMIN_CONNECTION` (kræver CREATE DATABASE). Tests må ikke erstattes med EF InMemory til concurrency-/rollback-kontrol.
+- Dækning: konsistente saldoer/historik, event-referencer, negative korrektioner, bulk-deduplikering/rollback, lifetime presets, samtidig køb/preset, katalogpris/maksimum, RollBonus, original refundering én gang, gentaget/fejlende replay og replay samtidig med køb.
+- Authorization: Member/Officer/anonymous/blocked, bootstrap-beskyttelse, eksisterende cookie efter blokering, provisioning, karakterejerskab og main-skift.
+- Activity: én række pr. køb/refundering, filtre og stabil pagination. Arkitekturkontrol verificerer lagafhængigheder og kontrakter uden actor-argumenter.
+- Automatisk host-smoke med fake authentication renderer dashboard, members, player details, My DKP, DKP Shop, Mine køb, Guild Activity og alle berørte administrationssider. Member får 403 til Officer-routes; anonym får 401 til activity. Test-loginhandleren findes kun i testprojektet.
+- Initial migration anvendt mod tom PostgreSQL; `has-pending-model-changes` viser ingen ændringer. `AddMigration.ps1` er brugt til at generere baselinen.
+
+### Kendte begrænsninger og resterende manuelle checks
+
+- Host-smoke tester server-rendering og authorization, ikke en browsers JavaScript/SignalR-interaktion. Gennemgå efter eget database-reset: login, DKP multiselect/confirmation, køb/annullering, aktivitetens paging/filtre og clipboard. Rigtigt Discord-login og addon-paste er ikke udført i denne verifikation.
+- Den fælles advisory lock serialiserer writes for guilden; det er et bevidst korrekthedsvalg. Ved større trafik kan låsegranularitet optimeres med tilsvarende PostgreSQL-concurrency-tests.
+- Replay er en intern Application persistence-kontrakt, ikke et offentligt endpoint eller en ny administrationsside. Den læser eventlisten i hukommelsen; streaming/batching er et senere skaleringsbehov.
+- Discord OAuth-loopet og bot-sikkerhedsintegrationen forbliver de kendte backlog-punkter. Slice 13, 13a, 13b og 14 er ikke implementeret her.
 
 ## Slice 13 – DKP acquisition overview
 

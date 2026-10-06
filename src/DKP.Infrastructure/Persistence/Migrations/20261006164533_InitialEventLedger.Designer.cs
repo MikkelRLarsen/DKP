@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DKP.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(DkpDbContext))]
-    [Migration("20261005200134_AllowEventSourcedPresetApplications")]
-    partial class AllowEventSourcedPresetApplications
+    [Migration("20261006164533_InitialEventLedger")]
+    partial class InitialEventLedger
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -100,8 +100,7 @@ namespace DKP.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("DKP.Domain.DkpAwardPresetApplication", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<Guid>("DkpEventId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("AppliedByUserId")
@@ -110,20 +109,15 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("DkpTransactionId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid>("PresetId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
-                    b.HasKey("Id");
+                    b.HasKey("DkpEventId");
 
                     b.HasIndex("AppliedByUserId");
-
-                    b.HasIndex("DkpTransactionId");
 
                     b.HasIndex("UserId");
 
@@ -135,7 +129,6 @@ namespace DKP.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("DKP.Domain.DkpBalanceProjection", b =>
                 {
                     b.Property<Guid>("UserId")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<int>("Balance")
@@ -148,6 +141,8 @@ namespace DKP.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("UserId");
+
+                    b.HasIndex("LastEventId");
 
                     b.ToTable("DkpBalanceProjections");
                 });
@@ -190,10 +185,14 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("CorrelationId")
-                        .IsUnique();
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("CorrelationId");
 
                     b.HasIndex("UserId", "OccurredAtUtc");
 
@@ -201,38 +200,6 @@ namespace DKP.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("DkpEvents");
-                });
-
-            modelBuilder.Entity("DKP.Domain.DkpTransaction", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Amount")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("UserId", "CreatedAtUtc");
-
-                    b.ToTable("DkpTransactions");
                 });
 
             modelBuilder.Entity("DKP.Domain.GuildSetting", b =>
@@ -249,6 +216,64 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("GuildSettings");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            DefaultReserveLimit = 0
+                        });
+                });
+
+            modelBuilder.Entity("DKP.Domain.LedgerEntryProjection", b =>
+                {
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Amount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ItemName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int?>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<long>("Sequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("EventId");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("Action", "CreatedAtUtc");
+
+                    b.HasIndex("CreatedAtUtc", "EventId");
+
+                    b.HasIndex("UserId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("LedgerEntries");
                 });
 
             modelBuilder.Entity("DKP.Domain.ShopItem", b =>
@@ -296,46 +321,72 @@ namespace DKP.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("ShopItems");
-                });
 
-            modelBuilder.Entity("DKP.Domain.ShopPurchase", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CancelledAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("ShopItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("TotalDkpCost")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedAtUtc");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("ShopItemId");
-
-                    b.HasIndex("UserId", "ShopItemId");
-
-                    b.ToTable("ShopPurchases");
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000008"),
+                            CreatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Additional Soft Reserve",
+                            IsActive = true,
+                            Key = "soft-reserve",
+                            MaxPerUser = 2,
+                            Name = "Soft Reserve",
+                            Price = 10,
+                            UpdatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000010"),
+                            CreatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Roll bonus +10",
+                            IsActive = true,
+                            Key = "roll-bonus-10",
+                            MaxPerUser = 1,
+                            Name = "RollBonus 10",
+                            Price = 10,
+                            RollBonusValue = 10,
+                            UpdatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000020"),
+                            CreatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Roll bonus +20",
+                            IsActive = true,
+                            Key = "roll-bonus-20",
+                            MaxPerUser = 1,
+                            Name = "RollBonus 20",
+                            Price = 30,
+                            RollBonusValue = 20,
+                            UpdatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000030"),
+                            CreatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Roll bonus +30",
+                            IsActive = true,
+                            Key = "roll-bonus-30",
+                            MaxPerUser = 1,
+                            Name = "RollBonus 30",
+                            Price = 60,
+                            RollBonusValue = 30,
+                            UpdatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000040"),
+                            CreatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Roll bonus +40",
+                            IsActive = true,
+                            Key = "roll-bonus-40",
+                            MaxPerUser = 1,
+                            Name = "RollBonus 40",
+                            Price = 120,
+                            RollBonusValue = 40,
+                            UpdatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc)
+                        });
                 });
 
             modelBuilder.Entity("DKP.Domain.ShopPurchaseProjection", b =>
@@ -344,6 +395,9 @@ namespace DKP.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("CancellationEventId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("CancelledAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -353,7 +407,23 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CreatedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ItemKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ItemName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("PurchaseEventId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RollBonusValue")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("ShopItemId")
@@ -362,44 +432,27 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.Property<int>("TotalDkpCost")
                         .HasColumnType("integer");
 
+                    b.Property<int>("UnitPrice")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("PurchaseId");
+
+                    b.HasIndex("CancellationEventId")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("PurchaseEventId")
+                        .IsUnique();
 
                     b.HasIndex("ShopItemId");
 
                     b.HasIndex("UserId", "ShopItemId", "CancelledAtUtc");
 
                     b.ToTable("ShopPurchaseProjections");
-                });
-
-            modelBuilder.Entity("DKP.Domain.SoftReservePurchase", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CancelledAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("DkpCost")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("SoftReservePurchases");
                 });
 
             modelBuilder.Entity("DKP.Domain.User", b =>
@@ -443,15 +496,10 @@ namespace DKP.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<int>("RollBonus")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
 
                     b.HasIndex("DiscordId")
                         .IsUnique();
-
-                    b.HasIndex("IsBlocked");
 
                     b.ToTable("Users");
                 });
@@ -469,122 +517,116 @@ namespace DKP.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("DKP.Domain.DkpAwardPresetApplication", b =>
                 {
-                    b.HasOne("DKP.Domain.User", "AppliedByUser")
+                    b.HasOne("DKP.Domain.User", null)
                         .WithMany()
                         .HasForeignKey("AppliedByUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("DKP.Domain.DkpTransaction", "DkpTransaction")
-                        .WithMany()
-                        .HasForeignKey("DkpTransactionId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                    b.HasOne("DKP.Domain.DkpEvent", null)
+                        .WithOne()
+                        .HasForeignKey("DKP.Domain.DkpAwardPresetApplication", "DkpEventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
-                    b.HasOne("DKP.Domain.DkpAwardPreset", "Preset")
+                    b.HasOne("DKP.Domain.DkpAwardPreset", null)
                         .WithMany()
                         .HasForeignKey("PresetId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("DKP.Domain.User", "User")
+                    b.HasOne("DKP.Domain.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("AppliedByUser");
-
-                    b.Navigation("DkpTransaction");
-
-                    b.Navigation("Preset");
-
-                    b.Navigation("User");
                 });
 
-            modelBuilder.Entity("DKP.Domain.DkpTransaction", b =>
+            modelBuilder.Entity("DKP.Domain.DkpBalanceProjection", b =>
                 {
-                    b.HasOne("DKP.Domain.User", "CreatedByUser")
-                        .WithMany("CreatedDkpTransactions")
-                        .HasForeignKey("CreatedByUserId")
+                    b.HasOne("DKP.Domain.DkpEvent", null)
+                        .WithMany()
+                        .HasForeignKey("LastEventId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("DKP.Domain.User", null)
+                        .WithOne()
+                        .HasForeignKey("DKP.Domain.DkpBalanceProjection", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DKP.Domain.DkpEvent", b =>
+                {
+                    b.HasOne("DKP.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("DKP.Domain.User", "User")
-                        .WithMany("DkpTransactions")
+                    b.HasOne("DKP.Domain.User", null)
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("User");
                 });
 
-            modelBuilder.Entity("DKP.Domain.ShopPurchase", b =>
+            modelBuilder.Entity("DKP.Domain.LedgerEntryProjection", b =>
                 {
-                    b.HasOne("DKP.Domain.User", "CreatedByUser")
-                        .WithMany("CreatedShopPurchases")
-                        .HasForeignKey("CreatedByUserId")
+                    b.HasOne("DKP.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("DKP.Domain.ShopItem", "ShopItem")
-                        .WithMany("Purchases")
-                        .HasForeignKey("ShopItemId")
+                    b.HasOne("DKP.Domain.DkpEvent", null)
+                        .WithOne()
+                        .HasForeignKey("DKP.Domain.LedgerEntryProjection", "EventId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("DKP.Domain.User", "User")
-                        .WithMany("ShopPurchases")
+                    b.HasOne("DKP.Domain.User", null)
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("ShopItem");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("DKP.Domain.ShopPurchaseProjection", b =>
                 {
+                    b.HasOne("DKP.Domain.DkpEvent", null)
+                        .WithOne()
+                        .HasForeignKey("DKP.Domain.ShopPurchaseProjection", "CancellationEventId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("DKP.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DKP.Domain.DkpEvent", null)
+                        .WithOne()
+                        .HasForeignKey("DKP.Domain.ShopPurchaseProjection", "PurchaseEventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("DKP.Domain.ShopItem", null)
                         .WithMany()
                         .HasForeignKey("ShopItemId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
 
-            modelBuilder.Entity("DKP.Domain.SoftReservePurchase", b =>
-                {
-                    b.HasOne("DKP.Domain.User", "User")
-                        .WithMany("SoftReservePurchases")
+                    b.HasOne("DKP.Domain.User", null)
+                        .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("DKP.Domain.ShopItem", b =>
-                {
-                    b.Navigation("Purchases");
                 });
 
             modelBuilder.Entity("DKP.Domain.User", b =>
                 {
                     b.Navigation("Characters");
-
-                    b.Navigation("CreatedDkpTransactions");
-
-                    b.Navigation("CreatedShopPurchases");
-
-                    b.Navigation("DkpTransactions");
-
-                    b.Navigation("ShopPurchases");
-
-                    b.Navigation("SoftReservePurchases");
                 });
 #pragma warning restore 612, 618
         }
