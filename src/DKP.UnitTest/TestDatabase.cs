@@ -1,5 +1,6 @@
 using DKP.Application.Authentication;
 using DKP.Application.Characters;
+using DKP.Application.DkpAwardRequests;
 using DKP.Application.DkpTransactions;
 using DKP.Application.LootReserve;
 using DKP.Application.Persistence;
@@ -106,6 +107,7 @@ public sealed class TestRig
         Dkp = new(Context, Ledger, new FixedTime());
         Shop = new(Context, new ShopRepository(Session), Ledger, new FixedTime());
         Presets = new(Context, new PresetRepository(Session), Ledger, new FixedTime());
+        AwardRequests = new(Context, new DkpAwardRequestRepository(Session), new PresetRepository(Session), Ledger, new FixedTime());
         Characters = new(Context, new CharacterRepository(Session));
         Roles = new(Context, Users, new BootstrapPolicy());
         Blocks = new(Context, Users, new BootstrapPolicy(), new FixedTime());
@@ -121,6 +123,7 @@ public sealed class TestRig
     public DkpTransactionCommandService Dkp { get; }
     public ShopCommandService Shop { get; }
     public DkpPresetCommandService Presets { get; }
+    public DkpAwardRequestCommandService AwardRequests { get; }
     public CharacterCommandService Characters { get; }
     public UserRoleCommandService Roles { get; }
     public UserBlockCommandService Blocks { get; }

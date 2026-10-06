@@ -9,6 +9,7 @@ using DKP.Application.Users;
 using DKP.Facade.Contracts;
 using DKP.Application.Shop;
 using DKP.Application.Presets;
+using DKP.Application.DkpAwardRequests;
 using DKP.Application.LootReserve;
 
 using DKP.Facade.Commands;
@@ -65,6 +66,7 @@ public static class DependencyInjection
 		services.AddScoped<ICharacterRepository, CharacterRepository>();
 		services.AddScoped<IShopRepository, ShopRepository>();
 		services.AddScoped<IPresetRepository, PresetRepository>();
+		services.AddScoped<IDkpAwardRequestRepository, DkpAwardRequestRepository>();
 		services.AddScoped<IGuildSettingsRepository, GuildSettingsRepository>();
 		services.AddScoped<IEventLedgerRepository, EventLedgerRepository>();
 		services.AddScoped<IEventProjectionRebuilder, EventProjectionRebuilder>();
@@ -84,6 +86,8 @@ public static class DependencyInjection
 		services.AddScoped<IShopCommands, ShopCommandService>();
 		services.AddScoped<IDkpPresetQueries, DkpPresetQueries>();
 		services.AddScoped<IDkpPresetCommands, DkpPresetCommandService>();
+		services.AddScoped<IDkpAwardRequestQueries, DkpAwardRequestQueries>();
+		services.AddScoped<IDkpAwardRequestCommands, DkpAwardRequestCommandService>();
 		services.AddScoped<ILootReserveQueries, LootReserveQueries>();
 		services.AddScoped<ILootReserveCommands, LootReserveCommandService>();
 

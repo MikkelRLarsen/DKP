@@ -1,8 +1,12 @@
 @page "/my-dkp/sources"
 @attribute [Authorize]
+@using DKP.Facade.Commands
 @using DKP.Facade.Contracts
 @using DKP.Facade.Queries
 @inject IDkpPresetQueries PresetQueries
+@inject IDkpAwardRequestQueries RequestQueries
+@inject IDkpAwardRequestCommands RequestCommands
+@inject DialogService DialogService
 @inject NotificationService NotificationService
 
 <PageTitle>Ways to Earn DKP</PageTitle>
@@ -51,6 +55,18 @@ else
                                 <RadzenBadge Text="@source.Remaining.ToString()" BadgeStyle="BadgeStyle.Info" />
                             </Template>
                         </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Title="Request" Sortable="false" Filterable="false">
+                            <Template Context="source">
+                                @if (PendingFor(source.PresetId) is not null)
+                                {
+                                    <RadzenBadge Text="Request pending" BadgeStyle="BadgeStyle.Warning" />
+                                }
+                                else
+                                {
+                                    <RadzenButton Text="Request DKP" Icon="send" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Primary" Click="@(() => RequestAsync(source))" Disabled="@busy" />
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
                     </Columns>
                 </RadzenDataGrid>
             </RadzenCard>
@@ -59,18 +75,60 @@ else
                 DKP awards are applied by an Officer through DKP Management. This page is informational only.
             </RadzenAlert>
         }
+
+        <RadzenCard>
+            <RadzenText Text="My requests" TextStyle="TextStyle.H5" />
+            @if (requests.Count == 0)
+            {
+                <RadzenText Text="You have not submitted any DKP requests." Style="margin-top: .75rem;" />
+            }
+            else
+            {
+                <RadzenDataGrid Data="@requests" TItem="DkpAwardRequestDto" AllowPaging="true" PageSize="10" AllowSorting="true" EmptyText="No requests found." Style="margin-top: 1rem;">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="PresetName" Title="Source" />
+                        <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Amount" Title="DKP" />
+                        <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="CreatedAtUtc" Title="Created">
+                            <Template Context="request">@request.CreatedAtUtc.ToLocalTime().ToString("g")</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Status" Title="Status">
+                            <Template Context="request"><RadzenBadge Text="@request.Status.ToString()" BadgeStyle="@StatusStyle(request.Status)" /></Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DkpAwardRequestDto" Title="Actions" Sortable="false" Filterable="false">
+                            <Template Context="request">
+                                @if (request.Status == DkpAwardRequestStatus.Pending)
+                                {
+                                    <RadzenButton Text="Cancel" Icon="cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => CancelAsync(request))" Disabled="@busy" />
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
     </RadzenStack>
 }
 
 @code {
     private IReadOnlyList<DkpAcquisitionSourceDto>? sources;
+    private IReadOnlyList<DkpAwardRequestDto> requests = [];
     private bool loading = true;
+    private bool busy;
+
+    private DkpAwardRequestDto? PendingFor(Guid presetId) => requests.FirstOrDefault(x => x.PresetId == presetId && x.Status == DkpAwardRequestStatus.Pending);
+    private static BadgeStyle StatusStyle(DkpAwardRequestStatus status) => status switch
+    {
+        DkpAwardRequestStatus.Approved => BadgeStyle.Success,
+        DkpAwardRequestStatus.Rejected => BadgeStyle.Danger,
+        DkpAwardRequestStatus.Cancelled => BadgeStyle.Light,
+        _ => BadgeStyle.Warning
+    };
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            sources = await PresetQueries.GetAvailableSourcesAsync();
+            await ReloadAsync();
         }
         catch (Exception exception)
         {
@@ -80,5 +138,42 @@ else
         {
             loading = false;
         }
+    }
+
+    private async Task ReloadAsync()
+    {
+        sources = await PresetQueries.GetAvailableSourcesAsync();
+        requests = await RequestQueries.GetMyRequestsAsync();
+    }
+
+    private async Task RequestAsync(DkpAcquisitionSourceDto source)
+    {
+        if (busy || PendingFor(source.PresetId) is not null) return;
+        busy = true;
+        try
+        {
+            var result = await DialogService.OpenAsync<DkpAwardRequestDialog>("Request DKP", new Dictionary<string, object> { ["Source"] = source });
+            if (result is not DkpAwardRequestDialog.DkpAwardRequestDialogResult request) return;
+            await RequestCommands.CreateAsync(new CreateDkpAwardRequestRequest(source.PresetId, request.Quantity, request.Comment));
+            NotificationService.Notify(NotificationSeverity.Success, "Request submitted", $"Your request for {source.Name} was submitted.");
+            await ReloadAsync();
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to submit request", exception.Message); }
+        finally { busy = false; }
+    }
+
+    private async Task CancelAsync(DkpAwardRequestDto request)
+    {
+        if (busy) return;
+        if (await DialogService.Confirm($"Cancel your request for {request.PresetName}?", "Cancel request") != true) return;
+        busy = true;
+        try
+        {
+            await RequestCommands.CancelAsync(request.Id);
+            NotificationService.Notify(NotificationSeverity.Success, "Request cancelled", "The request was cancelled.");
+            await ReloadAsync();
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to cancel request", exception.Message); }
+        finally { busy = false; }
     }
 }

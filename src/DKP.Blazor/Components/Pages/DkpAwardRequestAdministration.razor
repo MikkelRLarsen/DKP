@@ -1,0 +1,83 @@
+@page "/admin/dkp-requests"
+@attribute [Authorize(Roles = "Officer")]
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IDkpAwardRequestQueries RequestQueries
+@inject IDkpAwardRequestCommands RequestCommands
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>DKP Requests</PageTitle>
+<RadzenStack Gap="1.5rem">
+    <div><h1>DKP Requests</h1><RadzenText Text="Review member requests for predefined DKP awards." TextStyle="TextStyle.Subtitle2" /></div>
+    @if (loading)
+    {
+        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;"><RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" /><RadzenText Text="Loading DKP requests..." /></RadzenStack>
+    }
+    else if (requests is null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load DKP requests.</RadzenAlert>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenDataGrid Data="@requests" TItem="DkpAwardRequestDto" AllowPaging="true" PageSize="15" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No DKP requests found.">
+                <Columns>
+                    <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="DiscordName" Title="Player" />
+                    <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="MainCharacter" Title="Main character" />
+                    <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="PresetName" Title="Source" />
+                    <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Amount" Title="DKP" />
+                    <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Quantity" Title="Quantity" />
+                    <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Reason" Title="Reason" />
+                    <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Comment" Title="Member comment" />
+                    <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="CreatedAtUtc" Title="Created"><Template Context="request">@request.CreatedAtUtc.ToLocalTime().ToString("g")</Template></RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Status" Title="Status"><Template Context="request"><RadzenBadge Text="@request.Status.ToString()" BadgeStyle="@StatusStyle(request.Status)" /></Template></RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="DkpAwardRequestDto" Title="Actions" Sortable="false" Filterable="false">
+                        <Template Context="request">
+                            @if (request.Status == DkpAwardRequestStatus.Pending)
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap=".5rem"><RadzenButton Text="Approve" Icon="check" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Success" Click="@(() => ApproveAsync(request))" Disabled="@busy" /><RadzenButton Text="Reject" Icon="close" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(() => RejectAsync(request))" Disabled="@busy" /></RadzenStack>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(request.ReviewComment))
+                            {
+                                <RadzenText Text="@request.ReviewComment" TextStyle="TextStyle.Caption" />
+                            }
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private IReadOnlyList<DkpAwardRequestDto>? requests;
+    private bool loading = true;
+    private bool busy;
+    private static BadgeStyle StatusStyle(DkpAwardRequestStatus status) => status switch { DkpAwardRequestStatus.Approved => BadgeStyle.Success, DkpAwardRequestStatus.Rejected => BadgeStyle.Danger, DkpAwardRequestStatus.Cancelled => BadgeStyle.Light, _ => BadgeStyle.Warning };
+    protected override async Task OnInitializedAsync() { try { await ReloadAsync(); } catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to load DKP requests", exception.Message); } finally { loading = false; } }
+    private async Task ReloadAsync() => requests = await RequestQueries.GetAllRequestsAsync();
+    private async Task ApproveAsync(DkpAwardRequestDto request)
+    {
+        if (busy || request.Status != DkpAwardRequestStatus.Pending) return;
+        if (await DialogService.Confirm($"Approve {request.Quantity} × {request.Amount} DKP for {request.DiscordName}?", "Approve DKP request") != true) return;
+        busy = true;
+        try { await RequestCommands.ApproveAsync(request.Id, new ReviewDkpAwardRequestRequest(null)); NotificationService.Notify(NotificationSeverity.Success, "Request approved", $"{request.Quantity * request.Amount} DKP was awarded to {request.DiscordName}."); await ReloadAsync(); }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to approve request", exception.Message); }
+        finally { busy = false; }
+    }
+    private async Task RejectAsync(DkpAwardRequestDto request)
+    {
+        if (busy || request.Status != DkpAwardRequestStatus.Pending) return;
+        busy = true;
+        try
+        {
+            var comment = await DialogService.OpenAsync<DkpAwardReviewDialog>("Reject DKP request", new Dictionary<string, object> { ["Title"] = "Reject DKP request", ["Description"] = $"Reject the request from {request.DiscordName} for {request.PresetName}.", ["ConfirmText"] = "Reject", ["ButtonStyle"] = ButtonStyle.Danger });
+            if (comment is not DkpAwardReviewDialog.DkpAwardReviewDialogResult result) return;
+            await RequestCommands.RejectAsync(request.Id, new ReviewDkpAwardRequestRequest(result.Comment)); NotificationService.Notify(NotificationSeverity.Success, "Request rejected", "The DKP request was rejected."); await ReloadAsync();
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to reject request", exception.Message); }
+        finally { busy = false; }
+    }
+}

@@ -732,6 +732,23 @@ Tilføj en relation mellem shop-items og achievement definitions. Shop administr
 
 Kravændringer påvirker kun fremtidige køb. Historiske køb og DKP-events ændres ikke. Der skal tilføjes Facade-kontrakter, Application-/Infrastructure-flow, EF migration og tests for AND-logik, manglende/deaktiverede achievements, multi-user atomicitet og historisk databevarelse.
 
+## Slice 13c – DKP-anmodninger fra Sources
+
+Status: Færdig.
+
+Leveret:
+
+- Members kan oprette én pending DKP-anmodning pr. aktivt preset fra `/my-dkp/sources`.
+- Members kan vælge quantity; quantity bruger samme antal lifetime-applications, og godkendelse opretter ét DKP-event pr. anvendelse.
+- Members kan tilføje valgfri kommentar, se egne request-statusser og annullere egne pending requests.
+- Officers kan se alle requests på `/admin/dkp-requests` og godkende eller afvise dem.
+- Godkendelse genvaliderer preset, blokering og lifetime-limit under command-locken og opretter ét `DkpPosted`-event med Officer som actor.
+- Rejected og cancelled requests ændrer ikke saldo eller preset usage.
+- Pending-request uniqueness, ejerskab, authorization og kommentargrænser håndhæves serverside.
+- Request-state gemmes som workflow-data; DKP-balance og usage kommer fortsat fra event-store replay.
+- Migrationerne `20261006182056_Slice13cDkpAwardRequests` og `20261006182802_Slice13cRequestQuantity` tilføjer request-tabellen, quantity, event-reference-data, relationer og unique pending-index.
+- Tests dækker create/cancel, approve/reject, authorization, duplicate requests, limit recheck, usage og host-routes.
+
 ## Slice 14 – Deployment og production hardening
 
 Status: Planlagt.

@@ -39,14 +39,14 @@ public sealed class HostSmokeTests : DatabaseTest
             Assert.DoesNotContain("An unhandled exception", html);
             if (path is "/" or "/my-dkp") Assert.Contains("123", html);
         }
-        foreach (var path in new[] { "/admin/dkp", "/admin/users", "/admin/shop", "/admin/shop/purchases", "/admin/dkp-presets", "/admin/loot-reserve" })
+        foreach (var path in new[] { "/admin/dkp", "/admin/users", "/admin/shop", "/admin/shop/purchases", "/admin/dkp-presets", "/admin/dkp-requests", "/admin/loot-reserve" })
         {
             var response = await member.GetAsync(path);
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         }
         using var officer = host.CreateClient(new() { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false });
         officer.DefaultRequestHeaders.Add("X-Test-User", "officer");
-        foreach (var path in new[] { "/admin/dkp", "/admin/users", "/admin/shop", "/admin/shop/purchases", "/admin/dkp-presets", "/admin/loot-reserve" })
+        foreach (var path in new[] { "/admin/dkp", "/admin/users", "/admin/shop", "/admin/shop/purchases", "/admin/dkp-presets", "/admin/dkp-requests", "/admin/loot-reserve" })
         {
             var response = await officer.GetAsync(path);
             var html = await response.Content.ReadAsStringAsync();
