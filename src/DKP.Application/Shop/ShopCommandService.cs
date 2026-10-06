@@ -5,9 +5,9 @@ using DKP.Facade.Commands;
 using DKP.Facade.Contracts;
 namespace DKP.Application.Shop;
 
-public sealed class ShopCommandService(CommandContext context, IShopRepository catalog, IEventLedgerRepository ledger, TimeProvider time) : IShopCommands
+public sealed class ShopCommandService(CommandContext context, IShopRepository catalog, IAchievementRepository achievementRepository, IEventLedgerRepository ledger, TimeProvider time) : IShopCommands
 {
-    private static ShopItemDto Dto(ShopItem i) => new(i.Id, i.Key, i.Name, i.Description, i.Price, i.MaxPerUser, i.IsActive);
+    private async Task<ShopItemDto> Dto(ShopItem i, CancellationToken ct) { var ids = await catalog.GetAchievementRequirementIdsAsync(i.Id, ct); return new(i.Id, i.Key, i.Name, i.Description, i.Price, i.MaxPerUser, i.IsActive, ids.Select(x => new ShopItemAchievementRequirementDto(x, "")).ToArray()); }
     private static void Validate(ShopItemInput input)
     {
         if (string.IsNullOrWhiteSpace(input.Key) || input.Key.Trim().Length > 64 ||
@@ -22,7 +22,7 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
             Validate(input);
             var item = new ShopItem(input.Key.Trim(), input.Name.Trim(), input.Description.Trim(), input.Price, input.MaxPerUser, time.GetUtcNow().UtcDateTime);
             await catalog.AddItemAsync(item, ct);
-            return Dto(item);
+            await ReplaceRequirementsAsync(item, input.AchievementIds, ct); return await Dto(item, ct);
         }, ct);
     public Task<ShopItemDto> UpdateItemAsync(Guid itemId, ShopItemInput input, CancellationToken ct = default)
         => context.ExecuteAsync([], true, async _ =>
@@ -32,7 +32,7 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
             if (item.Key != input.Key.Trim()) throw new ArgumentException("Item key is immutable.");
             if (item.RollBonusValue != null && input.MaxPerUser != 1) throw new ArgumentException("RollBonus permits only one active unit across all tiers.");
             item.Update(input.Name.Trim(), input.Description.Trim(), input.Price, input.MaxPerUser, time.GetUtcNow().UtcDateTime);
-            return Dto(item);
+            await ReplaceRequirementsAsync(item, input.AchievementIds, ct); return await Dto(item, ct);
         }, ct);
     public Task SetActiveAsync(Guid itemId, bool active, CancellationToken ct = default)
         => context.ExecuteAsync([], true, async _ =>
@@ -64,6 +64,12 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
         foreach (var id in ids)
         {
             var target = await context.TargetAsync(id, ct);
+            foreach (var achievementId in await catalog.GetAchievementRequirementIdsAsync(item.Id, ct))
+            {
+                var achievement = await achievementRepository.FindAsync(achievementId, ct);
+                if (achievement is null || !achievement.IsActive || !await achievementRepository.HasActiveAsync(id, achievementId, ct))
+                    throw new InvalidOperationException($"{target.DiscordName}: missing required achievement.");
+            }
             var state = await ledger.GetStateAsync(id, ct);
             if (state.Balance < cost)
                 throw new InvalidOperationException($"{target.DiscordName}: insufficient DKP ({cost} required).");
@@ -85,6 +91,17 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
             result.Add(new(purchaseId, user.Id, user.DiscordName, null, item.Id, item.Name, quantity, cost, now, null));
         }
         return result;
+    }
+
+    private async Task ReplaceRequirementsAsync(ShopItem item, IReadOnlyList<Guid>? ids, CancellationToken ct)
+    {
+        var distinct = (ids ?? []).Where(x => x != Guid.Empty).Distinct().ToArray();
+        foreach (var id in distinct)
+        {
+            var achievement = await achievementRepository.FindAsync(id, ct) ?? throw new KeyNotFoundException("Required achievement not found.");
+            if (!achievement.IsActive) throw new InvalidOperationException("Inactive achievements cannot be shop requirements.");
+        }
+        await catalog.ReplaceAchievementRequirementsAsync(item.Id, distinct, ct);
     }
 
     public Task CancelAsync(Guid purchaseId, CancellationToken ct = default)

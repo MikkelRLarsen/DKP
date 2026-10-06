@@ -5,6 +5,7 @@
 @using DKP.Facade.Queries
 @inject IShopQueries ShopQueries
 @inject IShopCommands ShopCommands
+@inject IAchievementQueries AchievementQueries
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 
@@ -53,6 +54,9 @@
                 <RadzenFormField Text="Description" Style="width:100%;">
                     <ChildContent><RadzenTextArea @bind-Value="form.Description" MaxLength="500" Rows="3" Style="width:100%;" Disabled="@saving" /></ChildContent>
                 </RadzenFormField>
+                <RadzenFormField Text="Required achievements (all are required)" Style="width:100%;">
+                    <ChildContent><RadzenDropDown TValue="IEnumerable<Guid>" @bind-Value="form.AchievementIds" Data="@achievements" TextProperty="Name" ValueProperty="Id" Multiple="true" AllowFiltering="true" Style="width:100%;" Disabled="@saving" /></ChildContent>
+                </RadzenFormField>
                 <RadzenStack Orientation="Orientation.Horizontal" Gap=".75rem">
                     <RadzenButton Text="@(editingId is null ? "Create item" : "Save changes")" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="SaveAsync" Disabled="@saving" />
                     @if (editingId is not null)
@@ -71,6 +75,7 @@
                     <RadzenDataGridColumn TItem="ShopItemDto" Property="Key" Title="Key" />
                     <RadzenDataGridColumn TItem="ShopItemDto" Property="Price" Title="Price" />
                     <RadzenDataGridColumn TItem="ShopItemDto" Property="MaxPerUser" Title="Max per user" />
+                    <RadzenDataGridColumn TItem="ShopItemDto" Title="Achievement requirements" Sortable="false"><Template Context="item">@(item.AchievementRequirements is { Count: > 0 } ? string.Join(", ", item.AchievementRequirements.Select(x => x.AchievementName)) : "None")</Template></RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="ShopItemDto" Property="IsActive" Title="Status">
                         <Template Context="item"><RadzenBadge Text="@(item.IsActive ? "Active" : "Inactive")" BadgeStyle="@(item.IsActive ? BadgeStyle.Success : BadgeStyle.Light)" /></Template>
                     </RadzenDataGridColumn>
@@ -90,6 +95,7 @@
 
 @code {
     private IReadOnlyList<ShopItemDto> items = [];
+    private IReadOnlyList<AchievementDefinitionDto> achievements = [];
     private readonly ShopItemForm form = new();
     private Guid? editingId;
     private bool loading = true;
@@ -99,6 +105,7 @@
     {
         try
         {
+            achievements = await AchievementQueries.GetDefinitionsAsync();
             await ReloadAsync();
         }
         catch (Exception exception)
@@ -121,6 +128,7 @@
         form.Description = item.Description;
         form.Price = item.Price;
         form.MaxPerUser = item.MaxPerUser;
+        form.AchievementIds = item.AchievementRequirements.Select(x => x.AchievementId).ToArray();
     }
 
     private void ResetForm()
@@ -131,6 +139,7 @@
         form.Description = string.Empty;
         form.Price = 1;
         form.MaxPerUser = 1;
+        form.AchievementIds = [];
     }
 
     private async Task SaveAsync()
@@ -145,7 +154,7 @@
         saving = true;
         try
         {
-            var input = new ShopItemInput(form.Key, form.Name, form.Description, form.Price, form.MaxPerUser);
+            var input = new ShopItemInput(form.Key, form.Name, form.Description, form.Price, form.MaxPerUser, form.AchievementIds.ToArray());
             if (editingId is Guid id)
             {
                 await ShopCommands.UpdateItemAsync(id, input);
@@ -204,5 +213,6 @@
         public string Description { get; set; } = string.Empty;
         public int Price { get; set; } = 1;
         public int MaxPerUser { get; set; } = 1;
+        public IEnumerable<Guid> AchievementIds { get; set; } = [];
     }
 }

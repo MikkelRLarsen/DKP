@@ -13,6 +13,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<DkpEvent> DkpEvents => Set<DkpEvent>();
     public DbSet<AchievementDefinition> AchievementDefinitions => Set<AchievementDefinition>();
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
+    public DbSet<ShopItemAchievementRequirement> ShopItemAchievementRequirements => Set<ShopItemAchievementRequirement>();
 
     private void GuardEvents()
     {
@@ -51,6 +52,12 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.Property(x => x.Key).HasMaxLength(64);
             e.Property(x => x.Name).HasMaxLength(128);
             e.Property(x => x.Description).HasMaxLength(500);
+        });
+        model.Entity<ShopItemAchievementRequirement>(e =>
+        {
+            e.HasKey(x => new { x.ShopItemId, x.AchievementId });
+            e.HasOne<ShopItem>().WithMany().HasForeignKey(x => x.ShopItemId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<AchievementDefinition>().WithMany().HasForeignKey(x => x.AchievementId).OnDelete(DeleteBehavior.Restrict);
         });
         model.Entity<DkpAwardPreset>(e =>
         {

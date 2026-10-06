@@ -105,7 +105,7 @@ public sealed class TestRig
         Context = new(new TestIdentity(id), Users, Session);
         Ledger = new(Session);
         Dkp = new(Context, Ledger, new FixedTime());
-        Shop = new(Context, new ShopRepository(Session), Ledger, new FixedTime());
+        Shop = new(Context, new ShopRepository(Session), new AchievementRepository(Session), Ledger, new FixedTime());
         Presets = new(Context, new PresetRepository(Session), Ledger, new FixedTime());
         AwardRequests = new(Context, new DkpAwardRequestRepository(Session), new PresetRepository(Session), new AchievementRepository(Session), Ledger, new FixedTime());
         Characters = new(Context, new CharacterRepository(Session));

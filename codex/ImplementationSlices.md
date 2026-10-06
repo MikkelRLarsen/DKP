@@ -741,13 +741,13 @@ Kendte begrænsninger:
 
 ## Slice 13b – Achievement-gated shop-items
 
-Status: Planlagt.
+Status: Implementeret.
 
 Shop-items kan valgfrit kræve ét eller flere achievements. Hvis flere krav er sat, skal brugeren have alle achievements. Ingen krav betyder, at item’et fungerer som normalt.
 
 Tilføj en relation mellem shop-items og achievement definitions. Shop administration skal kunne vælge krav, og shop query/UI skal vise eventuelle manglende krav. Købsvalideringen håndhæves altid serverside, også ved Officer-køb på vegne af brugere. Multi-user køb fejler atomisk, hvis én target-bruger mangler et krav.
 
-Kravændringer påvirker kun fremtidige køb. Historiske køb og DKP-events ændres ikke. Der skal tilføjes Facade-kontrakter, Application-/Infrastructure-flow, EF migration og tests for AND-logik, manglende/deaktiverede achievements, multi-user atomicitet og historisk databevarelse.
+Kravændringer påvirker kun fremtidige køb. Historiske køb og DKP-events ændres ikke. Shop-administrationen kan vælge flere krav, shoppen viser manglende krav, og Application-valideringen håndhæver AND-logik for både medlemskøb og atomiske multi-user officer-køb. Migrationen `Slice13bAchievementGatedShopItems` opretter relationstabellen.
 
 ## Slice 13c – DKP-anmodninger fra Sources
 

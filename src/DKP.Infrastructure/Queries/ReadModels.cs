@@ -14,7 +14,12 @@ internal static class ReadModels
     }
     public static IQueryable<CharacterDto> Characters(DkpDbContext db, Guid id) => db.Characters.Where(x => x.UserId == id).OrderByDescending(x => x.IsMain).ThenBy(x => x.LastName).ThenBy(x => x.FirstName).ThenBy(x => x.Id).Select(x => new CharacterDto(x.Id, x.FirstName, x.LastName, x.IsMain));
     public static IQueryable<UserSummary> Users(DkpDbContext db) => db.Users.OrderBy(x => x.DiscordName).ThenBy(x => x.Id).Select(x => new UserSummary(x.Id, x.DiscordId, x.DiscordName, x.AvatarUrl, Role(x.Role), x.Characters.Where(c => c.IsMain).Select(c => c.FirstName + " " + c.LastName).FirstOrDefault(), x.IsBlocked, x.BlockedAtUtc, x.BlockReason));
-    public static IQueryable<ShopItemDto> Items(DkpDbContext db, bool activeOnly = false) => db.ShopItems.Where(x => !activeOnly || x.IsActive).OrderBy(x => x.Name).ThenBy(x => x.Id).Select(x => new ShopItemDto(x.Id, x.Key, x.Name, x.Description, x.Price, x.MaxPerUser, x.IsActive));
+    public static async Task<IReadOnlyList<ShopItemDto>> ItemsAsync(DkpDbContext db, bool activeOnly, CancellationToken ct)
+    {
+        var items = await db.ShopItems.AsNoTracking().Where(x => !activeOnly || x.IsActive).OrderBy(x => x.Name).ThenBy(x => x.Id).ToArrayAsync(ct);
+        var requirements = await db.ShopItemAchievementRequirements.AsNoTracking().Join(db.AchievementDefinitions.AsNoTracking(), r => r.AchievementId, a => a.Id, (r, a) => new { r.ShopItemId, Dto = new ShopItemAchievementRequirementDto(a.Id, a.Name) }).ToArrayAsync(ct);
+        return items.Select(x => new ShopItemDto(x.Id, x.Key, x.Name, x.Description, x.Price, x.MaxPerUser, x.IsActive, requirements.Where(r => r.ShopItemId == x.Id).Select(r => r.Dto).ToArray())).ToArray();
+    }
     public static async Task<DkpHistoryDto> HistoryAsync(DkpDbContext db, Guid id, CancellationToken ct)
     {
         var state = await StateAsync(db, id, ct);

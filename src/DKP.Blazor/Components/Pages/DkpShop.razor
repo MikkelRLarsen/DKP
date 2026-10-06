@@ -6,6 +6,7 @@
 @inject IDkpQueries DkpQueries
 @inject IShopQueries ShopQueries
 @inject IShopCommands ShopCommands
+@inject IAchievementQueries AchievementQueries
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 
@@ -17,7 +18,10 @@
     else {
         <RadzenCard><RadzenText Text="Current DKP" TextStyle="TextStyle.Overline" /><RadzenText Text="@balance.ToString("+#;-#;0")" Style="font-size:2.5rem;font-weight:700;" /></RadzenCard>
         <RadzenCard><RadzenStack Gap=".75rem"><RadzenText Text="Purchase" TextStyle="TextStyle.H5" /><RadzenDropDown TValue="Guid" @bind-Value="selectedItemId" Data="@items" TextProperty="Name" ValueProperty="Id" Disabled="@saving" AllowFiltering="true" Style="width:100%;" />
-            @if (selectedItem is not null) { <RadzenText Text="@(selectedItem.Description + $" Cost: {selectedItem.Price} DKP per unit.")" /><RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Max="@selectedItem.MaxPerUser" Disabled="@saving" /><RadzenButton Text="Purchase" Icon="shopping_cart" Click="PurchaseAsync" Disabled="@saving" /> }
+            @if (selectedItem is not null) { <RadzenText Text="@(selectedItem.Description + $" Cost: {selectedItem.Price} DKP per unit.")" />
+                @if (selectedItem.AchievementRequirements.Count > 0) { <RadzenText>Required achievements: @string.Join(", ", selectedItem.AchievementRequirements.Select(x => x.AchievementName))</RadzenText> }
+                @if (MissingRequirements(selectedItem).Count > 0) { <RadzenAlert AlertStyle="AlertStyle.Warning">You are missing: @string.Join(", ", MissingRequirements(selectedItem).Select(x => x.AchievementName))</RadzenAlert> }
+                <RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Max="@selectedItem.MaxPerUser" Disabled="@(saving || MissingRequirements(selectedItem).Count > 0)" /><RadzenButton Text="Purchase" Icon="shopping_cart" Click="PurchaseAsync" Disabled="@(saving || MissingRequirements(selectedItem).Count > 0)" /> }
         </RadzenStack></RadzenCard>
         <RadzenCard><RadzenText Text="My purchases" TextStyle="TextStyle.H5" /><RadzenDataGrid Data="@purchases" TItem="ShopPurchaseDto" AllowPaging="true" AllowSorting="true" EmptyText="No purchases found."><Columns><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="ItemName" Title="Item" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="Quantity" Title="Quantity" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="TotalDkpCost" Title="DKP" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="CreatedAtUtc" Title="Date" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Status"><Template Context="p"><RadzenBadge Text="@(p.IsCancelled ? "Cancelled" : "Active")" /></Template></RadzenDataGridColumn><RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Actions"><Template Context="p">@if(!p.IsCancelled){<RadzenButton Text="Cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(()=>CancelAsync(p))" Disabled="@saving" />}</Template></RadzenDataGridColumn></Columns></RadzenDataGrid></RadzenCard>
     }
@@ -26,6 +30,7 @@
 @code {
     private IReadOnlyList<ShopItemDto> items = [];
     private IReadOnlyList<ShopPurchaseDto> purchases = [];
+    private IReadOnlyList<UserAchievementDto> achievements = [];
     private Guid selectedItemId;
     private int quantity = 1;
     private int balance;
@@ -52,8 +57,10 @@
         balance = history.Balance.Amount;
         items = await ShopQueries.GetActiveItemsAsync();
         purchases = await ShopQueries.GetPurchasesAsync();
+        achievements = await AchievementQueries.GetUserAchievementsAsync();
         if (selectedItem is null && items.Count > 0) selectedItemId = items[0].Id;
     }
+    private IReadOnlyList<ShopItemAchievementRequirementDto> MissingRequirements(ShopItemDto item) => item.AchievementRequirements.Where(r => !achievements.Any(a => a.AchievementId == r.AchievementId && a.IsActive)).ToArray();
 
     private async Task PurchaseAsync()
     {
