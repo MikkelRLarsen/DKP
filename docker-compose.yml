@@ -1,37 +1,103 @@
 services:
   postgres:
-    image: postgres:16
-    container_name: dkp-postgres
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: dkp
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-dkp}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - dkp-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d dkp"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 10s
 
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: dkp-pgadmin
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@dkp.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?Set PGADMIN_DEFAULT_EMAIL in .env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?Set PGADMIN_DEFAULT_PASSWORD in .env}
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
     ports:
-      - "5050:80"
+      - "127.0.0.1:${PGADMIN_HOST_PORT:-5050}:80"
     volumes:
       - dkp-pgadmin-data:/var/lib/pgadmin
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dkp-pgadmin.rule=Host(`${PGADMIN_HOST:-pgadmin.coffecottage.dk}`)
+      - traefik.http.routers.dkp-pgadmin.entrypoints=websecure
+      - traefik.http.routers.dkp-pgadmin.tls.certresolver=letsencrypt
+      - traefik.http.services.dkp-pgadmin.loadbalancer.server.port=80
+
+  dkp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${DKP_IMAGE:-dkp:local}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-dkp};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}
+      Discord__ClientId: ${DISCORD_CLIENT_ID:?Set DISCORD_CLIENT_ID in .env}
+      Discord__ClientSecret: ${DISCORD_CLIENT_SECRET:?Set DISCORD_CLIENT_SECRET in .env}
+      Discord__GuildId: ${DISCORD_GUILD_ID:?Set DISCORD_GUILD_ID in .env}
+      Discord__RedirectUri: ${DISCORD_REDIRECT_URI:-https://wowforever.coffecottage.dk/signin-discord}
+    expose:
+      - "8080"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dkp.rule=Host(`${DKP_HOST:-wowforever.coffecottage.dk}`)
+      - traefik.http.routers.dkp.entrypoints=websecure
+      - traefik.http.routers.dkp.tls.certresolver=letsencrypt
+      - traefik.http.services.dkp.loadbalancer.server.port=8080
+      - com.centurylinklabs.watchtower.enable=true
+
+  traefik:
+    image: traefik:v3.3
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL:?Set LETSENCRYPT_EMAIL in .env}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --api.dashboard=${TRAEFIK_DASHBOARD_ENABLED:-false}
+      - --log.level=INFO
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - dkp-traefik-letsencrypt:/letsencrypt
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-300}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   dkp-postgres-data:
   dkp-pgadmin-data:
+  dkp-traefik-letsencrypt:

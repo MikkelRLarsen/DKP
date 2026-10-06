@@ -841,6 +841,10 @@ Migration: `20261006201039_Slice13gAchievementRequests` tilføjer achievement-re
 
 ## Slice 14 – Deployment og production hardening
 
+Status: Påbegyndt.
+
+Dockerfile, Docker Compose med PostgreSQL, pgAdmin, Traefik, Watchtower og DKP samt reverse-proxy-konfiguration for `wowforever.coffecottage.dk` er tilføjet. Se `codex/Deployment.md` for DNS, secrets og opstart. Health checks, fuld production-hardening og deployment-test er fortsat resterende arbejde.
+
 Status: Planlagt.
 
 Gør systemet deploymentklart med Dockerfile, Docker Compose for app/PostgreSQL/pgAdmin, production Discord redirect URI, environment-based configuration, database health checks, logging, kontrolleret fejlhåndtering, migration-/backup-dokumentation og kontrol af secrets.

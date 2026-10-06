@@ -2,6 +2,7 @@ using DKP.Blazor.Components;
 using DKP.InversionOfControl;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Radzen;
 
 namespace DKP.Blazor
@@ -29,6 +30,15 @@ namespace DKP.Blazor
 				app.UseHsts();
 			}
 
+			var forwardedHeaders = new ForwardedHeadersOptions
+			{
+				ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+			};
+			// Traefik/ngrok run on the private Docker network. The app is not
+			// published directly in production, so the proxy is the trust boundary.
+			forwardedHeaders.KnownIPNetworks.Clear();
+			forwardedHeaders.KnownProxies.Clear();
+			app.UseForwardedHeaders(forwardedHeaders);
 			app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 			app.UseHttpsRedirection();
 			app.UseAuthentication();
