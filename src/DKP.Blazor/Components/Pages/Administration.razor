@@ -20,6 +20,9 @@
             </RadzenCard>
         </RadzenColumn>
         <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard><RadzenStack Gap="0.75rem"><RadzenText Text="Achievements" TextStyle="TextStyle.H5" /><RadzenText Text="Award achievement-based DKP to guild members." /><RadzenButton Text="Open Achievements" Icon="emoji_events" ButtonStyle="ButtonStyle.Primary" Click="@OpenAchievements" /></RadzenStack></RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
             <RadzenCard>
                 <RadzenStack Gap="0.75rem">
                     <RadzenText Text="DKP Presets" TextStyle="TextStyle.H5" />
@@ -71,4 +74,5 @@
     private void OpenLootReserve() => NavigationManager.NavigateTo("/admin/loot-reserve");
     private void OpenShopCatalog() => NavigationManager.NavigateTo("/admin/shop");
     private void OpenShopPurchases() => NavigationManager.NavigateTo("/admin/shop/purchases");
+    private void OpenAchievements() => NavigationManager.NavigateTo("/admin/achievements");
 }

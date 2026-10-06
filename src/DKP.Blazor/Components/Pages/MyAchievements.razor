@@ -1,0 +1,53 @@
+@page "/my-achievements"
+@attribute [Authorize]
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IAchievementQueries AchievementQueries
+@inject NotificationService NotificationService
+
+<PageTitle>My Achievements</PageTitle>
+@if (loading)
+{
+    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height:16rem;"><RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" /><RadzenText Text="Loading achievements..." /></RadzenStack>
+}
+else
+{
+    <RadzenStack Gap="1.5rem">
+        <div><h1>My Achievements</h1><RadzenText Text="Achievements awarded to you by an Officer." TextStyle="TextStyle.Subtitle2" /></div>
+        <RadzenCard>
+            <RadzenText Text="Active achievements" TextStyle="TextStyle.H5" />
+            @if (!achievements.Any(x => x.IsActive))
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" Style="margin-top:1rem;">You do not have any active achievements yet.</RadzenAlert>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@achievements.Where(x => x.IsActive)" TItem="UserAchievementDto" AllowPaging="true" PageSize="10" AllowSorting="true" Style="margin-top:1rem;">
+                    <Columns><RadzenDataGridColumn TItem="UserAchievementDto" Property="AchievementName" Title="Achievement" /><RadzenDataGridColumn TItem="UserAchievementDto" Property="DkpAmount" Title="DKP" /><RadzenDataGridColumn TItem="UserAchievementDto" Property="GrantedAtUtc" Title="Awarded"><Template Context="item">@item.GrantedAtUtc.ToLocalTime().ToString("g")</Template></RadzenDataGridColumn></Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+        <RadzenCard>
+            <RadzenText Text="Achievement history" TextStyle="TextStyle.H5" />
+            @if (!achievements.Any(x => !x.IsActive))
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" Style="margin-top:1rem;">There are no revoked achievements.</RadzenAlert>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@achievements.Where(x => !x.IsActive)" TItem="UserAchievementDto" AllowPaging="true" PageSize="10" AllowSorting="true" Style="margin-top:1rem;"><Columns><RadzenDataGridColumn TItem="UserAchievementDto" Property="AchievementName" Title="Achievement" /><RadzenDataGridColumn TItem="UserAchievementDto" Property="DkpAmount" Title="Original DKP" /><RadzenDataGridColumn TItem="UserAchievementDto" Property="GrantedAtUtc" Title="Awarded"><Template Context="item">@item.GrantedAtUtc.ToLocalTime().ToString("g")</Template></RadzenDataGridColumn><RadzenDataGridColumn TItem="UserAchievementDto" Property="RevokedAtUtc" Title="Revoked"><Template Context="item">@item.RevokedAtUtc?.ToLocalTime().ToString("g")</Template></RadzenDataGridColumn></Columns></RadzenDataGrid>
+            }
+        </RadzenCard>
+    </RadzenStack>
+}
+
+@code {
+    private IReadOnlyList<UserAchievementDto> achievements = [];
+    private bool loading = true;
+    protected override async Task OnInitializedAsync()
+    {
+        try { achievements = await AchievementQueries.GetUserAchievementsAsync(); }
+        catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to load achievements", ex.Message); }
+        finally { loading = false; }
+    }
+}

@@ -137,7 +137,7 @@ public sealed class ReplayAndActivityTests : DatabaseTest
     public async Task New_baseline_has_no_pending_changes_and_expected_seed_and_relations()
     {
         await using var db = Factory.CreateDbContext();
-        Assert.Equal(4, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.Equal(5, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
         Assert.False(db.Database.HasPendingModelChanges());
         Assert.Equal(0, (await db.GuildSettings.SingleAsync()).DefaultReserveLimit);

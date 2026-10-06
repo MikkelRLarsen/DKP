@@ -23,7 +23,7 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 12 | DKP management presets | Færdig |
 | 12a | Legacy cleanup og event-konsolidering | Implementeret; event-store uden persisted projections |
 | 13 | DKP acquisition overview | Færdig |
-| 13a | Achievement-baserede DKP awards | Planlagt |
+| 13a | Achievement-baserede DKP awards | Færdig |
 | 13b | Achievement-gated shop-items | Planlagt |
 | 13c | DKP-anmodninger fra Sources | Færdig |
 | 13d | Consume LootReserve og revert seneste batch | Færdig |
@@ -712,7 +712,7 @@ Leveret:
 
 ## Slice 13a – Achievement-baserede DKP awards
 
-Status: Planlagt.
+Status: Færdig.
 
 Achievements registreres manuelt af Officers og knyttes til brugeren på guild-systemniveau, ikke til en character. En Officer kan oprette achievement definitions med key, navn, beskrivelse og DKP-belønning samt give eller fjerne et achievement for flere valgte brugere på én gang.
 
@@ -723,7 +723,21 @@ Planlagte modeller:
 - `AchievementDefinition`: `Id`, `Key`, `Name`, `Description`, `DkpAmount`, `IsActive`, `CreatedAtUtc`, `UpdatedAtUtc`.
 - `UserAchievement`: bruger, achievement, grant-audit og revoke-audit med timestamps og Officer IDs.
 
-Der skal være Officer-only UI, Facade-kontrakter, Application commands, Infrastructure persistence, migration og tests for authorization, multi-user atomicitet, duplicate grants, revoke/refund og re-grant.
+Leveret:
+
+- Officer-only `/admin/achievements` med definition CRUD, aktivering/deaktivering, multi-select grant og revoke.
+- Authenticated members kan se egne aktive achievements og achievement-historik på `/my-achievements`, og navigationen indeholder links til både member- og Officer-siden.
+- Achievement-definitioner og brugergrant gemmes som almindelige entities med grant/revoke-audit og eventreferencer.
+- Grant opretter et positivt `DkpPosted`-event med `AchievementId`; revoke opretter et modgående negativt event.
+- Members kan ikke oprette, tildele eller revoke achievements; blokering og target-validering håndhæves i Application.
+- En aktiv achievement kan ikke tildeles samme bruger to gange. Efter revoke kan den tildeles igen.
+- Facade-kontrakter, Application commands, Infrastructure repository/query og IoC-registrering er tilføjet.
+- Migrationen `Slice13aAchievements` er genereret.
+
+Kendte begrænsninger:
+
+- Achievement-events er ikke selv en del af DKP acquisition sources endnu; det hører til en senere udvidelse.
+- Grant/revoke-history vises på Officer-siden, mens almindelige brugeroversigter fortsat fokuserer på DKP-balance og historik.
 
 ## Slice 13b – Achievement-gated shop-items
 

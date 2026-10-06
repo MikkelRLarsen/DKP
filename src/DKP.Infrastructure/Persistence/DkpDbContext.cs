@@ -11,6 +11,8 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<DkpAwardRequest> DkpAwardRequests => Set<DkpAwardRequest>();
     public DbSet<GuildSetting> GuildSettings => Set<GuildSetting>();
     public DbSet<DkpEvent> DkpEvents => Set<DkpEvent>();
+    public DbSet<AchievementDefinition> AchievementDefinitions => Set<AchievementDefinition>();
+    public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
 
     private void GuardEvents()
     {
@@ -70,6 +72,25 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.HasOne<DkpAwardPreset>().WithMany().HasForeignKey(x => x.PresetId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<DkpEvent>().WithMany().HasForeignKey(x => x.DkpEventId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<AchievementDefinition>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.Key).IsUnique();
+            e.Property(x => x.Key).HasMaxLength(64);
+            e.Property(x => x.Name).HasMaxLength(128);
+            e.Property(x => x.Description).HasMaxLength(500);
+        });
+        model.Entity<UserAchievement>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.UserId, x.AchievementId, x.RevokedAtUtc });
+            e.HasOne<AchievementDefinition>().WithMany().HasForeignKey(x => x.AchievementId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.GrantedByUserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.RevokedByUserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<DkpEvent>().WithMany().HasForeignKey(x => x.GrantDkpEventId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<DkpEvent>().WithMany().HasForeignKey(x => x.RevokeDkpEventId).OnDelete(DeleteBehavior.Restrict);
         });
         model.Entity<DkpEvent>(e =>
         {

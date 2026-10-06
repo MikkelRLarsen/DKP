@@ -4,7 +4,7 @@ namespace DKP.Domain;
 
 public interface ILedgerPayload { int Amount { get; } string Reason { get; } }
 public enum LootReserveModifierType { SoftReserve, RollBonus }
-public sealed record DkpPosted([property: JsonRequired] int Amount, [property: JsonRequired] string Reason, Guid? PresetId = null) : ILedgerPayload;
+public sealed record DkpPosted([property: JsonRequired] int Amount, [property: JsonRequired] string Reason, Guid? PresetId = null, Guid? AchievementId = null) : ILedgerPayload;
 public sealed record PurchasePlaced([property: JsonRequired] Guid PurchaseId, [property: JsonRequired] Guid ItemId, [property: JsonRequired] string ItemKey, [property: JsonRequired] string ItemName, [property: JsonRequired] int Quantity, [property: JsonRequired] int UnitPrice, [property: JsonRequired] int? RollBonusValue) : ILedgerPayload
 {
     public int Amount => checked(-Quantity * UnitPrice);

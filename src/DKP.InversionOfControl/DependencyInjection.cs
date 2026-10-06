@@ -11,6 +11,7 @@ using DKP.Application.Shop;
 using DKP.Application.Presets;
 using DKP.Application.DkpAwardRequests;
 using DKP.Application.LootReserve;
+using DKP.Application.Achievements;
 
 using DKP.Facade.Commands;
 using DKP.Facade.Queries;
@@ -94,6 +95,9 @@ public static class DependencyInjection
 		services.AddScoped<ILootReserveConsumptionQueries, LootReserveConsumptionQueries>();
 		services.AddScoped<ILootReserveModifierCommands, LootReserveModifierCommandService>();
 		services.AddScoped<ILootReserveModifierQueries, LootReserveModifierQueries>();
+		services.AddScoped<IAchievementCommands, AchievementCommandService>();
+		services.AddScoped<IAchievementQueries, AchievementQueries>();
+		services.AddScoped<IAchievementRepository, AchievementRepository>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));
 		services.AddAuthentication(options =>

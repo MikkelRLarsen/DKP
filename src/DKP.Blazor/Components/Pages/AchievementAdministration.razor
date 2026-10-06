@@ -1,0 +1,72 @@
+@page "/admin/achievements"
+@attribute [Authorize(Roles = "Officer")]
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IAchievementQueries AchievementQueries
+@inject IAchievementCommands AchievementCommands
+@inject IUserAdministrationQueries UserQueries
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+<PageTitle>Achievements</PageTitle>
+<RadzenStack Gap="1rem">
+    <div><h1>Achievements</h1><RadzenText Text="Create achievements and award DKP to guild members." /></div>
+    <RadzenCard>
+        <RadzenStack Gap="0.75rem">
+            <RadzenText Text="Achievement definition" TextStyle="TextStyle.H5" />
+            <RadzenRow Gap="1rem">
+                <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Key" Style="width:100%;"><ChildContent><RadzenTextBox @bind-Value="form.Key" MaxLength="64" Style="width:100%;" /></ChildContent></RadzenFormField></RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Name" Style="width:100%;"><ChildContent><RadzenTextBox @bind-Value="form.Name" MaxLength="128" Style="width:100%;" /></ChildContent></RadzenFormField></RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="2"><RadzenFormField Text="DKP" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int" @bind-Value="form.DkpAmount" Min="1" Style="width:100%;" /></ChildContent></RadzenFormField></RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Description" Style="width:100%;"><ChildContent><RadzenTextBox @bind-Value="form.Description" MaxLength="500" Style="width:100%;" /></ChildContent></RadzenFormField></RadzenColumn>
+            </RadzenRow>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                <RadzenButton Text="@(editingId is null ? "Create" : "Save")" Icon="save" Click="SaveAsync" Disabled="@busy" />
+                @if (editingId is not null) { <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="CancelEdit" Disabled="@busy" /> }
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenCard>
+    <RadzenDataGrid Data="@definitions" TItem="AchievementDefinitionDto" AllowPaging="true" AllowSorting="true" AllowFiltering="true" EmptyText="No achievements found.">
+        <Columns>
+            <RadzenDataGridColumn TItem="AchievementDefinitionDto" Property="Name" Title="Name" />
+            <RadzenDataGridColumn TItem="AchievementDefinitionDto" Property="Key" Title="Key" />
+            <RadzenDataGridColumn TItem="AchievementDefinitionDto" Property="DkpAmount" Title="DKP" />
+            <RadzenDataGridColumn TItem="AchievementDefinitionDto" Property="Description" Title="Description" />
+            <RadzenDataGridColumn TItem="AchievementDefinitionDto" Property="IsActive" Title="Status" />
+            <RadzenDataGridColumn TItem="AchievementDefinitionDto" Title="Actions" Sortable="false" Filterable="false"><Template Context="item"><RadzenButton Text="Edit" Size="ButtonSize.Small" Click="@(() => BeginEdit(item))" /><RadzenButton Text="@(item.IsActive ? "Deactivate" : "Activate")" Size="ButtonSize.Small" ButtonStyle="@(item.IsActive ? ButtonStyle.Light : ButtonStyle.Success)" Click="@(() => ToggleAsync(item))" Disabled="@busy" /></Template></RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+    <RadzenCard>
+        <RadzenText Text="Award achievement" TextStyle="TextStyle.H5" />
+        <RadzenStack Gap="0.75rem">
+            <RadzenDropDown TValue="Guid?" @bind-Value="selectedAchievementId" Data="@activeDefinitions" TextProperty="Name" ValueProperty="Id" Placeholder="Select achievement" Style="width:100%;" />
+            <RadzenDropDown TValue="IEnumerable<Guid>" @bind-Value="selectedUserIds" Data="@users" TextProperty="DisplayName" ValueProperty="Id" Multiple="true" AllowFiltering="true" Placeholder="Select guild members" Style="width:100%;" />
+            <RadzenButton Text="Grant DKP" Icon="emoji_events" ButtonStyle="ButtonStyle.Success" Click="GrantAsync" Disabled="@(busy || selectedAchievementId is null || !selectedUserIds.Any())" />
+        </RadzenStack>
+    </RadzenCard>
+    <RadzenDataGrid Data="@userAchievements" TItem="UserAchievementDto" AllowPaging="true" AllowSorting="true" EmptyText="No achievement grants found.">
+        <Columns><RadzenDataGridColumn TItem="UserAchievementDto" Property="DiscordName" Title="Player" /><RadzenDataGridColumn TItem="UserAchievementDto" Property="AchievementName" Title="Achievement" /><RadzenDataGridColumn TItem="UserAchievementDto" Property="DkpAmount" Title="DKP" /><RadzenDataGridColumn TItem="UserAchievementDto" Property="IsActive" Title="Active" /><RadzenDataGridColumn TItem="UserAchievementDto" Title="Action" Sortable="false"><Template Context="item">@if (item.IsActive) { <RadzenButton Text="Revoke" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => RevokeAsync(item))" Disabled="@busy" /> }</Template></RadzenDataGridColumn></Columns>
+    </RadzenDataGrid>
+</RadzenStack>
+
+@code {
+    private IReadOnlyList<AchievementDefinitionDto> definitions = [];
+    private IReadOnlyList<UserSummary> users = [];
+    private IReadOnlyList<UserAchievementDto> userAchievements = [];
+    private IEnumerable<Guid> selectedUserIds = [];
+    private Guid? selectedAchievementId;
+    private Guid? editingId;
+    private bool busy;
+    private readonly Form form = new();
+    private IEnumerable<AchievementDefinitionDto> activeDefinitions => definitions.Where(x => x.IsActive);
+    protected override async Task OnInitializedAsync() { await ReloadAsync(); }
+    private async Task ReloadAsync() { definitions = await AchievementQueries.GetDefinitionsAsync(); users = (await UserQueries.GetAllAsync()).Where(x => !x.IsBlocked).ToArray(); userAchievements = await AchievementQueries.GetUserAchievementsAsync(); }
+    private void BeginEdit(AchievementDefinitionDto item) { editingId = item.Id; form.Key = item.Key; form.Name = item.Name; form.Description = item.Description; form.DkpAmount = item.DkpAmount; }
+    private void CancelEdit() { editingId = null; form.Reset(); }
+    private async Task SaveAsync() { if (busy) return; busy = true; try { var input = new AchievementInput(form.Key, form.Name, form.Description, form.DkpAmount); if (editingId is Guid id) await AchievementCommands.UpdateAsync(id, input); else await AchievementCommands.CreateAsync(input); CancelEdit(); await ReloadAsync(); NotificationService.Notify(NotificationSeverity.Success, "Saved", "Achievement definition saved."); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to save", ex.Message); } finally { busy = false; } }
+    private async Task ToggleAsync(AchievementDefinitionDto item) { if (busy || await DialogService.Confirm($"{(item.IsActive ? "Deactivate" : "Activate")} {item.Name}?", "Confirm") != true) return; busy = true; try { await AchievementCommands.SetActiveAsync(item.Id, !item.IsActive); await ReloadAsync(); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to update", ex.Message); } finally { busy = false; } }
+    private async Task GrantAsync() { if (busy || selectedAchievementId is not Guid achievementId) return; busy = true; try { var result = await AchievementCommands.GrantAsync(achievementId, selectedUserIds.ToArray()); selectedUserIds = []; await ReloadAsync(); NotificationService.Notify(NotificationSeverity.Success, "Achievement granted", $"Granted to {result.Count} player(s)."); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to grant achievement", ex.Message); } finally { busy = false; } }
+    private async Task RevokeAsync(UserAchievementDto item) { if (busy || await DialogService.Confirm($"Revoke {item.AchievementName} from {item.DiscordName}?", "Confirm revoke") != true) return; busy = true; try { await AchievementCommands.RevokeAsync(item.Id); await ReloadAsync(); NotificationService.Notify(NotificationSeverity.Success, "Achievement revoked", "The DKP was reversed."); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to revoke achievement", ex.Message); } finally { busy = false; } }
+    private sealed class Form { public string Key { get; set; } = ""; public string Name { get; set; } = ""; public string Description { get; set; } = ""; public int DkpAmount { get; set; } = 1; public void Reset() { Key = Name = Description = ""; DkpAmount = 1; } }
+}
