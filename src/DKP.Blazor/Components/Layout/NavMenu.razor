@@ -2,7 +2,9 @@
     <RadzenPanelMenuItem Text="Dashboard" Icon="dashboard" Path="/" />
     <AuthorizeView>
         <Authorized>
-            <RadzenPanelMenuItem Text="My DKP" Icon="account_balance_wallet" Path="/my-dkp" />
+            <RadzenPanelMenuItem Text="My DKP" Icon="account_balance_wallet" Path="/my-dkp">
+                <RadzenPanelMenuItem Text="Ways to Earn DKP" Icon="trending_up" Path="/my-dkp/sources" />
+            </RadzenPanelMenuItem>
             <RadzenPanelMenuItem Text="My Purchases" Icon="shopping_bag" Path="/my-purchases" />
             <RadzenPanelMenuItem Text="DKP Shop" Icon="shopping_cart" Path="/dkp-shop" />
             <RadzenPanelMenuItem Text="Guild Members" Icon="groups" Path="/members" />

@@ -696,9 +696,16 @@ De slettede legacy-filer/migrationer kan genfindes i Git-historikken.
 
 ## Slice 13 – DKP acquisition overview
 
-Status: Planlagt.
+Status: Færdig.
 
-Tilføj `/my-dkp/sources` med aktive DKP-presets, beløb, årsag, anvendelser, maksimum og resterende muligheder. Presets, hvor brugeren har nået maksimum, skjules. Oversigten er informativ; kun Officers kan anvende presets.
+Leveret:
+
+- `/my-dkp/sources` med navnet **Ways to Earn DKP** for authenticated brugere.
+- Viser aktive DKP-presets med beløb, årsag, anvendelser, maksimum og resterende muligheder.
+- Presets med opbrugt lifetime-limit eller som er deaktiverede vises ikke.
+- Usage beregnes fra event-store replay via den eksisterende preset-query; der gemmes ingen ny projection.
+- Siden er informativ, og Members kan ikke selv anvende eller claime DKP.
+- Tilføjet navigation under My DKP samt host smoke-test og query-test for filtrering og remaining count.
 
 ## Slice 13a – Achievement-baserede DKP awards
 

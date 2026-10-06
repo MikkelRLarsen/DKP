@@ -7,6 +7,7 @@ using DKP.Facade.Contracts;
 using DKP.Facade.Queries;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -29,7 +30,7 @@ public sealed class HostSmokeTests : DatabaseTest
         await using var host = new SmokeHost(ConnectionString);
         using var member = host.CreateClient(new() { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false });
         member.DefaultRequestHeaders.Add("X-Test-User", "member");
-        foreach (var path in new[] { "/", "/members", $"/members/{Member.Id}", "/my-dkp", "/dkp-shop", "/my-purchases", "/activity" })
+        foreach (var path in new[] { "/", "/members", $"/members/{Member.Id}", "/my-dkp", "/my-dkp/sources", "/dkp-shop", "/my-purchases", "/activity" })
         {
             var response = await member.GetAsync(path);
             var html = await response.Content.ReadAsStringAsync();
@@ -103,6 +104,7 @@ public sealed class HostSmokeTests : DatabaseTest
             builder.UseEnvironment("Development");
             builder.ConfigureTestServices(services =>
             {
+                services.AddDataProtection().UseEphemeralDataProtectionProvider();
                 services.AddAuthentication(options =>
                 {
                     options.DefaultAuthenticateScheme = "Test";

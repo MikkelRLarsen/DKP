@@ -1,0 +1,84 @@
+@page "/my-dkp/sources"
+@attribute [Authorize]
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IDkpPresetQueries PresetQueries
+@inject NotificationService NotificationService
+
+<PageTitle>Ways to Earn DKP</PageTitle>
+
+@if (loading)
+{
+    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        <RadzenText Text="Loading available DKP sources..." />
+    </RadzenStack>
+}
+else if (sources is null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load available DKP sources.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1.5rem">
+        <div>
+            <h1>Ways to Earn DKP</h1>
+            <RadzenText Text="These are the active DKP awards you can still receive from an Officer." TextStyle="TextStyle.Subtitle2" />
+        </div>
+
+        @if (sources.Count == 0)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Info">
+                There are no remaining DKP awards available for you right now.
+            </RadzenAlert>
+        }
+        else
+        {
+            <RadzenCard>
+                <RadzenDataGrid Data="@sources" TItem="DkpAcquisitionSourceDto" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No available DKP sources found.">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Property="Name" Title="Source" />
+                        <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Property="Amount" Title="DKP">
+                            <Template Context="source">
+                                <RadzenBadge Text="@($"+{source.Amount}")" BadgeStyle="BadgeStyle.Success" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Property="Reason" Title="Reason" />
+                        <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Property="Applications" Title="Used" />
+                        <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Property="MaxApplications" Title="Maximum" />
+                        <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Property="Remaining" Title="Remaining">
+                            <Template Context="source">
+                                <RadzenBadge Text="@source.Remaining.ToString()" BadgeStyle="BadgeStyle.Info" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenCard>
+
+            <RadzenAlert AlertStyle="AlertStyle.Info">
+                DKP awards are applied by an Officer through DKP Management. This page is informational only.
+            </RadzenAlert>
+        }
+    </RadzenStack>
+}
+
+@code {
+    private IReadOnlyList<DkpAcquisitionSourceDto>? sources;
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            sources = await PresetQueries.GetAvailableSourcesAsync();
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load DKP sources", exception.Message);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

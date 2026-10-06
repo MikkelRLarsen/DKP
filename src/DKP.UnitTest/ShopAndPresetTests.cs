@@ -121,6 +121,28 @@ public sealed class ShopAndPresetTests : DatabaseTest
     }
 
     [Fact]
+    public async Task Acquisition_sources_show_remaining_active_presets_for_authenticated_user()
+    {
+        var admin = As("officer");
+        var available = await admin.Presets.CreateAsync(new("Raid attendance", 10, "Attend the raid", 2));
+        var exhausted = await admin.Presets.CreateAsync(new("One-time award", 25, "One time", 1));
+        var inactive = await admin.Presets.CreateAsync(new("Inactive award", 5, "Inactive", 3));
+        await admin.Presets.SetActiveAsync(inactive.Id, false);
+        await admin.Presets.ApplyAsync(Member.Id, exhausted.Id);
+
+        var sources = await new DkpPresetQueries(As("member").Queries).GetAvailableSourcesAsync();
+
+        var source = Assert.Single(sources);
+        Assert.Equal(available.Id, source.PresetId);
+        Assert.Equal("Raid attendance", source.Name);
+        Assert.Equal(10, source.Amount);
+        Assert.Equal("Attend the raid", source.Reason);
+        Assert.Equal(0, source.Applications);
+        Assert.Equal(2, source.MaxApplications);
+        Assert.Equal(2, source.Remaining);
+    }
+
+    [Fact]
     public async Task Concurrent_preset_applications_cannot_exceed_lifetime_limit()
     {
         var preset = await As("officer").Presets.CreateAsync(new("Once", 10, "Once only", 1));
