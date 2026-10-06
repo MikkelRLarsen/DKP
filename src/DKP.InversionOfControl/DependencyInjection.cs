@@ -92,6 +92,8 @@ public static class DependencyInjection
 		services.AddScoped<ILootReserveCommands, LootReserveCommandService>();
 		services.AddScoped<ILootReserveConsumptionCommands, LootReserveConsumptionCommandService>();
 		services.AddScoped<ILootReserveConsumptionQueries, LootReserveConsumptionQueries>();
+		services.AddScoped<ILootReserveModifierCommands, LootReserveModifierCommandService>();
+		services.AddScoped<ILootReserveModifierQueries, LootReserveModifierQueries>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));
 		services.AddAuthentication(options =>

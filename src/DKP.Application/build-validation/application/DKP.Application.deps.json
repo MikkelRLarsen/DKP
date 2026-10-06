@@ -1,0 +1,53 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "DKP.Application/1.0.0": {
+        "dependencies": {
+          "DKP.Domain": "1.0.0",
+          "DKP.Facade": "1.0.0"
+        },
+        "runtime": {
+          "DKP.Application.dll": {}
+        }
+      },
+      "DKP.Domain/1.0.0": {
+        "runtime": {
+          "DKP.Domain.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "DKP.Facade/1.0.0": {
+        "runtime": {
+          "DKP.Facade.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "DKP.Application/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "DKP.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "DKP.Facade/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

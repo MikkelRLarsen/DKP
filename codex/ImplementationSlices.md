@@ -22,9 +22,12 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 11 | Guild membership ved OAuth og blokering af medlemmer | Færdig |
 | 12 | DKP management presets | Færdig |
 | 12a | Legacy cleanup og event-konsolidering | Implementeret; event-store uden persisted projections |
-| 13 | DKP acquisition overview | Planlagt |
+| 13 | DKP acquisition overview | Færdig |
 | 13a | Achievement-baserede DKP awards | Planlagt |
 | 13b | Achievement-gated shop-items | Planlagt |
+| 13c | DKP-anmodninger fra Sources | Færdig |
+| 13d | Consume LootReserve og revert seneste batch | Færdig |
+| 13e | LootReserve modifiers | Færdig |
 | 14 | Deployment og production hardening | Planlagt |
 
 ## Arkitektoniske regler
@@ -776,6 +779,41 @@ Kendte begrænsninger:
 - “Striket” og “export-ready” er UI-state; backend modtager kun de valgte bruger-ID’er og genvaliderer den faktiske event-state.
 - Consume bruger hele den aktive SoftReserve-purchase quantity og hele den aktive RollBonus-enhed pr. bruger.
 - Consume/revert er Officer-only og påvirker ikke DKP-balance eller historiske køb.
+
+## Slice 13e – LootReserve modifiers
+
+Status: Implementeret.
+
+Formålet er at give Officers mulighed for at tildele midlertidige negative modifiers til SoftReserve eller RollBonus i et begrænset antal LootReserve-consume-batches. Modifiers ændrer ikke køb, DKP-balance eller historiske events.
+
+Plan:
+
+- Officer kan tildele `-SoftReserve` eller `-RollBonus` til én eller flere brugere med årsag og antal resterende exports/raids.
+- Modifiers gemmes som immutable events og replayes i memory. Der oprettes ingen persisted projection.
+- En modifier påvirker den faktiske LootReserve-export og forbruges kun ved en succesfuld consume-batch.
+- Effective-værdier beregnes med minimum 0. Midlertidige CSV-overrides ændrer ikke modifier-state.
+- Consume/revert bruger samme `ConsumeBatchId`, så et revert også genskaber modifierens resterende anvendelser.
+- UI viser aktive modifiers, resterende anvendelser og effective SoftReserve/RollBonus på `/admin/loot-reserve`.
+- Multi-user assignment er atomisk, Officer-only og beskyttet mod blokerede brugere, ugyldige beløb og dobbeltklik.
+
+Forventede events:
+
+- `LootReserveModifierGranted`.
+- `LootReserveModifierConsumed`.
+- `LootReserveModifierRevoked`.
+
+Verificeret:
+
+- Immutable modifier-events og event-store replay er implementeret.
+- SoftReserve/RollBonus penalties trækkes fra effective LootReserve-værdier og bliver aldrig negative.
+- Modifier-forbrug kobles til `ConsumeBatchId`, og revert genskaber resterende anvendelser.
+- Officer-only grant/revoke, multi-user assignment, confirmation og active modifier overview er implementeret.
+- Solution build og testsuite passerer; replay-tests dækker grant, consume, revert og dobbeltforbrug.
+
+Kendte begrænsninger:
+
+- En modifier forbruges ved en succesfuld LootReserve consume-batch, ikke ved blot at generere tekst.
+- Der kræves ingen migration, fordi modifiers gemmes som JSON events i den eksisterende event-store.
 
 ## Slice 14 – Deployment og production hardening
 

@@ -7,6 +7,8 @@
 @inject ILootReserveCommands LootReserveCommands
 @inject ILootReserveConsumptionCommands LootReserveConsumptionCommands
 @inject ILootReserveConsumptionQueries LootReserveConsumptionQueries
+@inject ILootReserveModifierCommands LootReserveModifierCommands
+@inject ILootReserveModifierQueries LootReserveModifierQueries
 @inject NotificationService NotificationService
 @inject DialogService DialogService
 @inject IJSRuntime JS
@@ -38,6 +40,44 @@
                 }
                 <RadzenButton Text="Copy CSV text" Icon="content_copy" ButtonStyle="ButtonStyle.Success" Click="CopyTextAsync" Disabled="@string.IsNullOrEmpty(exportText)" />
             </RadzenStack>
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenText Text="LootReserve modifiers" TextStyle="TextStyle.H5" />
+            <RadzenText Text="Apply a temporary penalty to the next successful LootReserve exports." TextStyle="TextStyle.Body2" />
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
+                <RadzenFormField Text="Players" Style="min-width:280px;">
+                    <ChildContent><RadzenDropDown TValue="IEnumerable<Guid>" @bind-Value="selectedModifierUsers" Data="@rows" TextProperty="DiscordName" ValueProperty="UserId" Multiple="true" AllowFiltering="true" Placeholder="Select players" Style="width:100%;" /></ChildContent>
+                </RadzenFormField>
+                <RadzenFormField Text="Type">
+                    <ChildContent><RadzenDropDown TValue="LootReserveModifierKind" @bind-Value="modifierKind" Data="@modifierKinds" Style="width:160px;" /></ChildContent>
+                </RadzenFormField>
+                <RadzenFormField Text="Penalty">
+                    <ChildContent><RadzenNumeric TValue="int" @bind-Value="modifierAmount" Min="1" /></ChildContent>
+                </RadzenFormField>
+                <RadzenFormField Text="Exports">
+                    <ChildContent><RadzenNumeric TValue="int" @bind-Value="modifierExports" Min="1" /></ChildContent>
+                </RadzenFormField>
+                <RadzenFormField Text="Reason" Style="min-width:220px;">
+                    <ChildContent><RadzenTextBox @bind-Value="modifierReason" MaxLength="500" Style="width:100%;" /></ChildContent>
+                </RadzenFormField>
+                <RadzenButton Text="Grant modifier" Icon="add" ButtonStyle="ButtonStyle.Warning" Click="GrantModifierAsync" Disabled="@modifierBusy" />
+            </RadzenStack>
+            @if (activeModifiers.Count > 0)
+            {
+                <RadzenDataGrid Data="@activeModifiers" TItem="LootReserveModifierDto" AllowPaging="false" AllowSorting="true" class="rz-mt-3">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="LootReserveModifierDto" Property="DiscordName" Title="Player" />
+                        <RadzenDataGridColumn TItem="LootReserveModifierDto" Property="Kind" Title="Type" />
+                        <RadzenDataGridColumn TItem="LootReserveModifierDto" Property="Amount" Title="Penalty" />
+                        <RadzenDataGridColumn TItem="LootReserveModifierDto" Property="RemainingExports" Title="Remaining exports" />
+                        <RadzenDataGridColumn TItem="LootReserveModifierDto" Property="Reason" Title="Reason" />
+                        <RadzenDataGridColumn TItem="LootReserveModifierDto" Title="Action" Sortable="false">
+                            <Template Context="modifier"><RadzenButton Text="Revoke" Icon="undo" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(() => RevokeModifierAsync(modifier))" Disabled="@modifierBusy" /></Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
         </RadzenCard>
 
         <RadzenDataGrid @ref="grid" Data="@rows" TItem="LootReserveRow" AllowPaging="true" PageSize="25" AllowSorting="true" RowRender="RowRender" EmptyText="No guild members found.">
@@ -103,6 +143,14 @@
     private bool saving;
     private bool consumeBusy;
     private LootReserveConsumptionBatchDto? latestBatch;
+    private IEnumerable<Guid> selectedModifierUsers = [];
+    private LootReserveModifierKind modifierKind = LootReserveModifierKind.SoftReserve;
+    private readonly LootReserveModifierKind[] modifierKinds = Enum.GetValues<LootReserveModifierKind>();
+    private int modifierAmount = 1;
+    private int modifierExports = 1;
+    private string? modifierReason;
+    private List<LootReserveModifierDto> activeModifiers = [];
+    private bool modifierBusy;
     private string LatestSummary => latestBatch is null
         ? string.Empty
         : $"{latestBatch.CreatedAtUtc.ToLocalTime():g} · {latestBatch.PlayerCount} players · {latestBatch.SoftReserveQuantity} SoftReserves · {latestBatch.RollBonusCount} RollBonus";
@@ -116,6 +164,7 @@
             defaultReserveLimit = settings.DefaultReserveLimit;
             rows = members.Select(member => new LootReserveRow(member)).ToList();
             latestBatch = await LootReserveConsumptionQueries.GetLatestConsumptionBatchAsync();
+            activeModifiers = (await LootReserveModifierQueries.GetActiveAsync()).ToList();
         }
         catch (Exception exception)
         {
@@ -163,6 +212,11 @@
         {
             var preview = await LootReserveConsumptionCommands.PreviewConsumeAsync(selectedIds);
             var skipped = rows.Count(row => !row.IsReady || row.Struck);
+            if (preview.Batch.PlayerCount == 0)
+            {
+                NotificationService.Notify(NotificationSeverity.Info, "Nothing to consume", "The selected players have no active SoftReserves or RollBonus.");
+                return;
+            }
             var message = $"This will consume {preview.Batch.SoftReserveQuantity} SoftReserves for {preview.Batch.PlayerCount} players and {preview.Batch.RollBonusCount} RollBonus value(s). {skipped} row(s) will be skipped. Continue?";
             if (await DialogService.Confirm(message, "Use SR and RollBonus") != true) return;
 
@@ -204,6 +258,36 @@
         var members = await LootReserveQueries.GetMembersAsync();
         rows = members.Select(member => new LootReserveRow(member)).ToList();
         latestBatch = await LootReserveConsumptionQueries.GetLatestConsumptionBatchAsync();
+        activeModifiers = (await LootReserveModifierQueries.GetActiveAsync()).ToList();
+    }
+
+    private async Task GrantModifierAsync()
+    {
+        if (modifierBusy || !selectedModifierUsers.Any()) return;
+        modifierBusy = true;
+        try
+        {
+            var result = await LootReserveModifierCommands.GrantAsync(selectedModifierUsers.ToArray(), new CreateLootReserveModifierRequest(modifierKind, modifierAmount, modifierExports, modifierReason ?? string.Empty));
+            await ReloadRowsAsync();
+            selectedModifierUsers = [];
+            NotificationService.Notify(NotificationSeverity.Success, "Modifier granted", $"Modifier granted to {result.Count} player(s).");
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to grant modifier", exception.Message); }
+        finally { modifierBusy = false; }
+    }
+
+    private async Task RevokeModifierAsync(LootReserveModifierDto modifier)
+    {
+        if (modifierBusy || await DialogService.Confirm($"Revoke the {modifier.Kind} modifier for {modifier.DiscordName}?", "Confirm revoke") != true) return;
+        modifierBusy = true;
+        try
+        {
+            await LootReserveModifierCommands.RevokeAsync(modifier.ModifierId);
+            await ReloadRowsAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Modifier revoked", "The modifier was revoked.");
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to revoke modifier", exception.Message); }
+        finally { modifierBusy = false; }
     }
 
     private async Task CopyTextAsync()

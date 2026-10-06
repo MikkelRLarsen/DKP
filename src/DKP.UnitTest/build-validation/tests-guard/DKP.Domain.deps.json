@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "DKP.Domain/1.0.0": {
+        "runtime": {
+          "DKP.Domain.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "DKP.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

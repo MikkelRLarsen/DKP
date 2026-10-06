@@ -7,12 +7,15 @@ public sealed class LedgerReplayState
     private readonly List<LedgerActivityState> activities = [];
     private readonly Dictionary<Guid, LedgerConsumptionState> consumptions = [];
     private readonly HashSet<Guid> revertedConsumptions = [];
+    private readonly Dictionary<Guid, LedgerModifierState> modifiers = [];
+    private readonly Dictionary<Guid, LedgerModifierConsumptionState> modifierConsumptions = [];
 
     public int Balance { get; private set; }
     public IReadOnlyDictionary<Guid, LedgerPurchaseState> Purchases => purchases;
     public IReadOnlyDictionary<Guid, int> PresetUsage => presetUsage;
     public IReadOnlyList<LedgerActivityState> Activities => activities;
     public IReadOnlyDictionary<Guid, LedgerConsumptionState> Consumptions => consumptions;
+    public IReadOnlyDictionary<Guid, LedgerModifierState> Modifiers => modifiers;
 
     public static LedgerReplayState Replay(IEnumerable<DkpEvent> events)
     {
@@ -70,9 +73,11 @@ public sealed class LedgerReplayState
                     if (bonusPurchases.Length > 1)
                         throw new InvalidOperationException("Consumption references multiple RollBonus purchases.");
                     var rollBonus = bonusPurchases.Select(x => x.RollBonusValue).SingleOrDefault();
-                    if (softQuantity != consumed.SoftReserveQuantity || rollBonus != consumed.RollBonusValue)
+                    if (sourcePurchases.Length == 0 && (consumed.SoftReserveQuantity != 0 || consumed.RollBonusValue is not null))
+                        throw new InvalidOperationException("An empty consumption must have no purchase values.");
+                    if (sourcePurchases.Length > 0 && (softQuantity != consumed.SoftReserveQuantity || rollBonus != consumed.RollBonusValue))
                         throw new InvalidOperationException("Consumption payload does not match its purchases.");
-                    if (softQuantity == 0 && rollBonus is null)
+                    if (sourcePurchases.Length > 0 && softQuantity == 0 && rollBonus is null)
                         throw new InvalidOperationException("Consumption contains no active LootReserve state.");
                     foreach (var purchase in sourcePurchases) purchase.Consume();
                     state.consumptions.Add(entry.Id, new LedgerConsumptionState(entry.Id, consumed.ConsumeBatchId, entry.UserId, consumed.SourcePurchaseIds, entry.OccurredAtUtc));
@@ -85,6 +90,31 @@ public sealed class LedgerReplayState
                         throw new InvalidOperationException("Consumption was already reverted.");
                     foreach (var purchaseId in consumption.SourcePurchaseIds)
                         state.purchases[purchaseId].Restore();
+                    foreach (var modifierConsumption in state.modifierConsumptions.Values.Where(x => x.BatchId == reverted.ConsumeBatchId))
+                        state.modifiers[modifierConsumption.ModifierId].Restore();
+                    break;
+
+                case LootReserveModifierGranted granted:
+                    if (state.modifiers.ContainsKey(granted.ModifierId))
+                        throw new InvalidOperationException($"Duplicate LootReserve modifier {granted.ModifierId}.");
+                    state.modifiers.Add(granted.ModifierId, new LedgerModifierState(entry.UserId, granted));
+                    break;
+
+                case LootReserveModifierConsumed modifierConsumed:
+                    if (!state.modifiers.TryGetValue(modifierConsumed.ModifierId, out var modifier) || modifier.IsRevoked)
+                        throw new InvalidOperationException("Modifier consumption references an unknown or revoked modifier.");
+                    if (modifier.RemainingExports <= 0 || modifierConsumed.Amount != modifier.Amount)
+                        throw new InvalidOperationException("Modifier has no remaining exports.");
+                    modifier.Consume();
+                    if (state.modifierConsumptions.Values.Any(x => x.ModifierId == modifierConsumed.ModifierId && x.BatchId == modifierConsumed.ConsumeBatchId))
+                        throw new InvalidOperationException("Modifier was already consumed in this batch.");
+                    state.modifierConsumptions.Add(entry.Id, new LedgerModifierConsumptionState(entry.Id, modifierConsumed.ModifierId, modifierConsumed.ConsumeBatchId, modifierConsumed.Amount));
+                    break;
+
+                case LootReserveModifierRevoked revokedModifier:
+                    if (!state.modifiers.TryGetValue(revokedModifier.ModifierId, out var modifierToRevoke) || modifierToRevoke.IsRevoked)
+                        throw new InvalidOperationException("Modifier is unknown or already revoked.");
+                    modifierToRevoke.Revoke();
                     break;
             }
         }
@@ -94,6 +124,7 @@ public sealed class LedgerReplayState
 
     public int ActiveQuantity(Guid itemId) => purchases.Values.Where(x => x.ShopItemId == itemId && x.CancelledAtUtc is null).Sum(x => x.ActiveQuantity);
     public bool HasActiveRollBonus() => purchases.Values.Any(x => x.RollBonusValue is not null && x.CancelledAtUtc is null && !x.IsConsumed);
+    public int ActiveModifierAmount(LootReserveModifierType type) => modifiers.Values.Where(x => x.ModifierType == type && !x.IsRevoked).Sum(x => x.RemainingPenalty);
 }
 
 public sealed class LedgerPurchaseState
@@ -142,6 +173,21 @@ public sealed class LedgerPurchaseState
 }
 
 public sealed record LedgerConsumptionState(Guid EventId, Guid BatchId, Guid UserId, IReadOnlyList<Guid> SourcePurchaseIds, DateTime CreatedAtUtc);
+public sealed record LedgerModifierConsumptionState(Guid EventId, Guid ModifierId, Guid BatchId, int Amount);
+
+public sealed class LedgerModifierState(Guid userId, LootReserveModifierGranted granted)
+{
+    public Guid UserId { get; } = userId;
+    public Guid ModifierId { get; } = granted.ModifierId;
+    public LootReserveModifierType ModifierType { get; } = granted.ModifierType;
+    public int Amount { get; } = granted.Amount;
+    public int RemainingExports { get; private set; } = granted.ExportCount;
+    public bool IsRevoked { get; private set; }
+    public int RemainingPenalty => RemainingExports > 0 && !IsRevoked ? Amount : 0;
+    public void Consume() => RemainingExports--;
+    public void Restore() => RemainingExports++;
+    public void Revoke() => IsRevoked = true;
+}
 
 public sealed record LedgerActivityState(Guid EventId, Guid UserId, Guid ActorUserId, string Action, int Amount, string Reason, string? ItemName, int? Quantity, DateTime CreatedAtUtc)
 {

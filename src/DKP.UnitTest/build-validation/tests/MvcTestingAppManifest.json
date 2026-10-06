@@ -1,0 +1,8 @@
+{
+  "DKP.Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\Bruger\\source\\repos\\Codex\\DKP\\src\\DKP.Application",
+  "DKP.Blazor, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\Bruger\\source\\repos\\Codex\\DKP\\src\\DKP.Blazor",
+  "DKP.Domain, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\Bruger\\source\\repos\\Codex\\DKP\\src\\DKP.Domain",
+  "DKP.Facade, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\Bruger\\source\\repos\\Codex\\DKP\\src\\DKP.Facade",
+  "DKP.Infrastructure, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\Bruger\\source\\repos\\Codex\\DKP\\src\\DKP.Infrastructure",
+  "DKP.InversionOfControl, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\Bruger\\source\\repos\\Codex\\DKP\\src\\DKP.InversionOfControl"
+}

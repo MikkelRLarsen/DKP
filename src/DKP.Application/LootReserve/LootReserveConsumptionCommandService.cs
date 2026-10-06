@@ -36,7 +36,7 @@ public sealed class LootReserveConsumptionCommandService(CommandContext context,
         return context.ExecuteAsync(ids, true, async officer =>
         {
             var previews = new List<LootReserveConsumptionPreviewDto>();
-            var consumeData = new List<(Guid UserId, int SoftQuantity, int? RollBonus, IReadOnlyList<Guid> PurchaseIds)>();
+            var consumeData = new List<(Guid UserId, int SoftQuantity, int? RollBonus, IReadOnlyList<Guid> PurchaseIds, IReadOnlyList<(Guid Id, int Amount)> Modifiers)>();
             foreach (var id in ids)
             {
                 var user = await context.TargetAsync(id, ct);
@@ -48,19 +48,31 @@ public sealed class LootReserveConsumptionCommandService(CommandContext context,
                 var rollBonus = bonuses.Select(x => x.RollBonusValue).SingleOrDefault();
                 var purchaseIds = soft.Select(x => x.PurchaseId).Concat(bonuses.Select(x => x.PurchaseId)).ToArray();
                 previews.Add(new LootReserveConsumptionPreviewDto(id, user.DiscordName, softQuantity, rollBonus, true));
-                if (purchaseIds.Length > 0) consumeData.Add((id, softQuantity, rollBonus, purchaseIds));
+                var activeModifiers = state.Modifiers.Values
+                    .Where(x => !x.IsRevoked && x.RemainingExports > 0 && (x.ModifierType == LootReserveModifierType.SoftReserve || (x.ModifierType == LootReserveModifierType.RollBonus && rollBonus is not null)))
+                    .Select(x => (x.ModifierId, x.Amount))
+                    .ToArray();
+                if (purchaseIds.Length > 0 || activeModifiers.Length > 0) consumeData.Add((id, softQuantity, rollBonus, purchaseIds, activeModifiers));
             }
             if (!commit)
             {
                 var previewBatch = new LootReserveConsumptionBatchDto(Guid.Empty, DateTime.UtcNow, officer.DiscordName, consumeData.Count, consumeData.Sum(x => x.SoftQuantity), consumeData.Count(x => x.RollBonus is not null), false);
                 return new LootReserveConsumptionResultDto(previewBatch, previews);
             }
-            if (consumeData.Count == 0) throw new InvalidOperationException("No active SoftReserves or RollBonus were found for the selected players.");
+            if (consumeData.Count == 0)
+            {
+                var emptyBatch = new LootReserveConsumptionBatchDto(Guid.Empty, DateTime.UtcNow, officer.DiscordName, 0, 0, 0, false);
+                return new LootReserveConsumptionResultDto(emptyBatch, previews);
+            }
             var batchId = Guid.NewGuid();
             var operationId = Guid.NewGuid();
             var now = time.GetUtcNow().UtcDateTime;
             foreach (var item in consumeData)
+            {
                 await ledger.PostAsync(item.UserId, officer.Id, operationId, now, new LootReserveConsumed(batchId, item.SoftQuantity, item.RollBonus, item.PurchaseIds), ct);
+                foreach (var modifier in item.Modifiers)
+                    await ledger.PostAsync(item.UserId, officer.Id, operationId, now, new LootReserveModifierConsumed(modifier.Id, batchId, modifier.Amount), ct);
+            }
             var resultBatch = new LootReserveConsumptionBatchDto(batchId, now, officer.DiscordName, consumeData.Count, consumeData.Sum(x => x.SoftQuantity), consumeData.Count(x => x.RollBonus is not null), true);
             return new LootReserveConsumptionResultDto(resultBatch, previews);
         }, ct);
