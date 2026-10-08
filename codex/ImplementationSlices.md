@@ -845,6 +845,8 @@ Status: Påbegyndt.
 
 Dockerfile, Docker Compose med PostgreSQL, pgAdmin, Traefik, Watchtower og DKP samt reverse-proxy-konfiguration for `wowforever.coffecottage.dk` er tilføjet. Se `codex/Deployment.md` for DNS, secrets og opstart. Health checks, fuld production-hardening og deployment-test er fortsat resterende arbejde.
 
+En fremtidig Discord Bot/API-integration er dokumenteret i `codex/DiscordBotIntegration.md`. Den er ikke implementeret endnu. Planen bruger `DKP.DiscordBot.csproj` og `DKP.Api.csproj` i den eksisterende solution, hvor API’et hostes under `/api` på samme URL som Blazor.
+
 Status: Planlagt.
 
 Gør systemet deploymentklart med Dockerfile, Docker Compose for app/PostgreSQL/pgAdmin, production Discord redirect URI, environment-based configuration, database health checks, logging, kontrolleret fejlhåndtering, migration-/backup-dokumentation og kontrol af secrets.
