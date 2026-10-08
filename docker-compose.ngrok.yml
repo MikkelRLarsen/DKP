@@ -1,10 +1,9 @@
 # Local testing override. Use together with docker-compose.yml:
 # docker compose -f docker-compose.yml -f docker-compose.ngrok.yml up -d --build
-services:
-  dkp:
-    ports:
-      - "127.0.0.1:8080:8080"
+# docker compose --env-file .env `
+#  -f docker-compose.ngrok.yml up -d --build
 
+services:
   ngrok:
     image: ngrok/ngrok:latest
     restart: unless-stopped
@@ -18,3 +17,60 @@ services:
       - ${NGROK_URL:?Set NGROK_URL in .env}
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:?Set NGROK_AUTHTOKEN in .env}
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dkp}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - dkp-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?Set PGADMIN_DEFAULT_EMAIL in .env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?Set PGADMIN_DEFAULT_PASSWORD in .env}
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+    ports:
+      - "127.0.0.1:${PGADMIN_HOST_PORT:-5050}:80"
+    volumes:
+      - dkp-pgadmin-data:/var/lib/pgadmin
+
+  dkp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${DKP_IMAGE:-dkp:local}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-dkp};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}
+      Discord__ClientId: ${DISCORD_CLIENT_ID:?Set DISCORD_CLIENT_ID in .env}
+      Discord__ClientSecret: ${DISCORD_CLIENT_SECRET:?Set DISCORD_CLIENT_SECRET in .env}
+      Discord__GuildId: ${DISCORD_GUILD_ID:?Set DISCORD_GUILD_ID in .env}
+      Discord__RedirectUri: ${DISCORD_REDIRECT_URI:-https://wowforever.coffecottage.dk/signin-discord}
+      Discord__OfficerUserIds__0: ${DISCORD_OFFICER_USER_IDS__0:-}
+    expose:
+      - "8080"
+      
+volumes:
+  dkp-postgres-data:
+  dkp-pgadmin-data:

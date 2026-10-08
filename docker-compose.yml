@@ -53,6 +53,8 @@ services:
       Discord__ClientId: ${DISCORD_CLIENT_ID:?Set DISCORD_CLIENT_ID in .env}
       Discord__ClientSecret: ${DISCORD_CLIENT_SECRET:?Set DISCORD_CLIENT_SECRET in .env}
       Discord__GuildId: ${DISCORD_GUILD_ID:?Set DISCORD_GUILD_ID in .env}
+      Discord__OfficerUserIds__0: ${DISCORD_OFFICER_USER_IDS__0:-}
+      Discord__OfficerUserIds__1: ${DISCORD_OFFICER_USER_IDS__1:-}
       Discord__RedirectUri: ${DISCORD_REDIRECT_URI:-https://wowforever.coffecottage.dk/signin-discord}
     expose:
       - "8080"
