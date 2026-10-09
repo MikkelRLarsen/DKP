@@ -67,6 +67,24 @@ services:
       - traefik.http.services.dkp.loadbalancer.server.port=8080
       - com.centurylinklabs.watchtower.enable=true
 
+  discord-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.discordbot
+    image: ${DKP_BOT_IMAGE:-dkp-discord-bot:local}
+    restart: unless-stopped
+    depends_on:
+      dkp:
+        condition: service_started
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?Set DISCORD_BOT_TOKEN in .env}
+      DISCORD_APPLICATION_ID: ${DISCORD_APPLICATION_ID:?Set DISCORD_APPLICATION_ID in .env}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?Set DISCORD_GUILD_ID in .env}
+      DKP_BOT_API_URL: http://dkp:8080
+      DKP_BOT_API_SECRET: ${DKP_BOT_API_SECRET:?Set DKP_BOT_API_SECRET in .env}
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
   traefik:
     image: traefik:v3.3
     restart: unless-stopped
