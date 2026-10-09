@@ -8,4 +8,6 @@ public interface IShopCommands
 	Task<IReadOnlyList<ShopPurchaseDto>> PurchaseAsync(ShopPurchaseRequest request, CancellationToken cancellationToken = default);
 	Task<IReadOnlyList<ShopPurchaseDto>> PurchaseForUsersAsync(AdminShopPurchaseRequest request, CancellationToken cancellationToken = default);
 	Task CancelAsync(Guid purchaseId, CancellationToken cancellationToken = default);
+	Task MarkUsedAsync(Guid purchaseId, CancellationToken cancellationToken = default);
+	Task RevertUsedAsync(Guid purchaseId, CancellationToken cancellationToken = default);
 }

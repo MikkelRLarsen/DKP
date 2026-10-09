@@ -23,10 +23,12 @@ public sealed class BotShopController(
     }
 
     [HttpGet("purchases")]
-    public async Task<IActionResult> GetPurchasesAsync(CancellationToken ct)
+    public async Task<IActionResult> GetPurchasesAsync([FromQuery] string? status, CancellationToken ct)
     {
         if (!TryGetDiscordId(out var discordId, out var failure)) return failure!;
-        var purchases = await queries.GetPurchasesAsync(discordId!, ct);
+        if (status is not null && status is not ("all" or "active" or "cancelled" or "used"))
+            return BadRequest(new { error = "status must be all, active, cancelled or used." });
+        var purchases = await queries.GetPurchasesAsync(discordId!, status, ct);
         return purchases is null ? Unauthorized() : Ok(purchases);
     }
 

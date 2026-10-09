@@ -113,8 +113,33 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
                 throw new UnauthorizedAccessException("You can only cancel your own purchases.");
             await context.TargetAsync(purchase.UserId, ct);
             if (purchase.CancelledAtUtc != null) throw new InvalidOperationException("Purchase already cancelled.");
+            if (purchase.IsConsumed) throw new InvalidOperationException("Used purchases cannot be cancelled.");
             await ledger.PostAsync(purchase.UserId, actor.Id, Guid.NewGuid(), time.GetUtcNow().UtcDateTime,
                 new PurchaseCancelled(purchaseId, purchase.TotalDkpCost, $"Refund: {purchase.Quantity} x {purchase.ItemName}"), ct);
+            return true;
+        }, ct);
+
+    public Task MarkUsedAsync(Guid purchaseId, CancellationToken ct = default)
+        => context.ExecuteAsync<bool>([purchaseId], true, async officer =>
+        {
+            var state = await ledger.GetStateAsync(null, ct);
+            var purchase = state.Purchases.Values.SingleOrDefault(x => x.PurchaseId == purchaseId) ?? throw new KeyNotFoundException("Purchase not found.");
+            if (purchase.CancelledAtUtc is not null) throw new InvalidOperationException("Cancelled purchases cannot be marked used.");
+            if (purchase.IsConsumed) throw new InvalidOperationException("Purchase is already used.");
+            await ledger.PostAsync(purchase.UserId, officer.Id, Guid.NewGuid(), time.GetUtcNow().UtcDateTime, new PurchaseUsed(purchaseId, "Marked used by officer"), ct);
+            return true;
+        }, ct);
+
+    public Task RevertUsedAsync(Guid purchaseId, CancellationToken ct = default)
+        => context.ExecuteAsync<bool>([purchaseId], true, async officer =>
+        {
+            var state = await ledger.GetStateAsync(null, ct);
+            var purchase = state.Purchases.Values.SingleOrDefault(x => x.PurchaseId == purchaseId) ?? throw new KeyNotFoundException("Purchase not found.");
+            if (purchase.CancelledAtUtc is not null) throw new InvalidOperationException("Cancelled purchases cannot be reactivated.");
+            if (!purchase.IsConsumed || purchase.ConsumptionEventId is not Guid useEventId) throw new InvalidOperationException("Purchase is not manually used or cannot be reactivated.");
+            var events = await ledger.GetAllEventsAsync(ct);
+            var useEntry = events.SingleOrDefault(x => x.Id == useEventId && x.UserId == purchase.UserId && x.EventType == nameof(PurchaseUsed)) ?? throw new InvalidOperationException("Purchase use event was not found.");
+            await ledger.PostAsync(purchase.UserId, officer.Id, Guid.NewGuid(), time.GetUtcNow().UtcDateTime, new PurchaseUseReverted(purchaseId, useEntry.Id), ct);
             return true;
         }, ct);
 }

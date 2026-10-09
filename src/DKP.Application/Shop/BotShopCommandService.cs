@@ -57,6 +57,7 @@ public sealed class BotShopCommandService(
             if (purchase is null) throw new KeyNotFoundException("Purchase not found.");
             if (purchase.UserId != actor.Id) throw new UnauthorizedAccessException("You can only cancel your own purchases.");
             if (purchase.CancelledAtUtc is not null) throw new InvalidOperationException("Purchase already cancelled.");
+            if (purchase.IsConsumed) throw new InvalidOperationException("Used purchases cannot be cancelled.");
 
             await ledger.PostAsync(actor.Id, actor.Id, Guid.NewGuid(), time.GetUtcNow().UtcDateTime,
                 new PurchaseCancelled(purchaseId, purchase.TotalDkpCost, $"Refund: {purchase.Quantity} x {purchase.ItemName}"), ct);

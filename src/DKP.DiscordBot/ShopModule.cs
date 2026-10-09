@@ -40,17 +40,23 @@ public sealed class ShopModule(DkpApiClient api) : InteractionModuleBase<SocketI
 public sealed class PurchasesModule(DkpApiClient api) : InteractionModuleBase<SocketInteractionContext>
 {
     [SlashCommand("purchases", "Show your DKP shop purchases", runMode: RunMode.Async)]
-    public async Task ListAsync()
+    public async Task ListAsync(
+        [Summary("status", "Filter purchases by status")]
+        [Choice("All", "all")]
+        [Choice("Active", "active")]
+        [Choice("Cancelled", "cancelled")]
+        [Choice("Used", "used")] string status = "all")
     {
         await DeferAsync(ephemeral: true);
-        var purchases = await api.GetPurchasesAsync(Context.User.Id.ToString(), CancellationToken.None);
+        status = status.Trim().ToLowerInvariant();
+        if (status is not ("all" or "active" or "cancelled" or "used")) { await ModifyOriginalResponseAsync(p => p.Content = "Status must be all, active, cancelled or used."); return; }
+        var purchases = await api.GetPurchasesAsync(Context.User.Id.ToString(), status, CancellationToken.None);
         if (purchases is null) { await ModifyOriginalResponseAsync(p => p.Content = "Your purchases could not be loaded."); return; }
         if (purchases.Count == 0) { await ModifyOriginalResponseAsync(p => p.Content = "You have no shop purchases."); return; }
         var output = new StringBuilder("**Your shop purchases**\n");
         foreach (var purchase in purchases)
         {
-            var status = purchase.IsCancelled ? "cancelled" : "active";
-            output.AppendLine($"`{purchase.Id}` — **{purchase.Quantity} x {purchase.ItemName}**, {purchase.TotalDkpCost} DKP, {status}");
+            output.AppendLine($"`{purchase.Id}` — **{purchase.Quantity} x {purchase.ItemName}**, {purchase.TotalDkpCost} DKP, {purchase.Status}");
         }
         output.AppendLine("\nUse `/purchases-cancel` with a purchase ID to cancel an active purchase and receive a refund.");
         await ModifyOriginalResponseAsync(p => p.Content = output.ToString());

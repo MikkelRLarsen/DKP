@@ -11,6 +11,15 @@ public sealed record PurchasePlaced([property: JsonRequired] Guid PurchaseId, [p
     public string Reason => $"Purchased {Quantity} x {ItemName}";
 }
 public sealed record PurchaseCancelled([property: JsonRequired] Guid PurchaseId, [property: JsonRequired] int Amount, [property: JsonRequired] string Reason) : ILedgerPayload;
+public sealed record PurchaseUsed([property: JsonRequired] Guid PurchaseId, [property: JsonRequired] string Reason) : ILedgerPayload
+{
+    public int Amount => 0;
+}
+public sealed record PurchaseUseReverted([property: JsonRequired] Guid PurchaseId, [property: JsonRequired] Guid RevertedUseEventId) : ILedgerPayload
+{
+    public int Amount => 0;
+    public string Reason => "Purchase use reverted";
+}
 public sealed record LootReserveConsumed([property: JsonRequired] Guid ConsumeBatchId, [property: JsonRequired] int SoftReserveQuantity, int? RollBonusValue, [property: JsonRequired] IReadOnlyList<Guid> SourcePurchaseIds) : ILedgerPayload
 {
     public int Amount => 0;
@@ -45,6 +54,8 @@ public static class LedgerEvents
             DkpPosted => nameof(DkpPosted),
             PurchasePlaced => nameof(PurchasePlaced),
             PurchaseCancelled => nameof(PurchaseCancelled),
+            PurchaseUsed => nameof(PurchaseUsed),
+            PurchaseUseReverted => nameof(PurchaseUseReverted),
             LootReserveConsumed => nameof(LootReserveConsumed),
             LootReserveConsumptionReverted => nameof(LootReserveConsumptionReverted),
             LootReserveModifierGranted => nameof(LootReserveModifierGranted),
@@ -69,6 +80,8 @@ public static class LedgerEvents
             nameof(DkpPosted) => JsonSerializer.Deserialize<DkpPosted>(entry.Payload)!,
             nameof(PurchasePlaced) => JsonSerializer.Deserialize<PurchasePlaced>(entry.Payload)!,
             nameof(PurchaseCancelled) => JsonSerializer.Deserialize<PurchaseCancelled>(entry.Payload)!,
+            nameof(PurchaseUsed) => JsonSerializer.Deserialize<PurchaseUsed>(entry.Payload)!,
+            nameof(PurchaseUseReverted) => JsonSerializer.Deserialize<PurchaseUseReverted>(entry.Payload)!,
             nameof(LootReserveConsumed) => JsonSerializer.Deserialize<LootReserveConsumed>(entry.Payload)!,
             nameof(LootReserveConsumptionReverted) => JsonSerializer.Deserialize<LootReserveConsumptionReverted>(entry.Payload)!,
             nameof(LootReserveModifierGranted) => JsonSerializer.Deserialize<LootReserveModifierGranted>(entry.Payload)!,
@@ -87,6 +100,10 @@ public static class LedgerEvents
             throw new InvalidOperationException("Invalid purchase.");
         if (payload is PurchaseCancelled c && (c.PurchaseId == Guid.Empty || c.Amount < 0))
             throw new InvalidOperationException("Invalid cancellation.");
+        if (payload is PurchaseUsed used && (used.PurchaseId == Guid.Empty || string.IsNullOrWhiteSpace(used.Reason) || used.Reason.Length > 500))
+            throw new InvalidOperationException("Invalid purchase use.");
+        if (payload is PurchaseUseReverted useReverted && (useReverted.PurchaseId == Guid.Empty || useReverted.RevertedUseEventId == Guid.Empty))
+            throw new InvalidOperationException("Invalid purchase use revert.");
         if (payload is LootReserveConsumed consumed && (consumed.ConsumeBatchId == Guid.Empty || consumed.SoftReserveQuantity < 0 || consumed.SourcePurchaseIds.Any(x => x == Guid.Empty) || consumed.SourcePurchaseIds.Count != consumed.SourcePurchaseIds.Distinct().Count()))
             throw new InvalidOperationException("Invalid LootReserve consumption.");
         if (payload is LootReserveConsumptionReverted reverted && (reverted.ConsumeBatchId == Guid.Empty || reverted.RevertedConsumeEventId == Guid.Empty))

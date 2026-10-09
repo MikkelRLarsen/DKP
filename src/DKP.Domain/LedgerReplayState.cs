@@ -7,6 +7,8 @@ public sealed class LedgerReplayState
     private readonly List<LedgerActivityState> activities = [];
     private readonly Dictionary<Guid, LedgerConsumptionState> consumptions = [];
     private readonly HashSet<Guid> revertedConsumptions = [];
+    private readonly HashSet<Guid> revertedPurchaseUses = [];
+    private readonly Dictionary<Guid, Guid> purchaseUseEvents = [];
     private readonly Dictionary<Guid, LedgerModifierState> modifiers = [];
     private readonly Dictionary<Guid, LedgerModifierConsumptionState> modifierConsumptions = [];
 
@@ -58,6 +60,21 @@ public sealed class LedgerReplayState
                     state.activities.Add(LedgerActivityState.From(entry, cancellation, existing));
                     break;
 
+                case PurchaseUsed used:
+                    if (!state.purchases.TryGetValue(used.PurchaseId, out var usedPurchase) || usedPurchase.CancelledAtUtc is not null || usedPurchase.IsConsumed)
+                        throw new InvalidOperationException($"Purchase {used.PurchaseId} is not active.");
+                    state.purchaseUseEvents.Add(entry.Id, used.PurchaseId);
+                    usedPurchase.Consume(entry);
+                    break;
+
+                case PurchaseUseReverted useReverted:
+                    if (!state.purchaseUseEvents.TryGetValue(useReverted.RevertedUseEventId, out var revertedPurchaseId) || revertedPurchaseId != useReverted.PurchaseId)
+                        throw new InvalidOperationException("Purchase use revert references an unknown use event.");
+                    if (!state.revertedPurchaseUses.Add(useReverted.RevertedUseEventId) || !state.purchases.TryGetValue(useReverted.PurchaseId, out var restoredPurchase))
+                        throw new InvalidOperationException("Purchase use was already reverted.");
+                    restoredPurchase.Restore();
+                    break;
+
                 case LootReserveConsumed consumed:
                     if (state.consumptions.Values.Any(x => x.BatchId == consumed.ConsumeBatchId))
                         throw new InvalidOperationException($"Duplicate consume batch {consumed.ConsumeBatchId}.");
@@ -79,7 +96,7 @@ public sealed class LedgerReplayState
                         throw new InvalidOperationException("Consumption payload does not match its purchases.");
                     if (sourcePurchases.Length > 0 && softQuantity == 0 && rollBonus is null)
                         throw new InvalidOperationException("Consumption contains no active LootReserve state.");
-                    foreach (var purchase in sourcePurchases) purchase.Consume();
+                    foreach (var purchase in sourcePurchases) purchase.Consume(entry);
                     state.consumptions.Add(entry.Id, new LedgerConsumptionState(entry.Id, consumed.ConsumeBatchId, entry.UserId, consumed.SourcePurchaseIds, entry.OccurredAtUtc));
                     break;
 
@@ -168,8 +185,10 @@ public sealed class LedgerPurchaseState
         CancellationEventId = entry.Id;
     }
 
-    public void Consume() => IsConsumed = true;
-    public void Restore() => IsConsumed = false;
+    public Guid? ConsumptionEventId { get; private set; }
+    public bool IsManuallyUsed { get; private set; }
+    public void Consume(DkpEvent entry) { IsConsumed = true; ConsumptionEventId = entry.Id; IsManuallyUsed = entry.EventType == nameof(PurchaseUsed); }
+    public void Restore() { IsConsumed = false; ConsumptionEventId = null; IsManuallyUsed = false; }
 }
 
 public sealed record LedgerConsumptionState(Guid EventId, Guid BatchId, Guid UserId, IReadOnlyList<Guid> SourcePurchaseIds, DateTime CreatedAtUtc);

@@ -67,13 +67,18 @@
                         <Template Context="purchase">@purchase.CreatedAtUtc.ToLocalTime().ToString("g")</Template>
                     </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Status">
-                        <Template Context="purchase"><RadzenBadge Text="@(purchase.IsCancelled ? "Cancelled" : "Active")" BadgeStyle="@(purchase.IsCancelled ? BadgeStyle.Light : BadgeStyle.Success)" /></Template>
+                        <Template Context="purchase"><RadzenBadge Text="@purchase.Status" BadgeStyle="@(purchase.IsCancelled ? BadgeStyle.Light : purchase.IsUsed ? BadgeStyle.Warning : BadgeStyle.Success)" /></Template>
                     </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Actions" Sortable="false" Filterable="false">
                         <Template Context="purchase">
-                            @if (!purchase.IsCancelled)
+                            @if (!purchase.IsCancelled && !purchase.IsUsed)
                             {
+                                <RadzenButton Text="Mark used" Icon="done" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Warning" Click="@(() => MarkUsedAsync(purchase))" Disabled="@saving" />
                                 <RadzenButton Text="Cancel & refund" Icon="undo" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(() => CancelAsync(purchase))" Disabled="@saving" />
+                            }
+                            else if (purchase.IsManuallyUsed)
+                            {
+                                <RadzenButton Text="Revert to active" Icon="restore" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => RevertUsedAsync(purchase))" Disabled="@saving" />
                             }
                         </Template>
                     </RadzenDataGridColumn>
@@ -172,5 +177,35 @@
         {
             saving = false;
         }
+    }
+
+    private async Task MarkUsedAsync(ShopPurchaseDto purchase)
+    {
+        if (saving) return;
+        saving = true;
+        try
+        {
+            if (await DialogService.Confirm($"Mark {purchase.ItemName} as used? It can no longer be cancelled until reverted.", "Confirm used status") != true) return;
+            await ShopCommands.MarkUsedAsync(purchase.Id);
+            NotificationService.Notify(NotificationSeverity.Success, "Purchase marked used", "The purchase can no longer be cancelled.");
+            await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to mark purchase used", exception.Message); }
+        finally { saving = false; }
+    }
+
+    private async Task RevertUsedAsync(ShopPurchaseDto purchase)
+    {
+        if (saving) return;
+        saving = true;
+        try
+        {
+            if (await DialogService.Confirm($"Make {purchase.ItemName} active again?", "Confirm revert") != true) return;
+            await ShopCommands.RevertUsedAsync(purchase.Id);
+            NotificationService.Notify(NotificationSeverity.Success, "Purchase reactivated", "The purchase is active again.");
+            await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to revert purchase", exception.Message); }
+        finally { saving = false; }
     }
 }

@@ -32,7 +32,7 @@ internal static class ReadModels
         var users = await db.Users.AsNoTracking().Include(x => x.Characters).ToDictionaryAsync(x => x.Id, ct);
         var events = await db.DkpEvents.AsNoTracking().Where(x => userId == null || x.UserId == userId).ToArrayAsync(ct);
         var state = LedgerReplayState.Replay(events);
-        return state.Purchases.Values.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.PurchaseId).Select(p => { var user = users[p.UserId]; var main = user.Characters.FirstOrDefault(x => x.IsMain); return new ShopPurchaseDto(p.PurchaseId, p.UserId, user.DiscordName, main is null ? null : $"{main.FirstName} {main.LastName}", p.ShopItemId, p.ItemName, p.Quantity, p.TotalDkpCost, p.CreatedAtUtc, p.CancelledAtUtc); }).ToArray();
+        return state.Purchases.Values.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.PurchaseId).Select(p => { var user = users[p.UserId]; var main = user.Characters.FirstOrDefault(x => x.IsMain); return new ShopPurchaseDto(p.PurchaseId, p.UserId, user.DiscordName, main is null ? null : $"{main.FirstName} {main.LastName}", p.ShopItemId, p.ItemName, p.Quantity, p.TotalDkpCost, p.CreatedAtUtc, p.CancelledAtUtc, p.IsConsumed, p.IsManuallyUsed); }).ToArray();
     }
     public static Facade.Contracts.UserRole Role(Domain.UserRole role) => role switch { Domain.UserRole.Member => Facade.Contracts.UserRole.Member, Domain.UserRole.Officer => Facade.Contracts.UserRole.Officer, _ => throw new InvalidOperationException("Unknown user role.") };
 }

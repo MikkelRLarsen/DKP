@@ -55,8 +55,8 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public Task<IReadOnlyList<BotShopItemDto>?> GetShopItemsAsync(string discordUserId, CancellationToken cancellationToken)
         => SendShopAsync<IReadOnlyList<BotShopItemDto>>(HttpMethod.Get, "/api/bot/shop", discordUserId, null, cancellationToken);
 
-    public Task<IReadOnlyList<BotShopPurchaseDto>?> GetPurchasesAsync(string discordUserId, CancellationToken cancellationToken)
-        => SendShopAsync<IReadOnlyList<BotShopPurchaseDto>>(HttpMethod.Get, "/api/bot/shop/purchases", discordUserId, null, cancellationToken);
+    public Task<IReadOnlyList<BotShopPurchaseDto>?> GetPurchasesAsync(string discordUserId, string status, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BotShopPurchaseDto>>(HttpMethod.Get, $"/api/bot/shop/purchases?status={Uri.EscapeDataString(status)}", discordUserId, null, cancellationToken);
 
     public Task<BotShopPurchaseDto?> PurchaseAsync(string discordUserId, ShopPurchaseInput input, CancellationToken cancellationToken)
         => SendShopAsync<BotShopPurchaseDto>(HttpMethod.Post, "/api/bot/shop/purchases", discordUserId, input, cancellationToken);
@@ -165,7 +165,8 @@ public sealed record BotCharacterDto(Guid Id, string FirstName, string LastName,
 public sealed record ShopPurchaseInput(Guid ShopItemId, int Quantity);
 public sealed record BotShopItemDto(Guid Id, string Key, string Name, string Description, int Price, int MaxPerUser, bool IsActive, IReadOnlyList<BotShopRequirementDto>? AchievementRequirements);
 public sealed record BotShopRequirementDto(Guid AchievementId, string AchievementName);
-public sealed record BotShopPurchaseDto(Guid Id, Guid UserId, string UserName, string? MainCharacterName, Guid ShopItemId, string ItemName, int Quantity, int TotalDkpCost, DateTime CreatedAtUtc, DateTime? CancelledAtUtc)
+public sealed record BotShopPurchaseDto(Guid Id, Guid UserId, string UserName, string? MainCharacterName, Guid ShopItemId, string ItemName, int Quantity, int TotalDkpCost, DateTime CreatedAtUtc, DateTime? CancelledAtUtc, bool IsUsed = false, bool IsManuallyUsed = false)
 {
     public bool IsCancelled => CancelledAtUtc is not null;
+    public string Status => IsCancelled ? "cancelled" : IsUsed ? "used" : "active";
 }
