@@ -58,6 +58,26 @@ public sealed class HostSmokeTests : DatabaseTest
     }
 
     [Fact]
+    public async Task Bot_health_requires_the_configured_service_secret()
+    {
+        await using var host = new SmokeHost(ConnectionString);
+        using var client = host.CreateClient(new() { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/bot/health")).StatusCode);
+
+        client.DefaultRequestHeaders.Add("X-DKP-Bot-Secret", "wrong-secret");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/bot/health")).StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-DKP-Bot-Secret");
+        client.DefaultRequestHeaders.Add("X-DKP-Bot-Secret", "test-bot-secret");
+        var response = await client.GetAsync("/api/bot/health");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("dkp-api", body);
+        Assert.Contains("ok", body);
+    }
+
+    [Fact]
     public async Task Dependency_injection_resolves_every_facade_contract_and_uses_one_constructor()
     {
         await using var host = new SmokeHost(ConnectionString);
@@ -95,7 +115,8 @@ public sealed class HostSmokeTests : DatabaseTest
                 ["ConnectionStrings:DefaultConnection"] = connection,
                 ["Discord:ClientId"] = "test-client",
                 ["Discord:ClientSecret"] = "test-secret-not-a-credential",
-                ["Discord:GuildId"] = "1505886353131311136"
+                ["Discord:GuildId"] = "1505886353131311136",
+                ["DkpBot:ApiSecret"] = "test-bot-secret"
             }));
             return base.CreateHost(builder);
         }

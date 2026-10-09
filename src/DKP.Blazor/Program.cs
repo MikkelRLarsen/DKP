@@ -1,4 +1,5 @@
 using DKP.Blazor.Components;
+using DKP.Api;
 using DKP.InversionOfControl;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -15,6 +16,7 @@ namespace DKP.Blazor
 
 			// Add services to the container.
 			builder.Services.AddDkp(builder.Configuration);
+			builder.Services.AddDkpApi(builder.Configuration);
 			builder.Services.AddRadzenComponents();
 			builder.Services.AddRazorComponents()
 				.AddInteractiveServerComponents();
@@ -53,6 +55,7 @@ namespace DKP.Blazor
 				await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 				return Results.Redirect("/");
 			});
+			app.MapControllers();
 
 			app.MapStaticAssets();
 			app.MapRazorComponents<App>()

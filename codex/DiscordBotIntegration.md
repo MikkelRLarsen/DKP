@@ -1,5 +1,34 @@
 # Discord Bot-integration
 
+## Slice B1 – API-grundlag og Discord-bot connection
+
+Status: Implementeret.
+
+B1 leverer det tekniske fundament uden DKP-medlemsfunktioner:
+
+- `DKP.Api.csproj` er tilføjet til den eksisterende solution og hostes af Blazor under `/api`.
+- API’et bruger almindelige `[ApiController]`-REST controllers; Blazor registrerer services via `AddDkpApi()` og mapper controllers direkte med `app.MapControllers()`.
+- `GET /api/bot/health` kræver `X-DKP-Bot-Secret` og returnerer en neutral health-status.
+- `DKP.DiscordBot.csproj` er et separat `net10.0` executable-projekt uden adgang til Domain, DbContext eller Infrastructure.
+- Botten bruger Discord Gateway, `Discord.Net` og guild-specific registrering af `/dkp-ping`.
+- `/dkp-ping` kalder API'et via typed `HttpClient`, timeout og correlation-id.
+- Gateway-disconnects logges, commands registreres idempotent ved reconnect, og botten lukker kontrolleret ved shutdown.
+- Der er ikke tilføjet database-tabeller, events eller migrations.
+
+Konfigurationen kommer fra environment variables eller tilsvarende secret configuration:
+
+```env
+DISCORD_BOT_TOKEN=<bot-token>
+DISCORD_APPLICATION_ID=<application-id>
+DISCORD_GUILD_ID=1505886353131311136
+DKP_BOT_API_URL=http://dkp:8080
+DKP_BOT_API_SECRET=<lang-random-secret>
+```
+
+`DKP_BOT_API_SECRET` skal sættes ens i webappens `DkpBot:ApiSecret` og i bot-processens `DKP_BOT_API_SECRET`. Secrets er ikke hardcodet i source eller tracked `.env`.
+
+B1 har ingen production bot-container endnu; det hører til B8.
+
 ## Formål
 
 Dette dokument beskriver, hvordan DKP senere kan udvides med en Discord-bot, så medlemmer kan bruge udvalgte DKP-funktioner direkte fra Discord.
@@ -108,7 +137,7 @@ https://wowforever.coffecottage.dk/api/...
 Det kan implementeres som et almindeligt `.csproj`-projekt med endpoint extensions, som registreres fra Blazor:
 
 ```csharp
-app.MapDkpApi();
+app.MapControllers();
 ```
 
 Blazor forbliver host for webapp og API, så der kræves ikke en separat webadresse eller ekstra reverse-proxy-route.
@@ -273,17 +302,117 @@ Botten tilføjes senere til Compose:
 
 Botten skal ikke have en offentlig port, hvis Gateway anvendes.
 
-## Planlagte implementeringstrin
+## Bot-slices
 
-1. Opret `DKP.Api.csproj` og fælles API-authentication.
-2. Opret `DKP.DiscordBot.csproj` og inkluder begge i `DKP.slnx`.
-3. Implementér bot health/reconnect og guild command registration.
-4. Implementér `/dkp` som første vertical slice.
-5. Implementér characters, shop, purchases og achievements.
-6. Tilføj bot-compose-service og secrets.
-7. Tilføj API authorization og integration tests.
-8. Tilføj atomisk multi-user request.
-9. Tilføj Discord-kanalnotifikationer.
+### Slice B1 – API-grundlag og bot connection
+
+Opret `DKP.Api.csproj` og `DKP.DiscordBot.csproj` i den eksisterende solution. API’et hostes af Blazor under `/api`, mens botten kører som separat executable.
+
+- Intern bot-authentication mellem bot og API.
+- Discord Gateway connection.
+- Guild-specific slash-command registration.
+- Reconnect, logging og graceful shutdown.
+- `/api/health` for bot/API connectivity.
+- Ingen member-business features endnu.
+
+Acceptkriterier: Botten kan installeres i guilden, starter stabilt, registrerer en test-command og kan kalde API’et uden databaseadgang.
+
+### Slice B2 – DKP-balance og historik
+
+Tilføj første funktionelle member-flow:
+
+- `/dkp` viser brugerens aktuelle saldo.
+- `/dkp history` viser seneste historik.
+- Discord User ID mappes til intern User.
+- Ukendte, anonyme og blokerede brugere afvises.
+
+Acceptkriterier: Saldo og historik matcher Blazor, og botten kan ikke se en anden brugers data.
+
+### Slice B3 – Characters
+
+Tilføj member-management af egne characters:
+
+- `/characters list`.
+- Opret character via modal.
+- Redigér og slet egne characters.
+- Vælg main character.
+
+Acceptkriterier: Ownership, main-character-regler og validering er identiske med Blazor-flowet.
+
+### Slice B4 – Shop og purchases
+
+Tilføj read og self-service purchase-flow:
+
+- `/shop` viser aktive items, priser, limits og achievement-krav.
+- `/shop buy` med quantity.
+- `/purchases` viser egne køb.
+- Annullering af egne aktive køb.
+
+Køb går gennem eksisterende Application-flow og event-store. Botten implementerer ingen egen balance-, limit- eller achievement-logik.
+
+Acceptkriterier: Saldo, max-per-user, RollBonus, SoftReserve, refunds og achievement-gates håndhæves på samme måde som i webappen.
+
+### Slice B5 – Achievements og DKP requests
+
+Tilføj:
+
+- `/achievements` med obtained, revoked og available.
+- `/achievement request`.
+- `/achievement requests`.
+- Annullering af egne pending requests.
+
+Acceptkriterier: Request-status og event-baseret DKP matcher `/my-achievements` og `/my-dkp/sources`.
+
+### Slice B6 – Atomiske multi-user requests
+
+Giv en bruger mulighed for at tagge flere medlemmer i én request:
+
+```text
+/achievement request achievement: Attendance users: @UserA @UserB
+```
+
+- Initiator og taggede brugere deduplikeres.
+- Alle targets valideres før oprettelse.
+- Hele operationen er atomisk.
+- Én fejl betyder, at ingen requests oprettes.
+- Initiator får et tydeligt samlet resultat.
+
+Acceptkriterier: Ingen partial requests ved fejl, og member kan ikke bruge flowet til at give sig selv DKP direkte.
+
+### Slice B7 – Discord request-notifikationer
+
+Send besked til et konfigureret Discord-channel, når der oprettes:
+
+- DKP request.
+- Achievement request.
+
+Notifikationer skal komme fra en reliable outbox/event-notification mekanisme, så database-operationen ikke fejler, hvis Discord midlertidigt er utilgængelig.
+
+Acceptkriterier: Request gemmes selv om Discord-kanalen er utilgængelig, beskeden kan retries, og der sendes ikke dubletter.
+
+### Slice B8 – Bot production hardening
+
+- Dockerfile til botten.
+- Compose-service og secrets.
+- Health checks.
+- Watchtower-label.
+- Rate limiting og Discord API backoff.
+- Idempotency ved crash efter command-commit.
+- Structured logging og metrics.
+- Deployment- og recovery-dokumentation.
+
+Acceptkriterier: Botten genstarter automatisk, reconnecter, mister ikke committed requests og kan testes med en isoleret Discord/API-konfiguration.
+
+## Samlet implementeringsrækkefølge
+
+1. B1 – API-grundlag og bot connection
+2. B2 – DKP-balance og historik
+3. B3 – Characters
+4. B4 – Shop og purchases
+5. B5 – Achievements og DKP requests
+6. B6 – Atomiske multi-user requests
+7. B7 – Discord request-notifikationer
+8. B8 – Bot production hardening
 
 ## Ikke en del af første bot-version
 

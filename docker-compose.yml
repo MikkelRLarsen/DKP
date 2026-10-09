@@ -56,6 +56,7 @@ services:
       Discord__OfficerUserIds__0: ${DISCORD_OFFICER_USER_IDS__0:-}
       Discord__OfficerUserIds__1: ${DISCORD_OFFICER_USER_IDS__1:-}
       Discord__RedirectUri: ${DISCORD_REDIRECT_URI:-https://wowforever.coffecottage.dk/signin-discord}
+      DkpBot__ApiSecret: ${DKP_BOT_API_SECRET:?Set DKP_BOT_API_SECRET in .env}
     expose:
       - "8080"
     labels:

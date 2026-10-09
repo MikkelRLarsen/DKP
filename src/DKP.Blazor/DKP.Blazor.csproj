@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DKP.Api\DKP.Api.csproj" />
     <ProjectReference Include="..\DKP.Facade\DKP.Facade.csproj" />
     <ProjectReference Include="..\DKP.InversionOfControl\DKP.InversionOfControl.csproj" />
     <PackageReference Include="Radzen.Blazor" />
