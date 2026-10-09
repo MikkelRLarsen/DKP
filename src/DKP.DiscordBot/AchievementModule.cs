@@ -62,14 +62,23 @@ public sealed class AchievementRequestModule(DkpApiClient api) : InteractionModu
             .ToArray();
 
     [SlashCommand("requests", "Show your achievement and DKP requests", runMode: RunMode.Async)]
-    public async Task RequestsAsync()
+    public async Task RequestsAsync(
+        [Summary("status", "Filter: all, pending, approved, rejected or cancelled")]
+        [Choice("All", "all")]
+        [Choice("Pending", "pending")]
+        [Choice("Approved", "approved")]
+        [Choice("Rejected", "rejected")]
+        [Choice("Cancelled", "cancelled")] string status = "all")
     {
         await DeferAsync(ephemeral: true);
         var overview = await api.GetAchievementsAsync(Context.User.Id.ToString(), CancellationToken.None);
         if (overview is null) { await ModifyOriginalResponseAsync(p => p.Content = "Your requests could not be loaded."); return; }
-        if (overview.Requests.Count == 0) { await ModifyOriginalResponseAsync(p => p.Content = "You have no requests."); return; }
+        status = status.Trim().ToLowerInvariant();
+        if (status is not ("all" or "pending" or "approved" or "rejected" or "cancelled")) { await ModifyOriginalResponseAsync(p => p.Content = "Status must be all, pending, approved, rejected or cancelled."); return; }
+        var requests = overview.Requests.Where(x => status == "all" || x.StatusName.Equals(status, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (requests.Length == 0) { await ModifyOriginalResponseAsync(p => p.Content = "No requests match that status."); return; }
         var output = new StringBuilder("**Your requests**\n");
-        foreach (var request in overview.Requests)
+        foreach (var request in requests)
             output.AppendLine($"`{request.Id}` — **{request.PresetName}**, {request.Amount} DKP, {request.StatusName}");
         output.AppendLine("\nUse `/achievement cancel` with a pending request ID to cancel it.");
         await ModifyOriginalResponseAsync(p => p.Content = output.ToString());

@@ -37,6 +37,12 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public Task<DkpHistoryDto?> GetDkpHistoryAsync(string discordUserId, int limit, CancellationToken cancellationToken)
         => GetDkpAsync($"/api/bot/dkp/history?limit={limit}", discordUserId, cancellationToken);
 
+    public Task<IReadOnlyList<BotDkpSourceDto>?> GetDkpSourcesAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BotDkpSourceDto>>(HttpMethod.Get, "/api/bot/dkp/sources", discordUserId, null, cancellationToken);
+
+    public Task<IReadOnlyList<BotAwardRequestDto>?> RequestDkpAsync(string discordUserId, Guid presetId, int quantity, IReadOnlyList<string>? targetDiscordIds, string? comment, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BotAwardRequestDto>>(HttpMethod.Post, targetDiscordIds is { Count: > 0 } ? "/api/bot/dkp/requests/multi" : "/api/bot/dkp/requests", discordUserId, new BotDkpRequestInput(presetId, quantity, targetDiscordIds, comment), cancellationToken);
+
     public async Task<IReadOnlyList<BotCharacterDto>?> GetCharactersAsync(string discordUserId, CancellationToken cancellationToken)
         => await SendCharactersAsync(HttpMethod.Get, "/api/bot/characters", discordUserId, null, cancellationToken) as IReadOnlyList<BotCharacterDto>;
 
@@ -175,6 +181,8 @@ public sealed record BotHealthResponse(string Status, string Service, string Cor
 public sealed record DkpHistoryDto(BalanceDto Balance, IReadOnlyList<DkpTransactionDto> Transactions);
 public sealed record BalanceDto(int Amount);
 public sealed record DkpTransactionDto(Guid Id, int Amount, string Reason, DateTime CreatedAtUtc, string CreatedByDiscordName);
+public sealed record BotDkpSourceDto(Guid PresetId, string Name, int Amount, string Reason, int Applications, int MaxApplications, int Remaining);
+public sealed record BotDkpRequestInput(Guid PresetId, int Quantity, IReadOnlyList<string>? TargetDiscordIds, string? Comment);
 public sealed record CharacterInputDto(string FirstName, string LastName);
 public sealed record BotCharacterDto(Guid Id, string FirstName, string LastName, bool IsMain);
 public sealed record ShopPurchaseInput(Guid ShopItemId, int Quantity);

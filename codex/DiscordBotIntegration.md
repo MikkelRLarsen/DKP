@@ -324,8 +324,8 @@ Status: Implementeret.
 
 Tilføj første funktionelle member-flow:
 
-- `/dkp` viser brugerens aktuelle saldo.
-- `/dkp-history` viser de seneste 10 historikposter.
+- `/dkp balance` viser brugerens aktuelle saldo.
+- `/dkp history` viser de seneste 10 historikposter.
 - Discord User ID mappes til intern User.
 - Ukendte, anonyme og blokerede brugere afvises.
 
@@ -397,13 +397,13 @@ Acceptkriterier: Ingen partial requests ved fejl, og member kan ikke tildele sig
 
 ### Slice B6a – Preset-baserede DKP requests for flere spillere
 
-Status: Planlagt.
+Status: Implementeret.
 
 Udvid botten med DKP requests baseret på de aktive DKP-presets fra `/my-dkp/sources`.
 
 Planlagte commands:
 
-- `/dkp-sources` viser aktive presets, beløb, årsag og resterende anvendelser.
+- `/dkp sources` viser aktive presets, beløb, årsag og resterende anvendelser.
 - `/dkp request` opretter en request for initiatoren.
 - `/dkp request-many` opretter requests for initiatoren og flere taggede spillere.
 - `/dkp requests` viser egne pending, approved, rejected og cancelled requests.
@@ -411,7 +411,7 @@ Planlagte commands:
 
 Multi-player-flowet skal deduplikere initiator og taggede Discord IDs, validere alle brugere, kontrollere aktivt preset, pending duplicates, quantity og lifetime-limit før nogen request gemmes. Alle requests oprettes atomisk, så én fejl giver rollback for hele gruppen. Botten må ikke uddele DKP direkte; Officer-godkendelse genvaliderer preset usage og event-store.
 
-Tests skal dække preset-listing, én request, multi-user requests, deduplikering, blocked/unknown users, pending duplicates, limit-validering og rollback uden partial requests.
+Implementeret med API-flow, preset-listing, én request, multi-user requests, deduplikering, blocked/unknown users, pending duplicates, limit-validering og rollback uden partial requests.
 
 ### Slice B7 – Discord request-notifikationer
 
