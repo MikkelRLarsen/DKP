@@ -64,6 +64,15 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public async Task<bool> CancelPurchaseAsync(string discordUserId, Guid purchaseId, CancellationToken cancellationToken)
         => await SendShopAsync<object>(HttpMethod.Delete, $"/api/bot/shop/purchases/{purchaseId:D}", discordUserId, null, cancellationToken) is not null;
 
+    public Task<BotAchievementOverviewDto?> GetAchievementsAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<BotAchievementOverviewDto>(HttpMethod.Get, "/api/bot/achievements", discordUserId, null, cancellationToken);
+
+    public Task<BotAwardRequestDto?> RequestAchievementAsync(string discordUserId, Guid achievementId, string? comment, CancellationToken cancellationToken)
+        => SendShopAsync<BotAwardRequestDto>(HttpMethod.Post, "/api/bot/achievements/requests", discordUserId, new AchievementRequestInput(achievementId, comment), cancellationToken);
+
+    public async Task<bool> CancelAchievementRequestAsync(string discordUserId, Guid requestId, CancellationToken cancellationToken)
+        => await SendShopAsync<object>(HttpMethod.Delete, $"/api/bot/achievements/requests/{requestId:D}", discordUserId, null, cancellationToken) is not null;
+
     private async Task<T?> SendShopAsync<T>(HttpMethod method, string path, string discordUserId, object? body, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, new Uri(settings.ApiBaseUrl, path));
@@ -169,4 +178,13 @@ public sealed record BotShopPurchaseDto(Guid Id, Guid UserId, string UserName, s
 {
     public bool IsCancelled => CancelledAtUtc is not null;
     public string Status => IsCancelled ? "cancelled" : IsUsed ? "used" : "active";
+}
+public sealed record AchievementRequestInput(Guid AchievementId, string? Comment);
+public sealed record BotAchievementOverviewDto(IReadOnlyList<BotAchievementDefinitionDto> Definitions, IReadOnlyList<BotUserAchievementDto> UserAchievements, IReadOnlyList<BotAwardRequestDto> Requests);
+public sealed record BotAchievementDefinitionDto(Guid Id, string Key, string Name, string Description, int DkpAmount, bool IsActive);
+public sealed record BotUserAchievementDto(Guid Id, Guid UserId, string DiscordName, Guid AchievementId, string AchievementName, int DkpAmount, bool IsActive, DateTime GrantedAtUtc, DateTime? RevokedAtUtc);
+public sealed record BotAwardRequestDto(Guid Id, Guid UserId, string DiscordName, string? MainCharacter, Guid? PresetId, Guid? AchievementId, string PresetName, int Amount, int Quantity, string Reason, string? Comment, int Status, DateTime CreatedAtUtc, DateTime? ReviewedAtUtc, string? ReviewedByDiscordName, string? ReviewComment, IReadOnlyList<Guid> DkpEventIds)
+{
+    public bool IsPending => Status == 0;
+    public string StatusName => Status switch { 0 => "Pending", 1 => "Approved", 2 => "Rejected", 3 => "Cancelled", _ => "Unknown" };
 }

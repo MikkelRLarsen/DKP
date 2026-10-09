@@ -363,14 +363,16 @@ Acceptkriterier: Saldo, max-per-user, RollBonus, SoftReserve, refunds og achieve
 
 ### Slice B5 – Achievements og DKP requests
 
-Tilføj:
+Status: Implementeret.
+
+Tilføjet:
 
 - `/achievements` med obtained, revoked og available.
 - `/achievement request`.
 - `/achievement requests`.
 - Annullering af egne pending requests.
 
-Acceptkriterier: Request-status og event-baseret DKP matcher `/my-achievements` og `/my-dkp/sources`.
+Botten bruger API’et under `/api/bot/achievements`, og requesten genbruger den eksisterende Application-validering. Request-status og event-baseret DKP matcher `/my-achievements` og `/my-dkp/sources`.
 
 ### Slice B6 – Atomiske multi-user requests
 
@@ -399,6 +401,28 @@ Notifikationer skal komme fra en reliable outbox/event-notification mekanisme, s
 
 Acceptkriterier: Request gemmes selv om Discord-kanalen er utilgængelig, beskeden kan retries, og der sendes ikke dubletter.
 
+### Slice B7a – Private Discord-beskeder ved behandlinger
+
+Status: Planlagt.
+
+Send en privat Discord-besked til den berørte bruger, når en Officer behandler en DKP- eller achievement-relateret handling:
+
+- DKP request accepteres eller afvises.
+- Achievement request accepteres eller afvises.
+- Et shop-køb refunderes eller annulleres af en Officer.
+
+Beskeden indeholder handling, beløb eller achievement/item, eventuel årsag eller Officer-kommentar samt tidspunkt.
+
+Flowet er:
+
+```text
+Application command → committed event/database operation → outbox notification → Discord bot → private message
+```
+
+Databaseoperationen må ikke fejle, hvis DM ikke kan leveres. Notifikationer sendes først efter commit og skal have retry- og idempotency-beskyttelse ved bot-restart. Brugere med lukkede DMs håndteres som en kontrolleret warning i loggen. Der kræves ingen public webhook; Discord Gateway bruges til DM-leveringen.
+
+Tests skal dække successful DM, DM-fejl uden rollback, retry, idempotency og korrekt tekst for approve, reject og refund.
+
 ### Slice B8 – Bot production hardening
 
 - Dockerfile til botten.
@@ -421,7 +445,8 @@ Acceptkriterier: Botten genstarter automatisk, reconnecter, mister ikke committe
 5. B5 – Achievements og DKP requests
 6. B6 – Atomiske multi-user requests
 7. B7 – Discord request-notifikationer
-8. B8 – Bot production hardening
+8. B7a – Private Discord-beskeder ved behandlinger
+9. B8 – Bot production hardening
 
 ## Ikke en del af første bot-version
 
