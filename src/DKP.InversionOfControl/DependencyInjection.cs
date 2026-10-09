@@ -81,6 +81,8 @@ public static class DependencyInjection
 		services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 		services.AddScoped<ICharacterCommands, CharacterCommandService>();
 		services.AddScoped<IBotCharacterCommands, BotCharacterCommandService>();
+		services.AddScoped<IBotShopQueries, BotShopQueries>();
+		services.AddScoped<IBotShopCommands, BotShopCommandService>();
 		services.AddScoped<IDkpTransactionCommands, DkpTransactionCommandService>();
 		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();
 		services.AddScoped<IUserBlockCommands, UserBlockCommandService>();

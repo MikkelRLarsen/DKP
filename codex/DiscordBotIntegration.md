@@ -348,6 +348,8 @@ Acceptkriterier: Ownership, main-character-regler og validering er identiske med
 
 ### Slice B4 – Shop og purchases
 
+Status: Implementeret.
+
 Tilføj read og self-service purchase-flow:
 
 - `/shop` viser aktive items, priser, limits og achievement-krav.
@@ -355,7 +357,7 @@ Tilføj read og self-service purchase-flow:
 - `/purchases` viser egne køb.
 - Annullering af egne aktive køb.
 
-Køb går gennem eksisterende Application-flow og event-store. Botten implementerer ingen egen balance-, limit- eller achievement-logik.
+Køb går gennem bot-kontrakterne til Application og event-store. Botten implementerer ingen egen balance-, limit- eller achievement-logik. API’et eksponerer aktive items, egne køb, køb med quantity og annullering/refundering af egne aktive køb.
 
 Acceptkriterier: Saldo, max-per-user, RollBonus, SoftReserve, refunds og achievement-gates håndhæves på samme måde som i webappen.
 

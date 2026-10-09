@@ -52,6 +52,49 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public async Task<bool> SetMainCharacterAsync(string discordUserId, Guid characterId, CancellationToken cancellationToken)
         => await SendCharactersAsync(HttpMethod.Put, $"/api/bot/characters/{characterId:D}/main", discordUserId, null, cancellationToken) is not null;
 
+    public Task<IReadOnlyList<BotShopItemDto>?> GetShopItemsAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BotShopItemDto>>(HttpMethod.Get, "/api/bot/shop", discordUserId, null, cancellationToken);
+
+    public Task<IReadOnlyList<BotShopPurchaseDto>?> GetPurchasesAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BotShopPurchaseDto>>(HttpMethod.Get, "/api/bot/shop/purchases", discordUserId, null, cancellationToken);
+
+    public Task<BotShopPurchaseDto?> PurchaseAsync(string discordUserId, ShopPurchaseInput input, CancellationToken cancellationToken)
+        => SendShopAsync<BotShopPurchaseDto>(HttpMethod.Post, "/api/bot/shop/purchases", discordUserId, input, cancellationToken);
+
+    public async Task<bool> CancelPurchaseAsync(string discordUserId, Guid purchaseId, CancellationToken cancellationToken)
+        => await SendShopAsync<object>(HttpMethod.Delete, $"/api/bot/shop/purchases/{purchaseId:D}", discordUserId, null, cancellationToken) is not null;
+
+    private async Task<T?> SendShopAsync<T>(HttpMethod method, string path, string discordUserId, object? body, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(method, new Uri(settings.ApiBaseUrl, path));
+        request.Headers.Add("X-DKP-Bot-Secret", settings.ApiSecret);
+        request.Headers.Add("X-DKP-Discord-User-Id", discordUserId);
+        request.Headers.Add("X-Correlation-Id", Guid.NewGuid().ToString("N"));
+        if (body is not null) request.Content = JsonContent.Create(body);
+        try
+        {
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("DKP shop API request failed with status {StatusCode}", response.StatusCode);
+                return default;
+            }
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
+                return (T)(object)true;
+            return await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken);
+        }
+        catch (HttpRequestException exception)
+        {
+            logger.LogWarning(exception, "DKP shop API request failed.");
+            return default;
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning("DKP shop API request timed out.");
+            return default;
+        }
+    }
+
     private async Task<object?> SendCharactersAsync(HttpMethod method, string path, string discordUserId, object? body, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, new Uri(settings.ApiBaseUrl, path));
@@ -119,3 +162,10 @@ public sealed record BalanceDto(int Amount);
 public sealed record DkpTransactionDto(Guid Id, int Amount, string Reason, DateTime CreatedAtUtc, string CreatedByDiscordName);
 public sealed record CharacterInputDto(string FirstName, string LastName);
 public sealed record BotCharacterDto(Guid Id, string FirstName, string LastName, bool IsMain);
+public sealed record ShopPurchaseInput(Guid ShopItemId, int Quantity);
+public sealed record BotShopItemDto(Guid Id, string Key, string Name, string Description, int Price, int MaxPerUser, bool IsActive, IReadOnlyList<BotShopRequirementDto>? AchievementRequirements);
+public sealed record BotShopRequirementDto(Guid AchievementId, string AchievementName);
+public sealed record BotShopPurchaseDto(Guid Id, Guid UserId, string UserName, string? MainCharacterName, Guid ShopItemId, string ItemName, int Quantity, int TotalDkpCost, DateTime CreatedAtUtc, DateTime? CancelledAtUtc)
+{
+    public bool IsCancelled => CancelledAtUtc is not null;
+}
