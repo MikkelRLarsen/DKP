@@ -845,9 +845,9 @@ Status: Påbegyndt.
 
 Dockerfile, Docker Compose med PostgreSQL, pgAdmin, Traefik, Watchtower og DKP samt reverse-proxy-konfiguration for `wowforever.coffecottage.dk` er tilføjet. Se `codex/Deployment.md` for DNS, secrets og opstart. Health checks, fuld production-hardening og deployment-test er fortsat resterende arbejde.
 
-Discord Bot/API-integration er dokumenteret i `codex/DiscordBotIntegration.md`. Slice B1 er implementeret med `DKP.DiscordBot.csproj`, `DKP.Api.csproj`, API'et under `/api`, service-authentication og den diagnostiske `/dkp-ping` command. Der er endnu ikke implementeret medlemsfunktioner i botten.
+Discord Bot/API-integration er dokumenteret i `codex/DiscordBotIntegration.md`. Slice B1 og B2 er implementeret med `DKP.DiscordBot.csproj`, `DKP.Api.csproj`, API'et under `/api`, service-authentication samt `/dkp-ping`, `/dkp` og `/dkp-history`.
 
-Bot-integrationen er opdelt i følgende slices: B1 API-grundlag og bot connection (implementeret), B2 DKP-balance og historik, B3 Characters, B4 Shop og purchases, B5 Achievements og DKP requests, B6 atomiske multi-user requests, B7 Discord request-notifikationer og B8 bot production hardening.
+Bot-integrationen er opdelt i følgende slices: B1 API-grundlag og bot connection (implementeret), B2 DKP-balance og historik (implementeret), B3 Characters, B4 Shop og purchases, B5 Achievements og DKP requests, B6 atomiske multi-user requests, B7 Discord request-notifikationer og B8 bot production hardening.
 
 Status: Planlagt.
 

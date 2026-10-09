@@ -73,6 +73,7 @@ public static class DependencyInjection
 		services.AddScoped<IEventProjectionRebuilder, EventProjectionRebuilder>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
 		services.AddScoped<IDkpQueries, DkpQueries>();
+		services.AddScoped<IBotDkpQueries, BotDkpQueries>();
 		services.AddScoped<IGuildMemberQueries, GuildMemberQueries>();
 		services.AddScoped<IPlayerDetailsQueries, PlayerDetailsQueries>();
 		services.AddScoped<IOfficerIdentityPolicy, OfficerIdentityPolicy>();

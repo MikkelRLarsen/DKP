@@ -184,6 +184,7 @@ Første version kan indeholde:
 
 - `/dkp`
   - Aktuel DKP-saldo.
+- `/dkp-history`
   - Seneste DKP-historik.
 - `/characters`
   - Se egne characters.
@@ -319,14 +320,16 @@ Acceptkriterier: Botten kan installeres i guilden, starter stabilt, registrerer 
 
 ### Slice B2 – DKP-balance og historik
 
+Status: Implementeret.
+
 Tilføj første funktionelle member-flow:
 
 - `/dkp` viser brugerens aktuelle saldo.
-- `/dkp history` viser seneste historik.
+- `/dkp-history` viser de seneste 10 historikposter.
 - Discord User ID mappes til intern User.
 - Ukendte, anonyme og blokerede brugere afvises.
 
-Acceptkriterier: Saldo og historik matcher Blazor, og botten kan ikke se en anden brugers data.
+Botten sender kun den validerede Discord User ID og service-secret til API’et. API’et slår brugeren op via `DiscordId`, afviser ukendte/blokerede brugere og returnerer kun den pågældende brugers replay-baserede saldo/historik. Acceptkriteriet er dermed opfyldt uden databaseadgang fra botten.
 
 ### Slice B3 – Characters
 
