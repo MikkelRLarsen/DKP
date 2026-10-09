@@ -333,12 +333,16 @@ Botten sender kun den validerede Discord User ID og service-secret til API’et.
 
 ### Slice B3 – Characters
 
+Status: Implementeret.
+
 Tilføj member-management af egne characters:
 
 - `/characters list`.
 - Opret character via modal.
 - Redigér og slet egne characters.
 - Vælg main character.
+
+API’et eksponerer character-flowet under `/api/bot/characters`. Botten kan vise egne characters, oprette og redigere via modals, slette med eksplicit confirmation og sætte main character. Ownership, main-character-regler og validering håndhæves i Application/Infrastructure.
 
 Acceptkriterier: Ownership, main-character-regler og validering er identiske med Blazor-flowet.
 

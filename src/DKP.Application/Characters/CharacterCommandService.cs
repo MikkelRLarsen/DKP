@@ -10,7 +10,7 @@ public sealed class CharacterCommandService(CommandContext context, ICharacterRe
     public Task<CharacterDto> CreateAsync(CharacterInput input, CancellationToken ct = default)
         => context.ExecuteAsync([], false, async actor =>
         {
-            Validate(input);
+            CharacterRules.Validate(input);
             var character = new Character(actor.Id, input.FirstName.Trim(), input.LastName.Trim());
             await characters.AddAsync(character, ct);
             return ToDto(character);
@@ -19,7 +19,7 @@ public sealed class CharacterCommandService(CommandContext context, ICharacterRe
     public Task<CharacterDto?> UpdateAsync(Guid characterId, CharacterInput input, CancellationToken ct = default)
         => context.ExecuteAsync<CharacterDto?>([], false, async actor =>
         {
-            Validate(input);
+            CharacterRules.Validate(input);
             var character = await characters.FindForUserAsync(characterId, actor.Id, ct);
             if (character is null) return null;
             character.Update(input.FirstName.Trim(), input.LastName.Trim());
@@ -49,11 +49,5 @@ public sealed class CharacterCommandService(CommandContext context, ICharacterRe
             return true;
         }, ct);
 
-    private static void Validate(CharacterInput input)
-    {
-        if (string.IsNullOrWhiteSpace(input.FirstName) || input.FirstName.Trim().Length > 64 ||
-            string.IsNullOrWhiteSpace(input.LastName) || input.LastName.Trim().Length > 64)
-            throw new ArgumentException("First and last name are required (maximum 64 characters each).");
-    }
     private static CharacterDto ToDto(Character c) => new(c.Id, c.FirstName, c.LastName, c.IsMain);
 }

@@ -72,6 +72,7 @@ public static class DependencyInjection
 		services.AddScoped<IEventLedgerRepository, EventLedgerRepository>();
 		services.AddScoped<IEventProjectionRebuilder, EventProjectionRebuilder>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
+		services.AddScoped<IBotCharacterQueries, BotCharacterQueries>();
 		services.AddScoped<IDkpQueries, DkpQueries>();
 		services.AddScoped<IBotDkpQueries, BotDkpQueries>();
 		services.AddScoped<IGuildMemberQueries, GuildMemberQueries>();
@@ -79,6 +80,7 @@ public static class DependencyInjection
 		services.AddScoped<IOfficerIdentityPolicy, OfficerIdentityPolicy>();
 		services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 		services.AddScoped<ICharacterCommands, CharacterCommandService>();
+		services.AddScoped<IBotCharacterCommands, BotCharacterCommandService>();
 		services.AddScoped<IDkpTransactionCommands, DkpTransactionCommandService>();
 		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();
 		services.AddScoped<IUserBlockCommands, UserBlockCommandService>();

@@ -105,6 +105,7 @@ public sealed class TestRig
         Context = new(new TestIdentity(id), Users, Session);
         Ledger = new(Session);
         Dkp = new(Context, Ledger, new FixedTime());
+        BotCharacters = new(Users, new CharacterRepository(Session), Session);
         Shop = new(Context, new ShopRepository(Session), new AchievementRepository(Session), Ledger, new FixedTime());
         Presets = new(Context, new PresetRepository(Session), Ledger, new FixedTime());
         AwardRequests = new(Context, new DkpAwardRequestRepository(Session), new PresetRepository(Session), new AchievementRepository(Session), Ledger, new FixedTime());
@@ -121,6 +122,7 @@ public sealed class TestRig
     public CommandContext Context { get; }
     public EventLedgerRepository Ledger { get; }
     public DkpTransactionCommandService Dkp { get; }
+    public BotCharacterCommandService BotCharacters { get; }
     public ShopCommandService Shop { get; }
     public DkpPresetCommandService Presets { get; }
     public DkpAwardRequestCommandService AwardRequests { get; }
