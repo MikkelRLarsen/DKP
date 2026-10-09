@@ -37,9 +37,54 @@ public sealed class BotAchievementRequestCommandService(
             return true;
         }, ct);
 
+    public Task<IReadOnlyList<DkpAwardRequestDto>> CreateForUsersAsync(string discordId, BotMultiAchievementRequest input, CancellationToken ct = default)
+        => unitOfWork.ExecuteAsync<IReadOnlyList<DkpAwardRequestDto>>([], async () =>
+        {
+            await ActiveUserAsync(discordId, ct);
+            var achievement = await achievements.FindAsync(input.AchievementId, ct) ?? throw new KeyNotFoundException("Achievement not found.");
+            if (!achievement.IsActive) throw new InvalidOperationException("Achievement is inactive.");
+            var comment = NormalizeComment(input.Comment);
+            var ids = new[] { discordId }.Concat(input.TargetDiscordIds ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToArray();
+            if (ids.Length == 0) throw new ArgumentException("At least one member is required.");
+
+            var usersByDiscordId = new Dictionary<string, User>(StringComparer.Ordinal);
+            foreach (var id in ids)
+            {
+                var user = await ActiveUserAsync(id, ct);
+                usersByDiscordId[id] = user;
+            }
+
+            var targets = usersByDiscordId.Values.ToArray();
+            foreach (var target in targets)
+            {
+                if (await achievements.HasActiveAsync(target.Id, achievement.Id, ct))
+                    throw new InvalidOperationException($"{target.DiscordName} already has this achievement.");
+                if (await requests.HasPendingAsync(target.Id, null, achievement.Id, ct))
+                    throw new InvalidOperationException($"{target.DiscordName} already has a pending request for this achievement.");
+            }
+
+            var now = time.GetUtcNow().UtcDateTime;
+            var result = new List<DkpAwardRequestDto>(targets.Length);
+            foreach (var target in targets)
+            {
+                var created = new DkpAwardRequest(target.Id, null, achievement.Id, 1, comment, now);
+                await requests.AddAsync(created, ct);
+                result.Add(new DkpAwardRequestDto(created.Id, target.Id, target.DiscordName, null, null, achievement.Id, achievement.Name, achievement.DkpAmount, 1, achievement.Description, comment, DKP.Facade.Contracts.DkpAwardRequestStatus.Pending, now, null, null, null, []));
+            }
+            return result;
+        }, ct);
+
     private async Task<User> ActiveUserAsync(string discordId, CancellationToken ct)
     {
         var user = string.IsNullOrWhiteSpace(discordId) ? null : await users.FindByDiscordIdAsync(discordId, ct);
         return user is null || user.IsBlocked ? throw new UnauthorizedAccessException("An active member is required.") : user;
+    }
+
+    private static string? NormalizeComment(string? comment)
+    {
+        if (string.IsNullOrWhiteSpace(comment)) return null;
+        var normalized = comment.Trim();
+        if (normalized.Length > 500) throw new ArgumentException("Comment must be at most 500 characters.");
+        return normalized;
     }
 }

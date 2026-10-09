@@ -1,4 +1,5 @@
 using DKP.Facade.Commands;
+using DKP.Facade.Contracts;
 using DKP.Facade.Queries;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -42,6 +43,21 @@ public sealed class BotAchievementsController(
         catch (InvalidOperationException e) { return Conflict(new { error = e.Message }); }
     }
 
+    [HttpPost("requests/multi")]
+    public async Task<IActionResult> CreateMultiRequestAsync([FromBody] MultiAchievementRequestInput input, CancellationToken ct)
+    {
+        if (!TryGetDiscordId(out var discordId, out var failure)) return failure!;
+        try
+        {
+            var request = new BotMultiAchievementRequest(input.AchievementId, input.TargetDiscordIds ?? [], input.Comment);
+            return Ok(await commands.CreateForUsersAsync(discordId!, request, ct));
+        }
+        catch (ArgumentException e) { return BadRequest(new { error = e.Message }); }
+        catch (KeyNotFoundException e) { return NotFound(new { error = e.Message }); }
+        catch (UnauthorizedAccessException) { return Unauthorized(); }
+        catch (InvalidOperationException e) { return Conflict(new { error = e.Message }); }
+    }
+
     private bool TryGetDiscordId(out string? discordId, out IActionResult? failure)
     {
         discordId = Request.Headers["X-DKP-Discord-User-Id"].FirstOrDefault();
@@ -58,3 +74,4 @@ public sealed class BotAchievementsController(
 }
 
 public sealed record AchievementRequestInput(Guid AchievementId, string? Comment);
+public sealed record MultiAchievementRequestInput(Guid AchievementId, IReadOnlyList<string>? TargetDiscordIds, string? Comment);

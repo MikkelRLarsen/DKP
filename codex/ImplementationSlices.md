@@ -847,7 +847,7 @@ Dockerfile, Docker Compose med PostgreSQL, pgAdmin, Traefik, Watchtower og DKP s
 
 Discord Bot/API-integration er dokumenteret i `codex/DiscordBotIntegration.md`. Slice B1, B2, B3 og B4 er implementeret med `DKP.DiscordBot.csproj`, `DKP.Api.csproj`, API'et under `/api`, service-authentication samt DKP-, character- og shop-flow.
 
-Bot-integrationen er opdelt i følgende slices: B1 API-grundlag og bot connection (implementeret), B2 DKP-balance og historik (implementeret), B3 Characters (implementeret), B4 Shop og purchases (implementeret), B5 Achievements og DKP requests (implementeret), B6 atomiske multi-user requests, B7 Discord request-notifikationer, B7a private Discord-beskeder ved behandlinger og B8 bot production hardening.
+Bot-integrationen er opdelt i følgende slices: B1 API-grundlag og bot connection (implementeret), B2 DKP-balance og historik (implementeret), B3 Characters (implementeret), B4 Shop og purchases (implementeret), B5 Achievements og DKP requests (implementeret), B6 atomiske multi-user achievement requests (implementeret), B6a preset-baserede DKP requests for flere spillere, B7 Discord request-notifikationer, B7a private Discord-beskeder ved behandlinger og B8 bot production hardening.
 
 Status: Planlagt.
 

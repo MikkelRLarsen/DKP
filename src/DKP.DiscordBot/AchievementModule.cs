@@ -26,25 +26,41 @@ public sealed class AchievementModule(DkpApiClient api) : InteractionModuleBase<
         await ModifyOriginalResponseAsync(p => p.Content = output.ToString());
     }
 
-    [SlashCommand("achievement-requests", "Show your achievement and DKP requests", runMode: RunMode.Async)]
-    public async Task RequestsAsync()
-    {
-        await DeferAsync(ephemeral: true);
-        var overview = await api.GetAchievementsAsync(Context.User.Id.ToString(), CancellationToken.None);
-        if (overview is null) { await ModifyOriginalResponseAsync(p => p.Content = "Your requests could not be loaded."); return; }
-        var requests = overview.Requests;
-        if (requests.Count == 0) { await ModifyOriginalResponseAsync(p => p.Content = "You have no requests."); return; }
-        var output = new StringBuilder("**Your requests**\n");
-        foreach (var request in requests)
-            output.AppendLine($"`{request.Id}` — **{request.PresetName}**, {request.Amount} DKP, {request.StatusName}");
-        output.AppendLine("\nUse `/achievement cancel` with a pending request ID to cancel it.");
-        await ModifyOriginalResponseAsync(p => p.Content = output.ToString());
-    }
 }
 
 [Group("achievement", "Request an achievement DKP award")]
 public sealed class AchievementRequestModule(DkpApiClient api) : InteractionModuleBase<SocketInteractionContext>
 {
+    [SlashCommand("request-many", "Request an achievement for yourself and tagged members", runMode: RunMode.Async)]
+    public async Task RequestManyAsync(
+        [Summary("achievement", "The achievement key shown by /achievements")] string achievement,
+        [Summary("users", "Space-separated Discord mentions, for example @UserA @UserB")] string users,
+        [Summary("comment", "Optional comment for the Officer")] string? comment = null)
+    {
+        await DeferAsync(ephemeral: true);
+        var overview = await api.GetAchievementsAsync(Context.User.Id.ToString(), CancellationToken.None);
+        var definition = overview?.Definitions.SingleOrDefault(x => string.Equals(x.Key, achievement.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (definition is null) { await ModifyOriginalResponseAsync(p => p.Content = "That achievement was not found. Use `/achievements` to see valid keys."); return; }
+        var targetIds = ExtractDiscordIds(users);
+        if (targetIds.Length == 0)
+        {
+            await ModifyOriginalResponseAsync(p => p.Content = "Tag at least one Discord member, for example `@UserA @UserB`.");
+            return;
+        }
+        var requests = await api.RequestAchievementForUsersAsync(Context.User.Id.ToString(), definition.Id, targetIds, comment, CancellationToken.None);
+        await ModifyOriginalResponseAsync(p => p.Content = requests is null
+            ? "The multi-user request could not be created. No requests were saved; check that every member is eligible."
+            : $"Created **{requests.Count}** pending request(s) for **{definition.Name}**. An Officer must approve them before DKP is awarded.");
+    }
+
+    private static string[] ExtractDiscordIds(string value)
+        => (value ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(token => token.Trim().TrimStart('<').TrimEnd('>'))
+            .Select(token => token.StartsWith("@!", StringComparison.Ordinal) ? token[2..] : token.StartsWith("@", StringComparison.Ordinal) ? token[1..] : token)
+            .Where(token => ulong.TryParse(token, out _))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
     [SlashCommand("requests", "Show your achievement and DKP requests", runMode: RunMode.Async)]
     public async Task RequestsAsync()
     {
@@ -73,7 +89,7 @@ public sealed class AchievementRequestModule(DkpApiClient api) : InteractionModu
     }
 
     [SlashCommand("cancel", "Cancel one of your pending requests", runMode: RunMode.Async)]
-    public async Task CancelAsync([Summary("request_id", "The request ID shown by /achievement-requests")] string requestId)
+    public async Task CancelAsync([Summary("request_id", "The request ID shown by /achievement requests")] string requestId)
     {
         await DeferAsync(ephemeral: true);
         if (!Guid.TryParse(requestId, out var id)) { await ModifyOriginalResponseAsync(p => p.Content = "The request ID is not valid."); return; }

@@ -367,6 +367,7 @@ Status: Implementeret.
 
 Tilføjet:
 
+- `/account create` til idempotent initial account-provisioning.
 - `/achievements` med obtained, revoked og available.
 - `/achievement request`.
 - `/achievement requests`.
@@ -376,7 +377,9 @@ Botten bruger API’et under `/api/bot/achievements`, og requesten genbruger den
 
 ### Slice B6 – Atomiske multi-user requests
 
-Giv en bruger mulighed for at tagge flere medlemmer i én request:
+Status: Implementeret.
+
+Giv en bruger mulighed for at tagge flere medlemmer i én achievement request:
 
 ```text
 /achievement request achievement: Attendance users: @UserA @UserB
@@ -388,7 +391,27 @@ Giv en bruger mulighed for at tagge flere medlemmer i én request:
 - Én fejl betyder, at ingen requests oprettes.
 - Initiator får et tydeligt samlet resultat.
 
-Acceptkriterier: Ingen partial requests ved fejl, og member kan ikke bruge flowet til at give sig selv DKP direkte.
+API’et modtager initiatorens Discord ID og de taggede Discord IDs. Application deduplikerer initiator og targets, validerer alle brugere, aktive achievements, eksisterende awards og pending requests før der oprettes nogen records. Ingen database-migration er nødvendig.
+
+Acceptkriterier: Ingen partial requests ved fejl, og member kan ikke tildele sig selv DKP direkte; alle requests forbliver pending, indtil en Officer behandler dem.
+
+### Slice B6a – Preset-baserede DKP requests for flere spillere
+
+Status: Planlagt.
+
+Udvid botten med DKP requests baseret på de aktive DKP-presets fra `/my-dkp/sources`.
+
+Planlagte commands:
+
+- `/dkp-sources` viser aktive presets, beløb, årsag og resterende anvendelser.
+- `/dkp request` opretter en request for initiatoren.
+- `/dkp request-many` opretter requests for initiatoren og flere taggede spillere.
+- `/dkp requests` viser egne pending, approved, rejected og cancelled requests.
+- `/dkp cancel` annullerer egne pending requests.
+
+Multi-player-flowet skal deduplikere initiator og taggede Discord IDs, validere alle brugere, kontrollere aktivt preset, pending duplicates, quantity og lifetime-limit før nogen request gemmes. Alle requests oprettes atomisk, så én fejl giver rollback for hele gruppen. Botten må ikke uddele DKP direkte; Officer-godkendelse genvaliderer preset usage og event-store.
+
+Tests skal dække preset-listing, én request, multi-user requests, deduplikering, blocked/unknown users, pending duplicates, limit-validering og rollback uden partial requests.
 
 ### Slice B7 – Discord request-notifikationer
 
@@ -444,9 +467,10 @@ Acceptkriterier: Botten genstarter automatisk, reconnecter, mister ikke committe
 4. B4 – Shop og purchases
 5. B5 – Achievements og DKP requests
 6. B6 – Atomiske multi-user requests
-7. B7 – Discord request-notifikationer
-8. B7a – Private Discord-beskeder ved behandlinger
-9. B8 – Bot production hardening
+7. B6a – Preset-baserede DKP requests for flere spillere
+8. B7 – Discord request-notifikationer
+9. B7a – Private Discord-beskeder ved behandlinger
+10. B8 – Bot production hardening
 
 ## Ikke en del af første bot-version
 

@@ -73,6 +73,12 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public async Task<bool> CancelAchievementRequestAsync(string discordUserId, Guid requestId, CancellationToken cancellationToken)
         => await SendShopAsync<object>(HttpMethod.Delete, $"/api/bot/achievements/requests/{requestId:D}", discordUserId, null, cancellationToken) is not null;
 
+    public Task<BotAccountDto?> CreateAccountAsync(string discordUserId, BotAccountInput input, CancellationToken cancellationToken)
+        => SendShopAsync<BotAccountDto>(HttpMethod.Post, "/api/bot/account", discordUserId, input, cancellationToken);
+
+    public Task<IReadOnlyList<BotAwardRequestDto>?> RequestAchievementForUsersAsync(string discordUserId, Guid achievementId, IReadOnlyList<string> targetDiscordIds, string? comment, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BotAwardRequestDto>>(HttpMethod.Post, "/api/bot/achievements/requests/multi", discordUserId, new MultiAchievementRequestInput(achievementId, targetDiscordIds, comment), cancellationToken);
+
     private async Task<T?> SendShopAsync<T>(HttpMethod method, string path, string discordUserId, object? body, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, new Uri(settings.ApiBaseUrl, path));
@@ -180,6 +186,9 @@ public sealed record BotShopPurchaseDto(Guid Id, Guid UserId, string UserName, s
     public string Status => IsCancelled ? "cancelled" : IsUsed ? "used" : "active";
 }
 public sealed record AchievementRequestInput(Guid AchievementId, string? Comment);
+public sealed record MultiAchievementRequestInput(Guid AchievementId, IReadOnlyList<string> TargetDiscordIds, string? Comment);
+public sealed record BotAccountInput(string DiscordName, string? AvatarUrl);
+public sealed record BotAccountDto(Guid Id, string DiscordId, string DiscordName, int Role, bool Created);
 public sealed record BotAchievementOverviewDto(IReadOnlyList<BotAchievementDefinitionDto> Definitions, IReadOnlyList<BotUserAchievementDto> UserAchievements, IReadOnlyList<BotAwardRequestDto> Requests);
 public sealed record BotAchievementDefinitionDto(Guid Id, string Key, string Name, string Description, int DkpAmount, bool IsActive);
 public sealed record BotUserAchievementDto(Guid Id, Guid UserId, string DiscordName, Guid AchievementId, string AchievementName, int DkpAmount, bool IsActive, DateTime GrantedAtUtc, DateTime? RevokedAtUtc);
