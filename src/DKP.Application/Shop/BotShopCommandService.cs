@@ -35,7 +35,8 @@ public sealed class BotShopCommandService(
 
             var state = await ledger.GetStateAsync(actor.Id, ct);
             if (state.Balance < cost) throw new InvalidOperationException($"Insufficient DKP ({cost} required).");
-            if ((long)state.ActiveQuantity(item.Id) + request.Quantity > item.MaxPerUser)
+            var owned = ShopPurchaseLimitRules.OwnedQuantity(state, item);
+            if ((long)owned + request.Quantity > item.MaxPerUser)
                 throw new InvalidOperationException($"Maximum {item.MaxPerUser} for {item.Name} has been reached.");
             if (item.RollBonusValue is not null && state.HasActiveRollBonus())
                 throw new InvalidOperationException("You already have an active RollBonus.");

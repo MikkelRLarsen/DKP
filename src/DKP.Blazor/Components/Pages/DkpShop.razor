@@ -5,6 +5,7 @@
 @using DKP.Facade.Queries
 @inject IDkpQueries DkpQueries
 @inject IShopQueries ShopQueries
+@inject IShopPurchaseQueries ShopPurchaseQueries
 @inject IShopCommands ShopCommands
 @inject IAchievementQueries AchievementQueries
 @inject DialogService DialogService
@@ -17,18 +18,41 @@
     else if (loadFailed) { <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load the shop. Please reload the page.</RadzenAlert> }
     else {
         <RadzenCard><RadzenText Text="Current DKP" TextStyle="TextStyle.Overline" /><RadzenText Text="@balance.ToString("+#;-#;0")" Style="font-size:2.5rem;font-weight:700;" /></RadzenCard>
-        <RadzenCard><RadzenStack Gap=".75rem"><RadzenText Text="Purchase" TextStyle="TextStyle.H5" /><RadzenDropDown TValue="Guid" @bind-Value="selectedItemId" Data="@items" TextProperty="Name" ValueProperty="Id" Disabled="@saving" AllowFiltering="true" Style="width:100%;" />
+        <RadzenAccordion Multiple="true">
+            <Items>
+            <RadzenAccordionItem Text="Shop catalog" Icon="storefront">
+            <RadzenDataGrid Data="@availability" TItem="ShopItemAvailabilityDto" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" EmptyText="No active shop items found." Style="margin-top:1rem;">
+                <Columns>
+                    <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Property="Name" Title="Item" />
+                    <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Property="Price" Title="Price (DKP)" />
+                    <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Property="MaxPerUser" Title="Limit" />
+                    <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Property="ActiveQuantity" Title="Active" />
+                    <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Property="UsedQuantity" Title="Used" />
+                    <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Property="RemainingQuantity" Title="Remaining">
+                        <Template Context="item"><RadzenBadge Text="@item.RemainingQuantity.ToString()" BadgeStyle="@AvailabilityStyle(item)" /></Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Title="Requirements" Sortable="false"><Template Context="item">@(item.AchievementRequirements.Count == 0 ? "None" : string.Join(", ", item.AchievementRequirements.Select(x => x.AchievementName)))</Template></RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Title="Action" Sortable="false" Filterable="false"><Template Context="item"><RadzenButton Text="Select" Size="ButtonSize.Small" Click="@(() => SelectItem(item.ShopItemId))" Disabled="@saving" /></Template></RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+            </RadzenAccordionItem>
+            <RadzenAccordionItem Text="Purchase" Icon="shopping_cart"><RadzenStack Gap=".75rem"><RadzenDropDown TValue="Guid" @bind-Value="selectedItemId" Data="@items" TextProperty="Name" ValueProperty="Id" Disabled="@saving" AllowFiltering="true" Style="width:100%;" />
             @if (selectedItem is not null) { <RadzenText Text="@(selectedItem.Description + $" Cost: {selectedItem.Price} DKP per unit.")" />
                 @if (selectedItem.AchievementRequirements.Count > 0) { <RadzenText>Required achievements: @string.Join(", ", selectedItem.AchievementRequirements.Select(x => x.AchievementName))</RadzenText> }
                 @if (MissingRequirements(selectedItem).Count > 0) { <RadzenAlert AlertStyle="AlertStyle.Warning">You are missing: @string.Join(", ", MissingRequirements(selectedItem).Select(x => x.AchievementName))</RadzenAlert> }
-                <RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Max="@selectedItem.MaxPerUser" Disabled="@(saving || MissingRequirements(selectedItem).Count > 0)" /><RadzenButton Text="Purchase" Icon="shopping_cart" Click="PurchaseAsync" Disabled="@(saving || MissingRequirements(selectedItem).Count > 0)" /> }
-        </RadzenStack></RadzenCard>
-        <RadzenCard><RadzenText Text="My purchases" TextStyle="TextStyle.H5" /><RadzenDataGrid Data="@purchases" TItem="ShopPurchaseDto" AllowPaging="true" AllowSorting="true" EmptyText="No purchases found."><Columns><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="ItemName" Title="Item" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="Quantity" Title="Quantity" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="TotalDkpCost" Title="DKP" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="CreatedAtUtc" Title="Date" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Status"><Template Context="p"><RadzenBadge Text="@p.Status" /></Template></RadzenDataGridColumn><RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Actions"><Template Context="p">@if(!p.IsCancelled && !p.IsUsed){<RadzenButton Text="Cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(()=>CancelAsync(p))" Disabled="@saving" />}</Template></RadzenDataGridColumn></Columns></RadzenDataGrid></RadzenCard>
+                @if (SelectedAvailability is not null) { <RadzenText Text="@($"Active: {SelectedAvailability.ActiveQuantity}, Used: {SelectedAvailability.UsedQuantity}, Remaining: {SelectedAvailability.RemainingQuantity} of {SelectedAvailability.MaxPerUser}")" /> }
+                <RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Max="@(Math.Max(1, SelectedAvailability?.RemainingQuantity ?? 0))" Disabled="@(saving || MissingRequirements(selectedItem).Count > 0 || SelectedAvailability?.IsAvailable != true)" /><RadzenButton Text="Purchase" Icon="shopping_cart" Click="PurchaseAsync" Disabled="@(saving || MissingRequirements(selectedItem).Count > 0 || SelectedAvailability?.IsAvailable != true)" /> }
+            @if (SelectedAvailability?.IsAvailable == false) { <RadzenAlert AlertStyle="AlertStyle.Warning">You have reached the purchase limit for this item.</RadzenAlert> }
+        </RadzenStack></RadzenAccordionItem>
+            <RadzenAccordionItem Text="Purchase history" Icon="history"><RadzenDataGrid Data="@purchases" TItem="ShopPurchaseDto" AllowPaging="true" AllowSorting="true" EmptyText="No purchases found."><Columns><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="ItemName" Title="Item" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="Quantity" Title="Quantity" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="TotalDkpCost" Title="DKP" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Property="CreatedAtUtc" Title="Date" /><RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Status"><Template Context="p"><RadzenBadge Text="@p.Status" BadgeStyle="@StatusStyle(p)" /></Template></RadzenDataGridColumn><RadzenDataGridColumn TItem="ShopPurchaseDto" Title="Actions"><Template Context="p">@if(!p.IsCancelled && !p.IsUsed){<RadzenButton Text="Cancel" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Click="@(()=>CancelAsync(p))" Disabled="@saving" />}</Template></RadzenDataGridColumn></Columns></RadzenDataGrid></RadzenAccordionItem>
+            </Items>
+        </RadzenAccordion>
     }
 </RadzenStack>
 
 @code {
     private IReadOnlyList<ShopItemDto> items = [];
+    private IReadOnlyList<ShopItemAvailabilityDto> availability = [];
     private IReadOnlyList<ShopPurchaseDto> purchases = [];
     private IReadOnlyList<UserAchievementDto> achievements = [];
     private Guid selectedItemId;
@@ -38,6 +62,24 @@
     private bool loadFailed;
     private bool saving;
     private ShopItemDto? selectedItem => items.FirstOrDefault(x => x.Id == selectedItemId);
+    private ShopItemAvailabilityDto? SelectedAvailability => availability.FirstOrDefault(x => x.ShopItemId == selectedItemId);
+
+    private void SelectItem(Guid itemId) { selectedItemId = itemId; quantity = 1; }
+
+    private static BadgeStyle AvailabilityStyle(ShopItemAvailabilityDto item) => item.RemainingQuantity switch
+    {
+        <= 0 => BadgeStyle.Danger,
+        1 => BadgeStyle.Warning,
+        _ => BadgeStyle.Success
+    };
+
+    private static BadgeStyle StatusStyle(ShopPurchaseDto purchase) => purchase.Status switch
+    {
+        "Active" => BadgeStyle.Success,
+        "Used" => BadgeStyle.Warning,
+        "Cancelled" => BadgeStyle.Light,
+        _ => BadgeStyle.Info
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -56,9 +98,11 @@
             ?? throw new InvalidOperationException("DKP history was not found.");
         balance = history.Balance.Amount;
         items = await ShopQueries.GetActiveItemsAsync();
+        availability = await ShopPurchaseQueries.GetAvailabilityAsync();
         purchases = await ShopQueries.GetPurchasesAsync();
         achievements = await AchievementQueries.GetUserAchievementsAsync();
         if (selectedItem is null && items.Count > 0) selectedItemId = items[0].Id;
+        if (SelectedAvailability is not null && quantity > SelectedAvailability.RemainingQuantity) quantity = Math.Max(1, SelectedAvailability.RemainingQuantity);
     }
     private IReadOnlyList<ShopItemAchievementRequirementDto> MissingRequirements(ShopItemDto item) => item.AchievementRequirements.Where(r => !achievements.Any(a => a.AchievementId == r.AchievementId && a.IsActive)).ToArray();
 
@@ -66,7 +110,8 @@
     {
         if (saving) return;
         var item = selectedItem;
-        if (item is null || quantity < 1) return;
+        var available = SelectedAvailability;
+        if (item is null || available is null || !available.IsAvailable || quantity < 1 || quantity > available.RemainingQuantity) return;
         var request = new ShopPurchaseRequest(item.Id, quantity);
         saving = true;
         try

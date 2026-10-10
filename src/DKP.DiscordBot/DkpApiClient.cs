@@ -43,6 +43,9 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public Task<IReadOnlyList<BotAwardRequestDto>?> RequestDkpAsync(string discordUserId, Guid presetId, int quantity, IReadOnlyList<string>? targetDiscordIds, string? comment, CancellationToken cancellationToken)
         => SendShopAsync<IReadOnlyList<BotAwardRequestDto>>(HttpMethod.Post, targetDiscordIds is { Count: > 0 } ? "/api/bot/dkp/requests/multi" : "/api/bot/dkp/requests", discordUserId, new BotDkpRequestInput(presetId, quantity, targetDiscordIds, comment), cancellationToken);
 
+    public async Task<bool> CancelDkpRequestAsync(string discordUserId, Guid requestId, CancellationToken cancellationToken)
+        => await SendShopAsync<object>(HttpMethod.Delete, $"/api/bot/dkp/requests/{requestId:D}", discordUserId, null, cancellationToken) is not null;
+
     public async Task<IReadOnlyList<BotCharacterDto>?> GetCharactersAsync(string discordUserId, CancellationToken cancellationToken)
         => await SendCharactersAsync(HttpMethod.Get, "/api/bot/characters", discordUserId, null, cancellationToken) as IReadOnlyList<BotCharacterDto>;
 
@@ -82,6 +85,18 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public Task<BotAccountDto?> CreateAccountAsync(string discordUserId, BotAccountInput input, CancellationToken cancellationToken)
         => SendShopAsync<BotAccountDto>(HttpMethod.Post, "/api/bot/account", discordUserId, input, cancellationToken);
 
+    public Task<IReadOnlyList<BotNotificationDto>?> GetPendingNotificationsAsync(CancellationToken cancellationToken)
+        => SendBotAsync<IReadOnlyList<BotNotificationDto>>(HttpMethod.Get, "/api/bot/notifications/pending?limit=10", null, cancellationToken);
+
+    public async Task<bool> MarkNotificationSentAsync(Guid id, ulong messageId, CancellationToken cancellationToken)
+        => await SendBotAsync<object>(HttpMethod.Post, $"/api/bot/notifications/{id:D}/sent", new NotificationSentInput(messageId), cancellationToken) is not null;
+
+    public async Task<bool> MarkNotificationDeletedAsync(Guid id, CancellationToken cancellationToken)
+        => await SendBotAsync<object>(HttpMethod.Post, $"/api/bot/notifications/{id:D}/deleted", null, cancellationToken) is not null;
+
+    public async Task<bool> MarkNotificationFailedAsync(Guid id, string error, CancellationToken cancellationToken)
+        => await SendBotAsync<object>(HttpMethod.Post, $"/api/bot/notifications/{id:D}/failed", new NotificationFailureInput(error), cancellationToken) is not null;
+
     public Task<IReadOnlyList<BotAwardRequestDto>?> RequestAchievementForUsersAsync(string discordUserId, Guid achievementId, IReadOnlyList<string> targetDiscordIds, string? comment, CancellationToken cancellationToken)
         => SendShopAsync<IReadOnlyList<BotAwardRequestDto>>(HttpMethod.Post, "/api/bot/achievements/requests/multi", discordUserId, new MultiAchievementRequestInput(achievementId, targetDiscordIds, comment), cancellationToken);
 
@@ -112,6 +127,26 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             logger.LogWarning("DKP shop API request timed out.");
+            return default;
+        }
+    }
+
+    private async Task<T?> SendBotAsync<T>(HttpMethod method, string path, object? body, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(method, new Uri(settings.ApiBaseUrl, path));
+        request.Headers.Add("X-DKP-Bot-Secret", settings.ApiSecret);
+        request.Headers.Add("X-Correlation-Id", Guid.NewGuid().ToString("N"));
+        if (body is not null) request.Content = JsonContent.Create(body);
+        try
+        {
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode) { logger.LogWarning("DKP notification API request failed with status {StatusCode}", response.StatusCode); return default; }
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent) return (T)(object)true;
+            return await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(exception, "DKP notification API request failed.");
             return default;
         }
     }
@@ -197,6 +232,9 @@ public sealed record AchievementRequestInput(Guid AchievementId, string? Comment
 public sealed record MultiAchievementRequestInput(Guid AchievementId, IReadOnlyList<string> TargetDiscordIds, string? Comment);
 public sealed record BotAccountInput(string DiscordName, string? AvatarUrl);
 public sealed record BotAccountDto(Guid Id, string DiscordId, string DiscordName, int Role, bool Created);
+public sealed record BotNotificationDto(Guid Id, string NotificationType, string Payload, int Attempts, string Action, ulong? DiscordMessageId);
+public sealed record NotificationFailureInput(string? Error);
+public sealed record NotificationSentInput(ulong MessageId);
 public sealed record BotAchievementOverviewDto(IReadOnlyList<BotAchievementDefinitionDto> Definitions, IReadOnlyList<BotUserAchievementDto> UserAchievements, IReadOnlyList<BotAwardRequestDto> Requests);
 public sealed record BotAchievementDefinitionDto(Guid Id, string Key, string Name, string Description, int DkpAmount, bool IsActive);
 public sealed record BotUserAchievementDto(Guid Id, Guid UserId, string DiscordName, Guid AchievementId, string AchievementName, int DkpAmount, bool IsActive, DateTime GrantedAtUtc, DateTime? RevokedAtUtc);

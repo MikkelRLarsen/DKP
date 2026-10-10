@@ -9,6 +9,7 @@ public sealed class BotAchievementRequestCommandService(
     IUserRepository users,
     IDkpAwardRequestRepository requests,
     IAchievementRepository achievements,
+    INotificationOutboxRepository outbox,
     ICommandUnitOfWork unitOfWork,
     TimeProvider time) : IBotAchievementRequestCommands
 {
@@ -24,6 +25,7 @@ public sealed class BotAchievementRequestCommandService(
             if (normalizedComment?.Length > 500) throw new ArgumentException("Comment must be at most 500 characters.");
             var request = new DkpAwardRequest(user.Id, null, achievementId, 1, normalizedComment, time.GetUtcNow().UtcDateTime);
             await requests.AddAsync(request, ct);
+            await outbox.AddAsync(RequestNotificationFactory.Create(request, user.DiscordName, achievement.Name, achievement.DkpAmount, "Achievement", request.CreatedAtUtc), ct);
             return new DkpAwardRequestDto(request.Id, user.Id, user.DiscordName, null, null, achievement.Id, achievement.Name, achievement.DkpAmount, 1, achievement.Description, normalizedComment, DKP.Facade.Contracts.DkpAwardRequestStatus.Pending, request.CreatedAtUtc, null, null, null, []);
         }, ct);
 
@@ -33,7 +35,9 @@ public sealed class BotAchievementRequestCommandService(
             var user = await ActiveUserAsync(discordId, ct);
             var request = await requests.FindAsync(requestId, ct) ?? throw new KeyNotFoundException("DKP request not found.");
             if (request.UserId != user.Id) throw new UnauthorizedAccessException("You can only cancel your own request.");
-            request.Cancel(time.GetUtcNow().UtcDateTime);
+            var now = time.GetUtcNow().UtcDateTime;
+            request.Cancel(now);
+            await outbox.RequestDeletionAsync(request.Id, now, ct);
             return true;
         }, ct);
 
@@ -69,6 +73,7 @@ public sealed class BotAchievementRequestCommandService(
             {
                 var created = new DkpAwardRequest(target.Id, null, achievement.Id, 1, comment, now);
                 await requests.AddAsync(created, ct);
+                await outbox.AddAsync(RequestNotificationFactory.Create(created, target.DiscordName, achievement.Name, achievement.DkpAmount, "Achievement", now), ct);
                 result.Add(new DkpAwardRequestDto(created.Id, target.Id, target.DiscordName, null, null, achievement.Id, achievement.Name, achievement.DkpAmount, 1, achievement.Description, comment, DKP.Facade.Contracts.DkpAwardRequestStatus.Pending, now, null, null, null, []));
             }
             return result;

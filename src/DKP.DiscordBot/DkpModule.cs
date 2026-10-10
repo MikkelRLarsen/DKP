@@ -94,7 +94,7 @@ public sealed class DkpModule(DkpApiClient api) : InteractionModuleBase<SocketIn
     {
         await DeferAsync(ephemeral: true);
         if (!Guid.TryParse(requestId, out var id)) { await ModifyOriginalResponseAsync(p => p.Content = "The request ID is not valid."); return; }
-        var cancelled = await api.CancelAchievementRequestAsync(Context.User.Id.ToString(), id, CancellationToken.None);
+        var cancelled = await api.CancelDkpRequestAsync(Context.User.Id.ToString(), id, CancellationToken.None);
         await ModifyOriginalResponseAsync(p => p.Content = cancelled ? "DKP request cancelled." : "The request could not be cancelled. It may already be processed.");
     }
 

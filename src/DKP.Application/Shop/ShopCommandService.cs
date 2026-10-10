@@ -73,9 +73,9 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
             var state = await ledger.GetStateAsync(id, ct);
             if (state.Balance < cost)
                 throw new InvalidOperationException($"{target.DiscordName}: insufficient DKP ({cost} required).");
-            var active = state.ActiveQuantity(item.Id);
-            if ((long)active + quantity > item.MaxPerUser)
-                throw new InvalidOperationException($"{target.DiscordName}: maximum {item.MaxPerUser} for {item.Name} (already owns {active}).");
+            var owned = ShopPurchaseLimitRules.OwnedQuantity(state, item);
+            if ((long)owned + quantity > item.MaxPerUser)
+                throw new InvalidOperationException($"{target.DiscordName}: maximum {item.MaxPerUser} for {item.Name} (already owns {owned}).");
             if (item.RollBonusValue != null && state.HasActiveRollBonus())
                 throw new InvalidOperationException($"{target.DiscordName}: already has an active RollBonus.");
             users.Add(target);

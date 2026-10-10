@@ -15,3 +15,7 @@ public sealed record ActivePurchaseItemDto(string Key, string Name, int Quantity
 	public bool IsRollBonus => RollBonusValue is not null;
 }
 public sealed record ActivePurchaseOverviewDto(IReadOnlyList<ActivePurchaseItemDto> Items, int RollBonus);
+public sealed record ShopItemAvailabilityDto(Guid ShopItemId, string Key, string Name, string Description, int Price, int MaxPerUser, int? RollBonusValue, int ActiveQuantity, int UsedQuantity, int CountedQuantity, int RemainingQuantity, bool IsAvailable, IReadOnlyList<ShopItemAchievementRequirementDto> AchievementRequirements)
+{
+	public bool IsRollBonus => RollBonusValue is not null;
+}

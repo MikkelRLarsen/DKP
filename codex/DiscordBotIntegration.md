@@ -415,6 +415,8 @@ Implementeret med API-flow, preset-listing, én request, multi-user requests, de
 
 ### Slice B7 – Discord request-notifikationer
 
+Status: Implementeret.
+
 Send besked til et konfigureret Discord-channel, når der oprettes:
 
 - DKP request.
@@ -422,7 +424,9 @@ Send besked til et konfigureret Discord-channel, når der oprettes:
 
 Notifikationer skal komme fra en reliable outbox/event-notification mekanisme, så database-operationen ikke fejler, hvis Discord midlertidigt er utilgængelig.
 
-Acceptkriterier: Request gemmes selv om Discord-kanalen er utilgængelig, beskeden kan retries, og der sendes ikke dubletter.
+Implementeringen bruger en database-backed outbox, som gemmes i samme transaktion som requesten. Botten claimer pending beskeder via det interne API, sender neutral tekst til `DISCORD_OFFICER_CHANNEL_ID` med `AllowedMentions.None` og markerer derefter beskeden som sendt. Når requesten godkendes eller afvises, markeres den oprindelige besked til sletning, og botten sletter sin egen Discord-besked. Midlertidige API- eller Discord-fejl medfører retry med backoff. Channel-notifikationer kan deaktiveres ved at lade environment-variablen være tom.
+
+Acceptkriterier: Request gemmes selv om Discord-kanalen er utilgængelig, beskeden kan retries, og en succesfuldt markeret outbox-record sendes ikke igen.
 
 ### Slice B7a – Private Discord-beskeder ved behandlinger
 
@@ -445,6 +449,45 @@ Application command → committed event/database operation → outbox notificati
 Databaseoperationen må ikke fejle, hvis DM ikke kan leveres. Notifikationer sendes først efter commit og skal have retry- og idempotency-beskyttelse ved bot-restart. Brugere med lukkede DMs håndteres som en kontrolleret warning i loggen. Der kræves ingen public webhook; Discord Gateway bruges til DM-leveringen.
 
 Tests skal dække successful DM, DM-fejl uden rollback, retry, idempotency og korrekt tekst for approve, reject og refund.
+
+### Slice B7b – Channel-notifikationer ved nye presets og achievements
+
+Status: Planlagt.
+
+Send en informationsbesked til et konfigureret Discord-channel, når en Officer opretter:
+
+- Et nyt DKP preset.
+- Et nyt achievement.
+
+Notifikationen skal indeholde:
+
+- Navn.
+- Beløb eller DKP-værdi.
+- Beskrivelse/årsag.
+- Eventuelle relevante limits.
+- Tidspunkt.
+
+Vigtige sikkerheds- og brugerkrav:
+
+- Beskeden må ikke pinge brugere.
+- Der må ikke bruges `@everyone`, `@here`, bruger-mentions eller role-mentions.
+- Discord message properties skal sætte `AllowedMentions` til ingen mentions.
+- Navn og beskrivelse skal behandles som almindelig tekst og må ikke kunne injecte mentions.
+- Channel ID konfigureres via environment/secrets og må ikke hardcodes.
+- Manglende eller utilgængeligt channel må ikke rollbacke preset- eller achievement-oprettelsen.
+- Notifikationer skal sendes efter successful commit via outbox/retry.
+- Idempotency skal forhindre dubletter ved retry eller bot-restart.
+
+Formatet skal være en neutral embed eller almindelig besked uden ping-egenskaber, eksempelvis:
+
+```text
+New DKP source available
+Name: Raid Attendance
+Amount: 10 DKP
+Limit: 1 per user
+```
+
+Tests skal kontrollere channel-konfiguration, successful notification, retry, idempotency, manglende channel samt at alle mention-typer eksplicit er deaktiveret.
 
 ### Slice B8 – Bot production hardening
 
@@ -470,7 +513,8 @@ Acceptkriterier: Botten genstarter automatisk, reconnecter, mister ikke committe
 7. B6a – Preset-baserede DKP requests for flere spillere
 8. B7 – Discord request-notifikationer
 9. B7a – Private Discord-beskeder ved behandlinger
-10. B8 – Bot production hardening
+10. B7b – Channel-notifikationer ved nye presets og achievements
+11. B8 – Bot production hardening
 
 ## Ikke en del af første bot-version
 

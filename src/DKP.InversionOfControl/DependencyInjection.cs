@@ -88,6 +88,9 @@ public static class DependencyInjection
 		services.AddScoped<IBotAccountCommands, BotAccountCommandService>();
 		services.AddScoped<IBotDkpPresetQueries, BotDkpPresetQueries>();
 		services.AddScoped<IBotDkpRequestCommands, BotDkpRequestCommandService>();
+		services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
+		services.AddScoped<IBotNotificationQueries, BotNotificationQueries>();
+		services.AddScoped<IBotNotificationCommands, BotNotificationCommands>();
 		services.AddScoped<IDkpTransactionCommands, DkpTransactionCommandService>();
 		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();
 		services.AddScoped<IUserBlockCommands, UserBlockCommandService>();

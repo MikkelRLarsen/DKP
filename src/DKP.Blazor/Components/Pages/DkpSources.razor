@@ -57,14 +57,11 @@ else
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Title="Request" Sortable="false" Filterable="false">
                             <Template Context="source">
-                                @if (PendingFor(source.PresetId) is not null)
+                                @if (PendingCountFor(source.PresetId) > 0)
                                 {
-                                    <RadzenBadge Text="Request pending" BadgeStyle="BadgeStyle.Warning" />
+                                    <RadzenBadge Text="@($"{PendingCountFor(source.PresetId)} pending")" BadgeStyle="BadgeStyle.Warning" />
                                 }
-                                else
-                                {
-                                    <RadzenButton Text="Request DKP" Icon="send" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Primary" Click="@(() => RequestAsync(source))" Disabled="@busy" />
-                                }
+                                <RadzenButton Text="Request DKP" Icon="send" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Primary" Click="@(() => RequestAsync(source))" Disabled="@busy" />
                             </Template>
                         </RadzenDataGridColumn>
                     </Columns>
@@ -88,6 +85,7 @@ else
                     <Columns>
                         <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="PresetName" Title="Source" />
                         <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Amount" Title="DKP" />
+                        <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="Quantity" Title="Quantity" />
                         <RadzenDataGridColumn TItem="DkpAwardRequestDto" Property="CreatedAtUtc" Title="Created">
                             <Template Context="request">@request.CreatedAtUtc.ToLocalTime().ToString("g")</Template>
                         </RadzenDataGridColumn>
@@ -115,7 +113,7 @@ else
     private bool loading = true;
     private bool busy;
 
-    private DkpAwardRequestDto? PendingFor(Guid presetId) => requests.FirstOrDefault(x => x.PresetId == presetId && x.Status == DkpAwardRequestStatus.Pending);
+    private int PendingCountFor(Guid presetId) => requests.Count(x => x.PresetId == presetId && x.Status == DkpAwardRequestStatus.Pending);
     private static BadgeStyle StatusStyle(DkpAwardRequestStatus status) => status switch
     {
         DkpAwardRequestStatus.Approved => BadgeStyle.Success,
@@ -148,7 +146,7 @@ else
 
     private async Task RequestAsync(DkpAcquisitionSourceDto source)
     {
-        if (busy || PendingFor(source.PresetId) is not null) return;
+        if (busy) return;
         busy = true;
         try
         {

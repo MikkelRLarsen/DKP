@@ -847,7 +847,9 @@ Dockerfile, Docker Compose med PostgreSQL, pgAdmin, Traefik, Watchtower og DKP s
 
 Discord Bot/API-integration er dokumenteret i `codex/DiscordBotIntegration.md`. Slice B1, B2, B3 og B4 er implementeret med `DKP.DiscordBot.csproj`, `DKP.Api.csproj`, API'et under `/api`, service-authentication samt DKP-, character- og shop-flow.
 
-Bot-integrationen er opdelt i følgende slices: B1 API-grundlag og bot connection (implementeret), B2 DKP-balance og historik (implementeret), B3 Characters (implementeret), B4 Shop og purchases (implementeret), B5 Achievements og DKP requests (implementeret), B6 atomiske multi-user achievement requests (implementeret), B6a preset-baserede DKP requests for flere spillere (implementeret), B7 Discord request-notifikationer, B7a private Discord-beskeder ved behandlinger og B8 bot production hardening.
+Bot-integrationen er opdelt i følgende slices: B1 API-grundlag og bot connection (implementeret), B2 DKP-balance og historik (implementeret), B3 Characters (implementeret), B4 Shop og purchases (implementeret), B5 Achievements og DKP requests (implementeret), B6 atomiske multi-user achievement requests (implementeret), B6a preset-baserede DKP requests for flere spillere (implementeret), B7 Discord request-notifikationer (implementeret), B7a private Discord-beskeder ved behandlinger, B7b channel-notifikationer ved nye presets og achievements og B8 bot production hardening.
+
+B7 bruger en database-backed outbox og kræver valgfrit `DISCORD_OFFICER_CHANNEL_ID`. Notifikationer indeholder ikke Discord-mentions og sender med `AllowedMentions.None`. Den oprindelige request-besked slettes efter approve/reject/cancel via en separat, retrybar outbox-operation. Flere pending DKP-preset-requests pr. bruger er tilladt; lifetime-limit genvalideres ved approve. B7a og B7b er fortsat separate, planlagte slices.
 
 Status: Planlagt.
 

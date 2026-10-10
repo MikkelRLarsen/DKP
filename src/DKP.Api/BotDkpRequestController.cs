@@ -30,6 +30,16 @@ public sealed class BotDkpRequestController(
     public Task<IActionResult> CreateMultiAsync([FromBody] BotDkpRequestInput input, CancellationToken ct)
         => CreateCoreAsync(input, ct);
 
+    [HttpDelete("requests/{requestId:guid}")]
+    public async Task<IActionResult> CancelAsync(Guid requestId, CancellationToken ct)
+    {
+        if (!TryGetDiscordId(out var discordId, out var failure)) return failure!;
+        try { return await commands.CancelAsync(discordId!, requestId, ct) ? NoContent() : NotFound(); }
+        catch (KeyNotFoundException e) { return NotFound(new { error = e.Message }); }
+        catch (UnauthorizedAccessException) { return Unauthorized(); }
+        catch (InvalidOperationException e) { return Conflict(new { error = e.Message }); }
+    }
+
     private async Task<IActionResult> CreateCoreAsync(BotDkpRequestInput input, CancellationToken ct)
     {
         if (!TryGetDiscordId(out var discordId, out var failure)) return failure!;

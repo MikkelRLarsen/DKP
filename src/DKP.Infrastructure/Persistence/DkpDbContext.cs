@@ -14,6 +14,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<AchievementDefinition> AchievementDefinitions => Set<AchievementDefinition>();
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
     public DbSet<ShopItemAchievementRequirement> ShopItemAchievementRequirements => Set<ShopItemAchievementRequirement>();
+    public DbSet<DiscordNotificationOutbox> DiscordNotificationOutbox => Set<DiscordNotificationOutbox>();
 
     private void GuardEvents()
     {
@@ -74,7 +75,6 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.Property(x => x.ReviewComment).HasMaxLength(500);
             e.Property(x => x.DkpEventIdsJson).HasColumnType("jsonb");
             e.HasIndex(x => new { x.UserId, x.PresetId, x.Status });
-            e.HasIndex(x => new { x.UserId, x.PresetId }).IsUnique().HasFilter("\"Status\" = 'Pending'");
             e.HasIndex(x => new { x.UserId, x.AchievementId }).IsUnique().HasFilter("\"Status\" = 'Pending'");
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<DkpAwardPreset>().WithMany().HasForeignKey(x => x.PresetId).OnDelete(DeleteBehavior.Restrict);
@@ -100,6 +100,15 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.HasOne<User>().WithMany().HasForeignKey(x => x.RevokedByUserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<DkpEvent>().WithMany().HasForeignKey(x => x.GrantDkpEventId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<DkpEvent>().WithMany().HasForeignKey(x => x.RevokeDkpEventId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<DiscordNotificationOutbox>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.RequestId);
+            e.Property(x => x.NotificationType).HasMaxLength(64);
+            e.Property(x => x.Payload).HasColumnType("jsonb");
+            e.Property(x => x.LastError).HasMaxLength(500);
+            e.HasIndex(x => new { x.SentAtUtc, x.NextAttemptAtUtc });
         });
         model.Entity<DkpEvent>(e =>
         {

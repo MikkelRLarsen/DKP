@@ -3,6 +3,7 @@ using System;
 using DKP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DKP.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(DkpDbContext))]
-    partial class DkpDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261010080329_SliceB7DiscordRequestNotifications")]
+    partial class SliceB7DiscordRequestNotifications
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -112,15 +115,6 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("DeleteRequestedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal?>("DiscordMessageId")
-                        .HasColumnType("numeric(20,0)");
-
                     b.Property<string>("LastError")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -137,15 +131,10 @@ namespace DKP.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb");
 
-                    b.Property<Guid?>("RequestId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime?>("SentAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("RequestId");
 
                     b.HasIndex("SentAtUtc", "NextAttemptAtUtc");
 
@@ -251,6 +240,10 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.HasIndex("ReviewedByUserId");
 
                     b.HasIndex("UserId", "AchievementId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 'Pending'");
+
+                    b.HasIndex("UserId", "PresetId")
                         .IsUnique()
                         .HasFilter("\"Status\" = 'Pending'");
 

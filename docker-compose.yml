@@ -82,6 +82,7 @@ services:
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?Set DISCORD_GUILD_ID in .env}
       DKP_BOT_API_URL: http://dkp:8080
       DKP_BOT_API_SECRET: ${DKP_BOT_API_SECRET:?Set DKP_BOT_API_SECRET in .env}
+      DISCORD_OFFICER_CHANNEL_ID: ${DISCORD_OFFICER_CHANNEL_ID:-}
     labels:
       - com.centurylinklabs.watchtower.enable=true
 

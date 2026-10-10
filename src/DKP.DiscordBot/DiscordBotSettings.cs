@@ -1,6 +1,6 @@
 namespace DKP.DiscordBot;
 
-public sealed record DiscordBotSettings(string BotToken, ulong ApplicationId, ulong GuildId, Uri ApiBaseUrl, string ApiSecret)
+public sealed record DiscordBotSettings(string BotToken, ulong ApplicationId, ulong GuildId, Uri ApiBaseUrl, string ApiSecret, ulong? NotificationChannelId)
 {
     public static DiscordBotSettings FromConfiguration(IConfiguration configuration)
     {
@@ -10,9 +10,12 @@ public sealed record DiscordBotSettings(string BotToken, ulong ApplicationId, ul
         var apiUrl = Required(configuration, "DKP_BOT_API_URL");
         var apiSecret = Required(configuration, "DKP_BOT_API_SECRET");
         if (!Uri.TryCreate(apiUrl, UriKind.Absolute, out var baseUrl)) throw new InvalidOperationException("DKP_BOT_API_URL must be a valid absolute URL.");
-        return new(token, applicationId, guildId, baseUrl, apiSecret);
+        var notificationChannel = configuration["DISCORD_OFFICER_CHANNEL_ID"];
+        ulong? channelId = string.IsNullOrWhiteSpace(notificationChannel) ? null : ParseSnowflakeValue(notificationChannel, "DISCORD_OFFICER_CHANNEL_ID");
+        return new(token, applicationId, guildId, baseUrl, apiSecret, channelId);
     }
 
     private static string Required(IConfiguration configuration, string key) => !string.IsNullOrWhiteSpace(configuration[key]) ? configuration[key]! : throw new InvalidOperationException($"Missing required Discord bot configuration: {key}.");
     private static ulong ParseSnowflake(IConfiguration configuration, string key) => ulong.TryParse(Required(configuration, key), out var value) && value > 0 ? value : throw new InvalidOperationException($"{key} must be a valid Discord ID.");
+    private static ulong ParseSnowflakeValue(string value, string key) => ulong.TryParse(value, out var result) && result > 0 ? result : throw new InvalidOperationException($"{key} must be a valid Discord ID.");
 }

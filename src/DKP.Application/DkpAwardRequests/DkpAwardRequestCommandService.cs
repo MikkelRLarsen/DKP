@@ -6,7 +6,7 @@ using DKP.Facade.Contracts;
 
 namespace DKP.Application.DkpAwardRequests;
 
-public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAwardRequestRepository requests, IPresetRepository presets, IAchievementRepository achievements, IEventLedgerRepository ledger, TimeProvider time) : IDkpAwardRequestCommands
+public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAwardRequestRepository requests, IPresetRepository presets, IAchievementRepository achievements, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IDkpAwardRequestCommands
 {
     public Task<DkpAwardRequestDto> CreateAsync(CreateDkpAwardRequestRequest input, CancellationToken ct = default) => context.ExecuteAsync([], false, async actor =>
     {
@@ -14,7 +14,7 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
         if (input.Quantity <= 0) throw new ArgumentException("Quantity must be greater than zero.");
         if (input.AchievementId is not null && input.Quantity != 1) throw new ArgumentException("Achievement requests have quantity 1.");
         var comment = Normalize(input.Comment, "Comment");
-        if (await requests.HasPendingAsync(actor.Id, input.PresetId, input.AchievementId, ct)) throw new InvalidOperationException("You already have a pending request for this source.");
+        if (input.AchievementId is not null && await requests.HasPendingAsync(actor.Id, null, input.AchievementId, ct)) throw new InvalidOperationException("You already have a pending request for this achievement.");
         if (input.PresetId is Guid presetId)
         {
             var preset = await presets.FindAsync(presetId, ct) ?? throw new KeyNotFoundException("Preset not found.");
@@ -23,12 +23,14 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
             if (state.PresetUsage.GetValueOrDefault(preset.Id) + input.Quantity > preset.MaxApplicationsPerUser) throw new InvalidOperationException("The requested quantity exceeds your remaining lifetime limit.");
             var request = new DkpAwardRequest(actor.Id, preset.Id, null, input.Quantity, comment, time.GetUtcNow().UtcDateTime);
             await requests.AddAsync(request, ct);
+            await outbox.AddAsync(RequestNotificationFactory.Create(request, actor.DiscordName, preset.Name, preset.Amount, "DKP", request.CreatedAtUtc), ct);
             return ToDto(request, actor.DiscordName, null, preset, null);
         }
         var achievement = await achievements.FindAsync(input.AchievementId!.Value, ct) ?? throw new KeyNotFoundException("Achievement not found.");
         if (!achievement.IsActive) throw new InvalidOperationException("Achievement is inactive.");
         var achievementRequest = new DkpAwardRequest(actor.Id, null, achievement.Id, 1, comment, time.GetUtcNow().UtcDateTime);
         await requests.AddAsync(achievementRequest, ct);
+        await outbox.AddAsync(RequestNotificationFactory.Create(achievementRequest, actor.DiscordName, achievement.Name, achievement.DkpAmount, "Achievement", achievementRequest.CreatedAtUtc), ct);
         return ToDto(achievementRequest, actor.DiscordName, achievement, null, null);
     }, ct);
 
@@ -36,7 +38,8 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
     {
         var request = await requests.FindAsync(requestId, ct) ?? throw new KeyNotFoundException("DKP request not found.");
         if (request.UserId != actor.Id) throw new UnauthorizedAccessException("You can only cancel your own request.");
-        request.Cancel(time.GetUtcNow().UtcDateTime); return true;
+        var now = time.GetUtcNow().UtcDateTime;
+        request.Cancel(now); await outbox.RequestDeletionAsync(request.Id, now, ct); return true;
     }, ct);
 
     public Task ApproveAsync(Guid requestId, ReviewDkpAwardRequestRequest input, CancellationToken ct = default) => ReviewAsync(requestId, input.Comment, true, ct);
@@ -48,7 +51,7 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
         var target = await context.TargetAsync(request.UserId, ct);
         var reviewComment = Normalize(rawComment, "Review comment");
         var now = time.GetUtcNow().UtcDateTime;
-        if (!approve) { request.Reject(officer.Id, reviewComment, now); return true; }
+        if (!approve) { request.Reject(officer.Id, reviewComment, now); await outbox.RequestDeletionAsync(request.Id, now, ct); return true; }
         var operationId = Guid.NewGuid(); var eventIds = new List<Guid>(request.Quantity);
         if (request.PresetId is Guid presetId)
         {
@@ -67,7 +70,7 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
             eventIds.Add(entry.Id); await achievements.AddUserAchievementAsync(new UserAchievement(target.Id, achievement.Id, officer.Id, entry.Id, now), ct);
         }
         else throw new InvalidOperationException("The request has no valid source.");
-        request.Approve(officer.Id, eventIds, reviewComment, now); return true;
+        request.Approve(officer.Id, eventIds, reviewComment, now); await outbox.RequestDeletionAsync(request.Id, now, ct); return true;
     }, ct);
 
     private static string? Normalize(string? value, string field) { if (string.IsNullOrWhiteSpace(value)) return null; var result = value.Trim(); if (result.Length > 500) throw new ArgumentException($"{field} must be at most 500 characters."); return result; }
