@@ -64,6 +64,9 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public Task<IReadOnlyList<BotShopItemDto>?> GetShopItemsAsync(string discordUserId, CancellationToken cancellationToken)
         => SendShopAsync<IReadOnlyList<BotShopItemDto>>(HttpMethod.Get, "/api/bot/shop", discordUserId, null, cancellationToken);
 
+    public Task<IReadOnlyList<BotShopAvailabilityDto>?> GetShopAvailabilityAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BotShopAvailabilityDto>>(HttpMethod.Get, "/api/bot/shop/availability", discordUserId, null, cancellationToken);
+
     public Task<IReadOnlyList<BotShopPurchaseDto>?> GetPurchasesAsync(string discordUserId, string status, CancellationToken cancellationToken)
         => SendShopAsync<IReadOnlyList<BotShopPurchaseDto>>(HttpMethod.Get, $"/api/bot/shop/purchases?status={Uri.EscapeDataString(status)}", discordUserId, null, cancellationToken);
 
@@ -222,6 +225,10 @@ public sealed record CharacterInputDto(string FirstName, string LastName);
 public sealed record BotCharacterDto(Guid Id, string FirstName, string LastName, bool IsMain);
 public sealed record ShopPurchaseInput(Guid ShopItemId, int Quantity);
 public sealed record BotShopItemDto(Guid Id, string Key, string Name, string Description, int Price, int MaxPerUser, bool IsActive, IReadOnlyList<BotShopRequirementDto>? AchievementRequirements);
+public sealed record BotShopAvailabilityDto(Guid ShopItemId, string Key, string Name, string Description, int Price, int MaxPerUser, int? RollBonusValue, int ActiveQuantity, int UsedQuantity, int CountedQuantity, int RemainingQuantity, bool IsAvailable, IReadOnlyList<BotShopRequirementDto> AchievementRequirements)
+{
+    public bool IsRollBonus => RollBonusValue is not null;
+}
 public sealed record BotShopRequirementDto(Guid AchievementId, string AchievementName);
 public sealed record BotShopPurchaseDto(Guid Id, Guid UserId, string UserName, string? MainCharacterName, Guid ShopItemId, string ItemName, int Quantity, int TotalDkpCost, DateTime CreatedAtUtc, DateTime? CancelledAtUtc, bool IsUsed = false, bool IsManuallyUsed = false)
 {

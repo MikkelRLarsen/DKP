@@ -36,12 +36,12 @@ public sealed class CharactersModule(DkpApiClient api) : InteractionModuleBase<S
             : $"Created **{character.FirstName} {character.LastName}**.");
     }
 
-    [SlashCommand("edit", "Edit a character using its ID from /characters list", runMode: RunMode.Async)]
-    public async Task EditAsync(string characterId)
+    [SlashCommand("edit", "Edit one of your characters", runMode: RunMode.Async)]
+    public async Task EditAsync([Summary("character", "Select a character")] [Autocomplete<CharacterAutocompleteHandler>] string characterId)
     {
         if (!Guid.TryParse(characterId, out var id))
         {
-            await RespondAsync("Please provide a valid character ID from `/characters list`.", ephemeral: true);
+            await RespondAsync("Select a character from the dropdown.", ephemeral: true);
             return;
         }
 
@@ -64,10 +64,13 @@ public sealed class CharactersModule(DkpApiClient api) : InteractionModuleBase<S
     public async Task EditModalAsync(CharacterModal modal)
     {
         var customId = (Context.Interaction as SocketModal)?.Data.CustomId;
-        var idText = customId?.Split('-', 3).LastOrDefault();
+        const string prefix = "characters-edit-";
+        var idText = customId?.StartsWith(prefix, StringComparison.Ordinal) == true
+            ? customId[prefix.Length..]
+            : null;
         if (!Guid.TryParse(idText, out var id))
         {
-            await RespondAsync("The character edit request was invalid.", ephemeral: true);
+            await RespondAsync("The character edit request was invalid. Please select the character again.", ephemeral: true);
             return;
         }
 
@@ -78,8 +81,8 @@ public sealed class CharactersModule(DkpApiClient api) : InteractionModuleBase<S
             : $"Updated **{character.FirstName} {character.LastName}**.");
     }
 
-    [SlashCommand("delete", "Delete a character; run with confirm=true", runMode: RunMode.Async)]
-    public async Task DeleteAsync(string characterId, bool confirm = false)
+    [SlashCommand("delete", "Delete one of your characters; run with confirm=true", runMode: RunMode.Async)]
+    public async Task DeleteAsync([Summary("character", "Select a character")] [Autocomplete<CharacterAutocompleteHandler>] string characterId, bool confirm = false)
     {
         if (!confirm)
         {
@@ -88,7 +91,7 @@ public sealed class CharactersModule(DkpApiClient api) : InteractionModuleBase<S
         }
         if (!Guid.TryParse(characterId, out var id))
         {
-            await RespondAsync("Please provide a valid character ID from `/characters list`.", ephemeral: true);
+            await RespondAsync("Select a character from the dropdown.", ephemeral: true);
             return;
         }
 
@@ -100,7 +103,7 @@ public sealed class CharactersModule(DkpApiClient api) : InteractionModuleBase<S
     }
 
     [SlashCommand("main", "Set a character as your main; run with confirm=true", runMode: RunMode.Async)]
-    public async Task MainAsync(string characterId, bool confirm = false)
+    public async Task MainAsync([Summary("character", "Select a character")] [Autocomplete<CharacterAutocompleteHandler>] string characterId, bool confirm = false)
     {
         if (!confirm)
         {
@@ -109,7 +112,7 @@ public sealed class CharactersModule(DkpApiClient api) : InteractionModuleBase<S
         }
         if (!Guid.TryParse(characterId, out var id))
         {
-            await RespondAsync("Please provide a valid character ID from `/characters list`.", ephemeral: true);
+            await RespondAsync("Select a character from the dropdown.", ephemeral: true);
             return;
         }
 

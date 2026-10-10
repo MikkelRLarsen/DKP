@@ -32,6 +32,14 @@ public sealed class BotShopController(
         return purchases is null ? Unauthorized() : Ok(purchases);
     }
 
+    [HttpGet("availability")]
+    public async Task<IActionResult> GetAvailabilityAsync(CancellationToken ct)
+    {
+        if (!TryGetDiscordId(out var discordId, out var failure)) return failure!;
+        var availability = await queries.GetAvailabilityAsync(discordId!, ct);
+        return availability is null ? Unauthorized() : Ok(availability);
+    }
+
     [HttpPost("purchases")]
     public async Task<IActionResult> PurchaseAsync([FromBody] ShopPurchaseRequest request, CancellationToken ct)
     {

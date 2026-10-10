@@ -84,13 +84,13 @@ public sealed class DkpModule(DkpApiClient api) : InteractionModuleBase<SocketIn
         var requests = overview.Requests.Where(x => x.PresetId is not null && (status == "all" || x.StatusName.Equals(status, StringComparison.OrdinalIgnoreCase))).ToArray();
         if (requests.Length == 0) { await ModifyOriginalResponseAsync(p => p.Content = "No DKP requests match that status."); return; }
         var output = new StringBuilder("**Your DKP requests**\n");
-        foreach (var request in requests) output.AppendLine($"`{request.Id}` — **{request.PresetName}**, x{request.Quantity}, {request.Amount} DKP, {request.StatusName}");
-        output.AppendLine("\nUse `/dkp cancel` with a pending request ID to cancel it.");
+        foreach (var request in requests) output.AppendLine($"**{request.PresetName}**, x{request.Quantity}, {request.Amount} DKP, {request.StatusName}");
+        output.AppendLine("\nUse `/dkp cancel` and select a pending request from the dropdown to cancel it.");
         await ModifyOriginalResponseAsync(p => p.Content = output.ToString());
     }
 
     [SlashCommand("cancel", "Cancel one of your pending DKP requests", runMode: RunMode.Async)]
-    public async Task CancelAsync([Summary("request_id", "The request ID shown by /dkp requests")] string requestId)
+    public async Task CancelAsync([Summary("request", "Select a pending DKP request")] [Autocomplete<DkpRequestAutocompleteHandler>] string requestId)
     {
         await DeferAsync(ephemeral: true);
         if (!Guid.TryParse(requestId, out var id)) { await ModifyOriginalResponseAsync(p => p.Content = "The request ID is not valid."); return; }

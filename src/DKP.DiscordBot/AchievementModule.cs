@@ -18,7 +18,7 @@ public sealed class AchievementModule(DkpApiClient api) : InteractionModuleBase<
             var pending = overview.Requests.Any(x => x.AchievementId == definition.Id && x.IsPending);
             var previouslyRevoked = overview.UserAchievements.Any(x => x.AchievementId == definition.Id && !x.IsActive);
             var status = obtained ? "Obtained" : pending ? "Request pending" : previouslyRevoked ? "Previously revoked" : "Available";
-            output.AppendLine($"• **{definition.Name}** (`{definition.Key}`) — {definition.DkpAmount} DKP — {status}");
+            output.AppendLine($"• **{definition.Name}** — {definition.DkpAmount} DKP — {status}");
             if (!string.IsNullOrWhiteSpace(definition.Description)) output.AppendLine($"  {definition.Description}");
         }
         if (overview.Definitions.Count == 0) output.AppendLine("No active achievements are currently available.");
@@ -75,12 +75,15 @@ public sealed class AchievementRequestModule(DkpApiClient api) : InteractionModu
         if (overview is null) { await ModifyOriginalResponseAsync(p => p.Content = "Your requests could not be loaded."); return; }
         status = status.Trim().ToLowerInvariant();
         if (status is not ("all" or "pending" or "approved" or "rejected" or "cancelled")) { await ModifyOriginalResponseAsync(p => p.Content = "Status must be all, pending, approved, rejected or cancelled."); return; }
-        var requests = overview.Requests.Where(x => status == "all" || x.StatusName.Equals(status, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var requests = overview.Requests
+            .Where(x => x.AchievementId is not null)
+            .Where(x => status == "all" || x.StatusName.Equals(status, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
         if (requests.Length == 0) { await ModifyOriginalResponseAsync(p => p.Content = "No requests match that status."); return; }
         var output = new StringBuilder("**Your requests**\n");
         foreach (var request in requests)
-            output.AppendLine($"`{request.Id}` — **{request.PresetName}**, {request.Amount} DKP, {request.StatusName}");
-        output.AppendLine("\nUse `/achievement cancel` with a pending request ID to cancel it.");
+            output.AppendLine($"**{request.PresetName}**, {request.Amount} DKP, {request.StatusName}");
+        output.AppendLine("\nUse `/achievement cancel` and select a pending request from the dropdown to cancel it.");
         await ModifyOriginalResponseAsync(p => p.Content = output.ToString());
     }
 
@@ -88,20 +91,32 @@ public sealed class AchievementRequestModule(DkpApiClient api) : InteractionModu
     public async Task RequestAsync([Summary("achievement", "Select an available achievement")] [Autocomplete<AchievementAutocompleteHandler>] string achievement, [Summary("comment", "Optional comment for the Officer")] string? comment = null)
     {
         await DeferAsync(ephemeral: true);
-        var overview = await api.GetAchievementsAsync(Context.User.Id.ToString(), CancellationToken.None);
-        var definition = Guid.TryParse(achievement, out var achievementId) ? overview?.Definitions.SingleOrDefault(x => x.Id == achievementId) : null;
-        if (definition is null) { await ModifyOriginalResponseAsync(p => p.Content = "Select an available achievement from the dropdown."); return; }
-        if (overview!.UserAchievements.Any(x => x.AchievementId == definition.Id && x.IsActive)) { await ModifyOriginalResponseAsync(p => p.Content = "You already have this achievement."); return; }
-        if (overview.Requests.Any(x => x.AchievementId == definition.Id && x.IsPending)) { await ModifyOriginalResponseAsync(p => p.Content = "You already have a pending request for this achievement."); return; }
-        var request = await api.RequestAchievementAsync(Context.User.Id.ToString(), definition.Id, comment, CancellationToken.None);
-        await ModifyOriginalResponseAsync(p => p.Content = request is null ? "The achievement request could not be created." : $"Request submitted for **{definition.Name}**. An Officer must approve it before the DKP is awarded.");
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var overview = await api.GetAchievementsAsync(Context.User.Id.ToString(), timeout.Token);
+            var definition = Guid.TryParse(achievement, out var achievementId) ? overview?.Definitions.SingleOrDefault(x => x.Id == achievementId) : null;
+            if (definition is null) { await ModifyOriginalResponseAsync(p => p.Content = "Select an available achievement from the dropdown."); return; }
+            if (overview!.UserAchievements.Any(x => x.AchievementId == definition.Id && x.IsActive)) { await ModifyOriginalResponseAsync(p => p.Content = "You already have this achievement."); return; }
+            if (overview.Requests.Any(x => x.AchievementId == definition.Id && x.IsPending)) { await ModifyOriginalResponseAsync(p => p.Content = "You already have a pending request for this achievement."); return; }
+            var request = await api.RequestAchievementAsync(Context.User.Id.ToString(), definition.Id, comment, timeout.Token);
+            await ModifyOriginalResponseAsync(p => p.Content = request is null ? "The achievement request could not be created." : $"Request submitted for **{definition.Name}**. An Officer must approve it before the DKP is awarded.");
+        }
+        catch (OperationCanceledException)
+        {
+            await ModifyOriginalResponseAsync(p => p.Content = "The achievement request timed out. Please try again.");
+        }
+        catch (Exception)
+        {
+            await ModifyOriginalResponseAsync(p => p.Content = "The achievement request could not be completed. Please try again.");
+        }
     }
 
     [SlashCommand("cancel", "Cancel one of your pending requests", runMode: RunMode.Async)]
-    public async Task CancelAsync([Summary("request_id", "The request ID shown by /achievement requests")] string requestId)
+    public async Task CancelAsync([Summary("request", "Select a pending achievement request")] [Autocomplete<AchievementRequestAutocompleteHandler>] string requestId)
     {
         await DeferAsync(ephemeral: true);
-        if (!Guid.TryParse(requestId, out var id)) { await ModifyOriginalResponseAsync(p => p.Content = "The request ID is not valid."); return; }
+        if (!Guid.TryParse(requestId, out var id)) { await ModifyOriginalResponseAsync(p => p.Content = "Select a request from the dropdown."); return; }
         var cancelled = await api.CancelAchievementRequestAsync(Context.User.Id.ToString(), id, CancellationToken.None);
         await ModifyOriginalResponseAsync(p => p.Content = cancelled ? "Request cancelled." : "The request could not be cancelled. It may already be processed.");
     }

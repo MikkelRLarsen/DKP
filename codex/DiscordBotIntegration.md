@@ -342,7 +342,7 @@ Tilføj member-management af egne characters:
 - Redigér og slet egne characters.
 - Vælg main character.
 
-API’et eksponerer character-flowet under `/api/bot/characters`. Botten kan vise egne characters, oprette og redigere via modals, slette med eksplicit confirmation og sætte main character. Ownership, main-character-regler og validering håndhæves i Application/Infrastructure.
+API’et eksponerer character-flowet under `/api/bot/characters`. Botten kan vise egne characters, oprette og redigere via modals, slette med eksplicit confirmation og sætte main character. Edit, delete og main bruger autocomplete-dropdowns med egne characters. Ownership, main-character-regler og validering håndhæves i Application/Infrastructure.
 
 Acceptkriterier: Ownership, main-character-regler og validering er identiske med Blazor-flowet.
 
@@ -357,7 +357,7 @@ Tilføj read og self-service purchase-flow:
 - `/purchases` viser egne køb.
 - Annullering af egne aktive køb.
 
-Køb går gennem bot-kontrakterne til Application og event-store. Botten implementerer ingen egen balance-, limit- eller achievement-logik. API’et eksponerer aktive items, egne køb, køb med quantity og annullering/refundering af egne aktive køb.
+Køb går gennem bot-kontrakterne til Application og event-store. Botten implementerer ingen egen balance-, limit- eller achievement-logik. API’et eksponerer aktive items, egne køb, køb med quantity og annullering/refundering af egne aktive køb. Shop buy og purchase cancellation bruger autocomplete-dropdowns.
 
 Acceptkriterier: Saldo, max-per-user, RollBonus, SoftReserve, refunds og achievement-gates håndhæves på samme måde som i webappen.
 
@@ -373,7 +373,7 @@ Tilføjet:
 - `/achievement requests`.
 - Annullering af egne pending requests.
 
-Botten bruger API’et under `/api/bot/achievements`, og requesten genbruger den eksisterende Application-validering. Request-status og event-baseret DKP matcher `/my-achievements` og `/my-dkp/sources`.
+Botten bruger API’et under `/api/bot/achievements`, og requesten genbruger den eksisterende Application-validering. Achievement-requests og DKP-cancel bruger autocomplete-dropdowns, mens request-status og event-baseret DKP matcher `/my-achievements` og `/my-dkp/sources`.
 
 ### Slice B6 – Atomiske multi-user requests
 
