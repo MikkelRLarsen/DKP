@@ -1,4 +1,5 @@
 using DKP.Application.Authentication;
+using DKP.Application.Notifications;
 using DKP.Application.Persistence;
 using DKP.Domain;
 using DKP.Facade.Commands;
@@ -6,7 +7,7 @@ using DKP.Facade.Contracts;
 
 namespace DKP.Application.Achievements;
 
-public sealed class AchievementCommandService(CommandContext context, IAchievementRepository achievements, IEventLedgerRepository ledger, TimeProvider time) : IAchievementCommands
+public sealed class AchievementCommandService(CommandContext context, IAchievementRepository achievements, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IAchievementCommands
 {
     private static void Validate(AchievementInput input)
     {
@@ -14,7 +15,7 @@ public sealed class AchievementCommandService(CommandContext context, IAchieveme
             throw new ArgumentException("Key, name, description (max 500) and a positive DKP amount are required.");
     }
     private static AchievementDefinitionDto ToDto(AchievementDefinition x) => new(x.Id, x.Key, x.Name, x.Description, x.DkpAmount, x.IsActive);
-    public Task<AchievementDefinitionDto> CreateAsync(AchievementInput input, CancellationToken ct = default) => context.ExecuteAsync([], true, async _ => { Validate(input); var item = new AchievementDefinition(input.Key.Trim(), input.Name.Trim(), input.Description.Trim(), input.DkpAmount, time.GetUtcNow().UtcDateTime); await achievements.AddAsync(item, ct); return ToDto(item); }, ct);
+    public Task<AchievementDefinitionDto> CreateAsync(AchievementInput input, CancellationToken ct = default) => context.ExecuteAsync([], true, async officer => { Validate(input); var now = time.GetUtcNow().UtcDateTime; var item = new AchievementDefinition(input.Key.Trim(), input.Name.Trim(), input.Description.Trim(), input.DkpAmount, now); await achievements.AddAsync(item, ct); await outbox.AddAsync(SourceNotificationFactory.Create("Achievement", item.Name, item.Description, item.DkpAmount, null, officer.DiscordName, now), ct); return ToDto(item); }, ct);
     public Task<AchievementDefinitionDto> UpdateAsync(Guid id, AchievementInput input, CancellationToken ct = default) => context.ExecuteAsync([], true, async _ => { Validate(input); var item = await achievements.FindAsync(id, ct) ?? throw new KeyNotFoundException("Achievement not found."); item.Update(input.Key.Trim(), input.Name.Trim(), input.Description.Trim(), input.DkpAmount, time.GetUtcNow().UtcDateTime); return ToDto(item); }, ct);
     public Task SetActiveAsync(Guid id, bool active, CancellationToken ct = default) => context.ExecuteAsync([], true, async _ => { var item = await achievements.FindAsync(id, ct) ?? throw new KeyNotFoundException("Achievement not found."); item.SetActive(active, time.GetUtcNow().UtcDateTime); return true; }, ct);
     public Task<IReadOnlyList<UserAchievementDto>> GrantAsync(Guid achievementId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default)

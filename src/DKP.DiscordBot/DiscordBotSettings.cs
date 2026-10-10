@@ -1,6 +1,6 @@
 namespace DKP.DiscordBot;
 
-public sealed record DiscordBotSettings(string BotToken, ulong ApplicationId, ulong GuildId, Uri ApiBaseUrl, string ApiSecret, ulong? NotificationChannelId)
+public sealed record DiscordBotSettings(string BotToken, ulong ApplicationId, ulong GuildId, Uri ApiBaseUrl, string ApiSecret, ulong? NotificationChannelId, ulong? MemberNotificationChannelId)
 {
     public static DiscordBotSettings FromConfiguration(IConfiguration configuration)
     {
@@ -12,7 +12,9 @@ public sealed record DiscordBotSettings(string BotToken, ulong ApplicationId, ul
         if (!Uri.TryCreate(apiUrl, UriKind.Absolute, out var baseUrl)) throw new InvalidOperationException("DKP_BOT_API_URL must be a valid absolute URL.");
         var notificationChannel = configuration["DISCORD_OFFICER_CHANNEL_ID"];
         ulong? channelId = string.IsNullOrWhiteSpace(notificationChannel) ? null : ParseSnowflakeValue(notificationChannel, "DISCORD_OFFICER_CHANNEL_ID");
-        return new(token, applicationId, guildId, baseUrl, apiSecret, channelId);
+        var memberNotificationChannel = configuration["DISCORD_MEDLEM_CHANNEL_ID"];
+        ulong? memberChannelId = string.IsNullOrWhiteSpace(memberNotificationChannel) ? null : ParseSnowflakeValue(memberNotificationChannel, "DISCORD_MEDLEM_CHANNEL_ID");
+        return new(token, applicationId, guildId, baseUrl, apiSecret, channelId, memberChannelId);
     }
 
     private static string Required(IConfiguration configuration, string key) => !string.IsNullOrWhiteSpace(configuration[key]) ? configuration[key]! : throw new InvalidOperationException($"Missing required Discord bot configuration: {key}.");

@@ -1,11 +1,12 @@
 using DKP.Application.Authentication;
+using DKP.Application.Notifications;
 using DKP.Application.Persistence;
 using DKP.Domain;
 using DKP.Facade.Commands;
 using DKP.Facade.Contracts;
 namespace DKP.Application.Presets;
 
-public sealed class DkpPresetCommandService(CommandContext context, IPresetRepository presets, IEventLedgerRepository ledger, TimeProvider time) : IDkpPresetCommands
+public sealed class DkpPresetCommandService(CommandContext context, IPresetRepository presets, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IDkpPresetCommands
 {
     private static void Validate(DkpAwardPresetInput input)
     {
@@ -17,11 +18,13 @@ public sealed class DkpPresetCommandService(CommandContext context, IPresetRepos
     private static DkpAwardPresetDto Dto(DkpAwardPreset p) => new(p.Id, p.Name, p.Amount, p.Reason, p.MaxApplicationsPerUser, p.IsActive);
 
     public Task<DkpAwardPresetDto> CreateAsync(DkpAwardPresetInput input, CancellationToken ct = default)
-        => context.ExecuteAsync([], true, async _ =>
+        => context.ExecuteAsync([], true, async officer =>
         {
             Validate(input);
-            var preset = new DkpAwardPreset(input.Name.Trim(), input.Amount, input.Reason.Trim(), input.MaxApplicationsPerUser, time.GetUtcNow().UtcDateTime);
+            var now = time.GetUtcNow().UtcDateTime;
+            var preset = new DkpAwardPreset(input.Name.Trim(), input.Amount, input.Reason.Trim(), input.MaxApplicationsPerUser, now);
             await presets.AddAsync(preset, ct);
+            await outbox.AddAsync(SourceNotificationFactory.Create("DKP preset", preset.Name, preset.Reason, preset.Amount, preset.MaxApplicationsPerUser, officer.DiscordName, now), ct);
             return Dto(preset);
         }, ct);
 

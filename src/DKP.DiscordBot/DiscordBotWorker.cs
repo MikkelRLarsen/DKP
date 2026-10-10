@@ -34,7 +34,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         await client.StartAsync();
         notificationCts = new CancellationTokenSource();
         notificationTask = NotificationLoopAsync(notificationCts.Token);
-        logger.LogInformation("Discord notification delivery enabled. Channel: {ChannelId}.", settings.NotificationChannelId);
+        logger.LogInformation("Discord notification delivery enabled. Officer channel: {OfficerChannelId}; member channel: {MemberChannelId}.", settings.NotificationChannelId, settings.MemberNotificationChannelId);
         logger.LogInformation("Discord bot startup initiated for guild {GuildId}.", settings.GuildId);
     }
 
@@ -44,7 +44,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         {
             try
             {
-                var pending = await api.GetPendingNotificationsAsync(cancellationToken, settings.NotificationChannelId is null ? "dm" : null);
+                var pending = await api.GetPendingNotificationsAsync(cancellationToken, settings.NotificationChannelId is null && settings.MemberNotificationChannelId is null ? "dm" : null);
                 if (pending is not null)
                 {
                     foreach (var notification in pending)
@@ -53,9 +53,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                         {
                             if (notification.Action == "delete")
                             {
-                                if (settings.NotificationChannelId is null)
-                                    throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
-                                var channel = client?.GetChannel(settings.NotificationChannelId.Value) as IMessageChannel;
+                                var channel = GetNotificationChannel(notification.NotificationType);
                                 if (channel is null)
                                     throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
                                 if (notification.DiscordMessageId is ulong messageId)
@@ -78,12 +76,10 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                                 }
                                 else
                                 {
-                                    if (settings.NotificationChannelId is null)
-                                        throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
-                                    var channel = client?.GetChannel(settings.NotificationChannelId.Value) as IMessageChannel;
+                                    var channel = GetNotificationChannel(notification.NotificationType);
                                     if (channel is null)
                                         throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
-                                    message = await channel.SendMessageAsync(FormatNotification(notification.Payload), allowedMentions: AllowedMentions.None);
+                                    message = await channel.SendMessageAsync(FormatNotification(notification.NotificationType, notification.Payload), allowedMentions: AllowedMentions.None);
                                 }
                                 await api.MarkNotificationSentAsync(notification.Id, message.Id, cancellationToken);
                             }
@@ -107,12 +103,26 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         }
     }
 
-    private static string FormatNotification(string payload)
+    private static string FormatNotification(string notificationType, string payload)
     {
         try
         {
             using var document = JsonDocument.Parse(payload);
             var root = document.RootElement;
+            if (notificationType == "DkpSourceCreated")
+            {
+                var sourceKind = Safe(GetString(root, "Kind") ?? "DKP source");
+                var name = Safe(GetString(root, "Name") ?? "Unknown source");
+                var description = Safe(GetString(root, "Description"));
+                var sourceAmount = root.TryGetProperty("Amount", out var sourceAmountElement) ? sourceAmountElement.GetInt32() : 0;
+                var limit = root.TryGetProperty("Limit", out var limitElement) && limitElement.ValueKind != JsonValueKind.Null ? limitElement.GetInt32().ToString() : null;
+                var sourceMessage = $"**New {sourceKind} available**\nName: {name}\nAmount: {sourceAmount} DKP";
+                if (!string.IsNullOrWhiteSpace(limit)) sourceMessage += $"\nLimit: {limit} per user";
+                var createdBy = Safe(GetString(root, "CreatedBy"));
+                if (!string.IsNullOrWhiteSpace(createdBy)) sourceMessage += $"\nCreated by: {createdBy}";
+                if (root.TryGetProperty("CreatedAtUtc", out var createdAtElement) && createdAtElement.TryGetDateTime(out var createdAt)) sourceMessage += $"\nTime: {createdAt:u}";
+                return string.IsNullOrWhiteSpace(description) ? sourceMessage : $"{sourceMessage}\nDescription: {description}";
+            }
             var kind = Safe(GetString(root, "Kind") ?? "DKP");
             var user = Safe(GetString(root, "UserName") ?? "Unknown user");
             var source = Safe(GetString(root, "SourceName") ?? "Unknown source");
@@ -126,6 +136,14 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         {
             return "**New DKP request**\nA new request is awaiting officer review.";
         }
+    }
+
+    private IMessageChannel? GetNotificationChannel(string notificationType)
+    {
+        var channelId = notificationType == "DkpSourceCreated"
+            ? settings.MemberNotificationChannelId
+            : settings.NotificationChannelId;
+        return channelId is ulong id ? client?.GetChannel(id) as IMessageChannel : null;
     }
 
     private static string FormatPrivateNotification(string payload)

@@ -424,7 +424,7 @@ Send besked til et konfigureret Discord-channel, når der oprettes:
 
 Notifikationer skal komme fra en reliable outbox/event-notification mekanisme, så database-operationen ikke fejler, hvis Discord midlertidigt er utilgængelig.
 
-Implementeringen bruger en database-backed outbox, som gemmes i samme transaktion som requesten. Botten claimer pending beskeder via det interne API, sender neutral tekst til `DISCORD_OFFICER_CHANNEL_ID` med `AllowedMentions.None` og markerer derefter beskeden som sendt. Når requesten godkendes eller afvises, markeres den oprindelige besked til sletning, og botten sletter sin egen Discord-besked. Midlertidige API- eller Discord-fejl medfører retry med backoff. Channel-notifikationer kan deaktiveres ved at lade environment-variablen være tom.
+Implementeringen bruger en database-backed outbox, som gemmes i samme transaktion som requesten. Botten claimer pending beskeder via det interne API, sender neutral tekst til `DISCORD_OFFICER_CHANNEL_ID` med `AllowedMentions.None` og markerer derefter beskeden som sendt. Når requesten godkendes eller afvises, markeres den oprindelige besked til sletning, og botten sletter sin egen Discord-besked. Midlertidige API- eller Discord-fejl medfører retry med backoff. Officer-request-notifikationer bruger `DISCORD_OFFICER_CHANNEL_ID`, mens B7b source-notifikationer bruger `DISCORD_MEDLEM_CHANNEL_ID`.
 
 Acceptkriterier: Request gemmes selv om Discord-kanalen er utilgængelig, beskeden kan retries, og en succesfuldt markeret outbox-record sendes ikke igen.
 
@@ -452,7 +452,7 @@ Tests skal dække successful DM, DM-fejl uden rollback, retry, idempotency og ko
 
 ### Slice B7b – Channel-notifikationer ved nye presets og achievements
 
-Status: Planlagt.
+Status: Implementeret.
 
 Send en informationsbesked til et konfigureret Discord-channel, når en Officer opretter:
 
