@@ -1,7 +1,7 @@
 using Discord.Interactions;
 using Discord.WebSocket;
 
-namespace DKP.DiscordBot;
+namespace DKP.DiscordBot.modules;
 
 [Group("characters", "Manage your DKP characters")]
 public sealed class CharactersModule(DkpApiClient api) : InteractionModuleBase<SocketInteractionContext>

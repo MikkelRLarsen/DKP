@@ -1,6 +1,6 @@
 using Discord.Interactions;
 
-namespace DKP.DiscordBot;
+namespace DKP.DiscordBot.modules;
 
  [Group("account", "Manage your DKP account")]
 public sealed class AccountModule(DkpApiClient api) : InteractionModuleBase<SocketInteractionContext>

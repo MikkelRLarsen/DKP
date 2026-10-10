@@ -1,7 +1,7 @@
 using System.Text;
 using Discord.Interactions;
 
-namespace DKP.DiscordBot;
+namespace DKP.DiscordBot.modules;
 
 [Group("dkp", "View your DKP and request awards")]
 public sealed class DkpModule(DkpApiClient api) : InteractionModuleBase<SocketInteractionContext>

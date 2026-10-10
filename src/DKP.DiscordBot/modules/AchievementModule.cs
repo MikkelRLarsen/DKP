@@ -1,7 +1,7 @@
 using System.Text;
 using Discord.Interactions;
 
-namespace DKP.DiscordBot;
+namespace DKP.DiscordBot.modules;
 
 public sealed class AchievementModule(DkpApiClient api) : InteractionModuleBase<SocketInteractionContext>
 {

@@ -1,6 +1,6 @@
 using Discord.Interactions;
 
-namespace DKP.DiscordBot;
+namespace DKP.DiscordBot.modules;
 
 public sealed class DkpPingModule(DkpApiClient api) : InteractionModuleBase<SocketInteractionContext>
 {

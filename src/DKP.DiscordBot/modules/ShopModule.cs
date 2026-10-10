@@ -1,7 +1,7 @@
 using System.Text;
 using Discord.Interactions;
 
-namespace DKP.DiscordBot;
+namespace DKP.DiscordBot.modules;
 
 [Group("shop", "View and purchase available DKP shop items")]
 public sealed class ShopModule(DkpApiClient api) : InteractionModuleBase<SocketInteractionContext>
