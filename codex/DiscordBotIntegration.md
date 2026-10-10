@@ -430,7 +430,7 @@ Acceptkriterier: Request gemmes selv om Discord-kanalen er utilgængelig, besked
 
 ### Slice B7a – Private Discord-beskeder ved behandlinger
 
-Status: Planlagt.
+Status: Implementeret.
 
 Send en privat Discord-besked til den berørte bruger, når en Officer behandler en DKP- eller achievement-relateret handling:
 

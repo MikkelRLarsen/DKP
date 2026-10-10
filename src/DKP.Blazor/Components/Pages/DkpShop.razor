@@ -98,7 +98,7 @@
             ?? throw new InvalidOperationException("DKP history was not found.");
         balance = history.Balance.Amount;
         items = await ShopQueries.GetActiveItemsAsync();
-        availability = await ShopPurchaseQueries.GetAvailabilityAsync();
+            availability = await ShopPurchaseQueries.GetAvailabilityAsync();
         purchases = await ShopQueries.GetPurchasesAsync();
         achievements = await AchievementQueries.GetUserAchievementsAsync();
         if (selectedItem is null && items.Count > 0) selectedItemId = items[0].Id;

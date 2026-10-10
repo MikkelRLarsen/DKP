@@ -14,10 +14,10 @@ public sealed class BotNotificationsController(
     ILogger<BotNotificationsController> logger) : ControllerBase
 {
     [HttpGet("pending")]
-    public async Task<IActionResult> PendingAsync([FromQuery] int limit, CancellationToken ct)
+    public async Task<IActionResult> PendingAsync([FromQuery] int limit, [FromQuery] string? target, CancellationToken ct)
     {
         if (!Authorized()) return Unauthorized();
-        return Ok(await queries.ClaimPendingAsync(limit <= 0 ? 10 : limit, ct));
+        return Ok(await queries.ClaimPendingAsync(limit <= 0 ? 10 : limit, target, ct));
     }
 
     [HttpPost("{id:guid}/sent")]

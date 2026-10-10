@@ -90,7 +90,7 @@ else
     {
         try
         {
-            availability = await ShopPurchaseQueries.GetAvailabilityAsync();
+            availability = await ShopPurchaseQueries.GetAvailabilityAsync(includeInactive: true);
         }
         catch (Exception exception)
         {

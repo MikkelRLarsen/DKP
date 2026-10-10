@@ -104,6 +104,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
         {
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.RequestId);
+            e.Property(x => x.RecipientDiscordUserId).HasMaxLength(32);
             e.Property(x => x.NotificationType).HasMaxLength(64);
             e.Property(x => x.Payload).HasColumnType("jsonb");
             e.Property(x => x.LastError).HasMaxLength(500);

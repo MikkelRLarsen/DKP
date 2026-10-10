@@ -51,7 +51,31 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
         var target = await context.TargetAsync(request.UserId, ct);
         var reviewComment = Normalize(rawComment, "Review comment");
         var now = time.GetUtcNow().UtcDateTime;
-        if (!approve) { request.Reject(officer.Id, reviewComment, now); await outbox.RequestDeletionAsync(request.Id, now, ct); return true; }
+        var sourceName = "Unknown source";
+        var sourceAmount = 0;
+        var sourceKind = "DKP";
+        if (request.PresetId is Guid presetForNotification)
+        {
+            var preset = await presets.FindAsync(presetForNotification, ct) ?? throw new KeyNotFoundException("Preset not found.");
+            sourceName = preset.Name;
+            sourceAmount = preset.Amount;
+        }
+        else if (request.AchievementId is Guid achievementForNotification)
+        {
+            var achievement = await achievements.FindAsync(achievementForNotification, ct) ?? throw new KeyNotFoundException("Achievement not found.");
+            sourceName = achievement.Name;
+            sourceAmount = achievement.DkpAmount;
+            sourceKind = "Achievement";
+        }
+        else throw new InvalidOperationException("The request has no valid source.");
+
+        if (!approve)
+        {
+            request.Reject(officer.Id, reviewComment, now);
+            await outbox.AddAsync(RequestNotificationFactory.CreateReview(request, target.DiscordId, target.DiscordName, sourceName, sourceAmount, sourceKind, false, reviewComment, officer.DiscordName, now), ct);
+            await outbox.RequestDeletionAsync(request.Id, now, ct);
+            return true;
+        }
         var operationId = Guid.NewGuid(); var eventIds = new List<Guid>(request.Quantity);
         if (request.PresetId is Guid presetId)
         {
@@ -70,7 +94,10 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
             eventIds.Add(entry.Id); await achievements.AddUserAchievementAsync(new UserAchievement(target.Id, achievement.Id, officer.Id, entry.Id, now), ct);
         }
         else throw new InvalidOperationException("The request has no valid source.");
-        request.Approve(officer.Id, eventIds, reviewComment, now); await outbox.RequestDeletionAsync(request.Id, now, ct); return true;
+        request.Approve(officer.Id, eventIds, reviewComment, now);
+        await outbox.AddAsync(RequestNotificationFactory.CreateReview(request, target.DiscordId, target.DiscordName, sourceName, sourceAmount, sourceKind, true, reviewComment, officer.DiscordName, now), ct);
+        await outbox.RequestDeletionAsync(request.Id, now, ct);
+        return true;
     }, ct);
 
     private static string? Normalize(string? value, string field) { if (string.IsNullOrWhiteSpace(value)) return null; var result = value.Trim(); if (result.Length > 500) throw new ArgumentException($"{field} must be at most 500 characters."); return result; }

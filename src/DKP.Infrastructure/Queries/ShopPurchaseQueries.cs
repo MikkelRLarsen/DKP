@@ -5,10 +5,12 @@ using Microsoft.EntityFrameworkCore;
 namespace DKP.Infrastructure.Queries;
 public sealed class ShopPurchaseQueries(QuerySession session) : IShopPurchaseQueries
 {
-    public Task<IReadOnlyList<ShopItemAvailabilityDto>> GetAvailabilityAsync(CancellationToken ct = default) => session.ReadAsync<IReadOnlyList<ShopItemAvailabilityDto>>(false, async (db, actor) =>
+    public Task<IReadOnlyList<ShopItemAvailabilityDto>> GetAvailabilityAsync(bool includeInactive = false, CancellationToken ct = default) => session.ReadAsync<IReadOnlyList<ShopItemAvailabilityDto>>(false, async (db, actor) =>
     {
         var state = await ReadModels.StateAsync(db, actor.Id, ct);
-        var items = await db.ShopItems.Where(x => x.IsActive).OrderBy(x => x.Name).ThenBy(x => x.Id).ToArrayAsync(ct);
+        var itemsQuery = db.ShopItems.AsQueryable();
+        if (!includeInactive) itemsQuery = itemsQuery.Where(x => x.IsActive);
+        var items = await itemsQuery.OrderBy(x => x.Name).ThenBy(x => x.Id).ToArrayAsync(ct);
         var requirements = await (from requirement in db.ShopItemAchievementRequirements
                                   join achievement in db.AchievementDefinitions on requirement.AchievementId equals achievement.Id
                                   select new { requirement.ShopItemId, Dto = new ShopItemAchievementRequirementDto(achievement.Id, achievement.Name) })

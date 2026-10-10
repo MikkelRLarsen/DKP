@@ -32,12 +32,9 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         await interactions.AddModulesAsync(Assembly.GetExecutingAssembly(), services);
         await client.LoginAsync(TokenType.Bot, settings.BotToken);
         await client.StartAsync();
-        if (settings.NotificationChannelId is not null)
-        {
-            notificationCts = new CancellationTokenSource();
-            notificationTask = NotificationLoopAsync(notificationCts.Token);
-            logger.LogInformation("Request notification delivery enabled for channel {ChannelId}.", settings.NotificationChannelId);
-        }
+        notificationCts = new CancellationTokenSource();
+        notificationTask = NotificationLoopAsync(notificationCts.Token);
+        logger.LogInformation("Discord notification delivery enabled. Channel: {ChannelId}.", settings.NotificationChannelId);
         logger.LogInformation("Discord bot startup initiated for guild {GuildId}.", settings.GuildId);
     }
 
@@ -47,19 +44,20 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         {
             try
             {
-                var pending = await api.GetPendingNotificationsAsync(cancellationToken);
+                var pending = await api.GetPendingNotificationsAsync(cancellationToken, settings.NotificationChannelId is null ? "dm" : null);
                 if (pending is not null)
                 {
                     foreach (var notification in pending)
                     {
                         try
                         {
-                            var channel = client?.GetChannel(settings.NotificationChannelId!.Value) as IMessageChannel;
-                            if (channel is null)
-                                throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
-
                             if (notification.Action == "delete")
                             {
+                                if (settings.NotificationChannelId is null)
+                                    throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
+                                var channel = client?.GetChannel(settings.NotificationChannelId.Value) as IMessageChannel;
+                                if (channel is null)
+                                    throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
                                 if (notification.DiscordMessageId is ulong messageId)
                                 {
                                     var message = await channel.GetMessageAsync(messageId);
@@ -69,7 +67,24 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                             }
                             else
                             {
-                                var message = await channel.SendMessageAsync(FormatNotification(notification.Payload), allowedMentions: AllowedMentions.None);
+                                IMessage message;
+                                if (ulong.TryParse(notification.RecipientDiscordUserId, out var recipientId))
+                                {
+                                    var recipient = await client!.Rest.GetUserAsync(recipientId);
+                                    if (recipient is null)
+                                        throw new InvalidOperationException("The Discord recipient could not be resolved.");
+                                    var dm = await recipient.CreateDMChannelAsync();
+                                    message = await dm.SendMessageAsync(FormatPrivateNotification(notification.Payload), allowedMentions: AllowedMentions.None);
+                                }
+                                else
+                                {
+                                    if (settings.NotificationChannelId is null)
+                                        throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
+                                    var channel = client?.GetChannel(settings.NotificationChannelId.Value) as IMessageChannel;
+                                    if (channel is null)
+                                        throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
+                                    message = await channel.SendMessageAsync(FormatNotification(notification.Payload), allowedMentions: AllowedMentions.None);
+                                }
                                 await api.MarkNotificationSentAsync(notification.Id, message.Id, cancellationToken);
                             }
                         }
@@ -110,6 +125,30 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         catch (JsonException)
         {
             return "**New DKP request**\nA new request is awaiting officer review.";
+        }
+    }
+
+    private static string FormatPrivateNotification(string payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            var action = Safe(GetString(root, "Action") ?? "updated");
+            var kind = Safe(GetString(root, "Kind") ?? "DKP");
+            var source = Safe(GetString(root, "SourceName") ?? GetString(root, "ItemName") ?? "item");
+            var amount = root.TryGetProperty("Amount", out var amountElement) ? amountElement.GetInt32() : 0;
+            var quantity = root.TryGetProperty("Quantity", out var quantityElement) ? quantityElement.GetInt32() : 1;
+            var comment = Safe(GetString(root, "ReviewComment"));
+            var reviewer = Safe(GetString(root, "ReviewerName") ?? GetString(root, "OfficerName"));
+            var message = $"Your {kind.ToLowerInvariant()} request was **{action}**.\nSource: {source}\nAmount: {amount} DKP\nQuantity: {quantity}";
+            if (!string.IsNullOrWhiteSpace(reviewer)) message += $"\nProcessed by: {reviewer}";
+            if (!string.IsNullOrWhiteSpace(comment)) message += $"\nComment: {comment}";
+            return message;
+        }
+        catch (JsonException)
+        {
+            return "Your DKP request was processed. Please check the DKP website for details.";
         }
     }
 

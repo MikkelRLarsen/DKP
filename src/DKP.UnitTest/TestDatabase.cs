@@ -106,7 +106,7 @@ public sealed class TestRig
         Ledger = new(Session);
         Dkp = new(Context, Ledger, new FixedTime());
         BotCharacters = new(Users, new CharacterRepository(Session), Session);
-        Shop = new(Context, new ShopRepository(Session), new AchievementRepository(Session), Ledger, new FixedTime());
+        Shop = new(Context, new ShopRepository(Session), new AchievementRepository(Session), Ledger, new NotificationOutboxRepository(Session), new FixedTime());
         Presets = new(Context, new PresetRepository(Session), Ledger, new FixedTime());
         AwardRequests = new(Context, new DkpAwardRequestRepository(Session), new PresetRepository(Session), new AchievementRepository(Session), Ledger, new NotificationOutboxRepository(Session), new FixedTime());
         Characters = new(Context, new CharacterRepository(Session));

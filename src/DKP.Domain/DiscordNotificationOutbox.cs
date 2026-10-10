@@ -4,7 +4,7 @@ public sealed class DiscordNotificationOutbox
 {
     private DiscordNotificationOutbox() { }
 
-    public DiscordNotificationOutbox(string notificationType, string payload, DateTime createdAtUtc, Guid? requestId = null)
+    public DiscordNotificationOutbox(string notificationType, string payload, DateTime createdAtUtc, Guid? requestId = null, string? recipientDiscordUserId = null)
     {
         Id = Guid.NewGuid();
         NotificationType = notificationType;
@@ -12,10 +12,12 @@ public sealed class DiscordNotificationOutbox
         CreatedAtUtc = createdAtUtc;
         NextAttemptAtUtc = createdAtUtc;
         RequestId = requestId;
+        RecipientDiscordUserId = recipientDiscordUserId;
     }
 
     public Guid Id { get; private set; }
     public Guid? RequestId { get; private set; }
+    public string? RecipientDiscordUserId { get; private set; }
     public string NotificationType { get; private set; } = string.Empty;
     public string Payload { get; private set; } = string.Empty;
     public DateTime CreatedAtUtc { get; private set; }

@@ -5,7 +5,7 @@ using DKP.Facade.Commands;
 using DKP.Facade.Contracts;
 namespace DKP.Application.Shop;
 
-public sealed class ShopCommandService(CommandContext context, IShopRepository catalog, IAchievementRepository achievementRepository, IEventLedgerRepository ledger, TimeProvider time) : IShopCommands
+public sealed class ShopCommandService(CommandContext context, IShopRepository catalog, IAchievementRepository achievementRepository, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IShopCommands
 {
     private async Task<ShopItemDto> Dto(ShopItem i, CancellationToken ct) { var ids = await catalog.GetAchievementRequirementIdsAsync(i.Id, ct); return new(i.Id, i.Key, i.Name, i.Description, i.Price, i.MaxPerUser, i.IsActive, ids.Select(x => new ShopItemAchievementRequirementDto(x, "")).ToArray()); }
     private static void Validate(ShopItemInput input)
@@ -111,11 +111,14 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
             var purchase = state.Purchases.Values.SingleOrDefault(x => x.PurchaseId == purchaseId) ?? throw new KeyNotFoundException("Purchase not found.");
             if (actor.Id != purchase.UserId && actor.Role != Domain.UserRole.Officer)
                 throw new UnauthorizedAccessException("You can only cancel your own purchases.");
-            await context.TargetAsync(purchase.UserId, ct);
+            var target = await context.TargetAsync(purchase.UserId, ct);
             if (purchase.CancelledAtUtc != null) throw new InvalidOperationException("Purchase already cancelled.");
             if (purchase.IsConsumed) throw new InvalidOperationException("Used purchases cannot be cancelled.");
-            await ledger.PostAsync(purchase.UserId, actor.Id, Guid.NewGuid(), time.GetUtcNow().UtcDateTime,
+            var now = time.GetUtcNow().UtcDateTime;
+            await ledger.PostAsync(purchase.UserId, actor.Id, Guid.NewGuid(), now,
                 new PurchaseCancelled(purchaseId, purchase.TotalDkpCost, $"Refund: {purchase.Quantity} x {purchase.ItemName}"), ct);
+            if (actor.Role == Domain.UserRole.Officer)
+                await outbox.AddAsync(ShopNotificationFactory.CreateRefund(target, actor.DiscordName, purchase.ItemName, purchase.Quantity, purchase.TotalDkpCost, now), ct);
             return true;
         }, ct);
 

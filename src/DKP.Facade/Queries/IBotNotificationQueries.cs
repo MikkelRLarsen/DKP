@@ -4,5 +4,5 @@ namespace DKP.Facade.Queries;
 
 public interface IBotNotificationQueries
 {
-    Task<IReadOnlyList<DiscordNotificationDto>> ClaimPendingAsync(int limit = 10, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DiscordNotificationDto>> ClaimPendingAsync(int limit = 10, string? target = null, CancellationToken cancellationToken = default);
 }
