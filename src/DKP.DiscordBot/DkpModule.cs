@@ -39,28 +39,28 @@ public sealed class DkpModule(DkpApiClient api) : InteractionModuleBase<SocketIn
         if (sources.Count == 0) { await ModifyOriginalResponseAsync(p => p.Content = "You have no remaining DKP sources."); return; }
         var output = new StringBuilder("**Available DKP sources**\n");
         foreach (var source in sources) output.AppendLine($"`{source.Name}` — **+{source.Amount} DKP**, {source.Remaining} remaining — {source.Reason}");
-        output.AppendLine("\nUse `/dkp request` with the exact preset name.");
+        output.AppendLine("\nUse `/dkp request` and select a preset from the dropdown.");
         await ModifyOriginalResponseAsync(p => p.Content = output.ToString());
     }
 
     [SlashCommand("request", "Request a DKP award from a preset", runMode: RunMode.Async)]
-    public async Task RequestAsync([Summary("preset", "The preset name shown by /dkp sources")] string preset, [Summary("quantity", "Number of applications requested")] int quantity = 1, [Summary("comment", "Optional comment for the Officer")] string? comment = null)
+    public async Task RequestAsync([Summary("preset", "Select an available DKP preset")] [Autocomplete<DkpPresetAutocompleteHandler>] string preset, [Summary("quantity", "Number of applications requested")] int quantity = 1, [Summary("comment", "Optional comment for the Officer")] string? comment = null)
     {
         await DeferAsync(ephemeral: true);
         var sources = await api.GetDkpSourcesAsync(Context.User.Id.ToString(), CancellationToken.None);
-        var source = sources?.SingleOrDefault(x => string.Equals(x.Name, preset.Trim(), StringComparison.OrdinalIgnoreCase));
-        if (source is null) { await ModifyOriginalResponseAsync(p => p.Content = "That preset was not found or is no longer available. Use `/dkp sources`."); return; }
+        var source = Guid.TryParse(preset, out var presetId) ? sources?.SingleOrDefault(x => x.PresetId == presetId) : null;
+        if (source is null) { await ModifyOriginalResponseAsync(p => p.Content = "Select an available preset from the dropdown. It may no longer be available."); return; }
         var result = await api.RequestDkpAsync(Context.User.Id.ToString(), source.PresetId, quantity, [], comment, CancellationToken.None);
         await ModifyOriginalResponseAsync(p => p.Content = result is null ? "The DKP request could not be created." : $"Created {result.Count} pending DKP request(s) for **{source.Name}**.");
     }
 
     [SlashCommand("request-many", "Request a DKP preset award for tagged members", runMode: RunMode.Async)]
-    public async Task RequestManyAsync([Summary("preset", "The preset name shown by /dkp sources")] string preset, [Summary("users", "Space-separated Discord mentions, for example @UserA @UserB")] string users, [Summary("quantity", "Number of applications requested per user")] int quantity = 1, [Summary("comment", "Optional comment for the Officer")] string? comment = null)
+    public async Task RequestManyAsync([Summary("preset", "Select an available DKP preset")] [Autocomplete<DkpPresetAutocompleteHandler>] string preset, [Summary("users", "Space-separated Discord mentions, for example @UserA @UserB")] string users, [Summary("quantity", "Number of applications requested per user")] int quantity = 1, [Summary("comment", "Optional comment for the Officer")] string? comment = null)
     {
         await DeferAsync(ephemeral: true);
         var sources = await api.GetDkpSourcesAsync(Context.User.Id.ToString(), CancellationToken.None);
-        var source = sources?.SingleOrDefault(x => string.Equals(x.Name, preset.Trim(), StringComparison.OrdinalIgnoreCase));
-        if (source is null) { await ModifyOriginalResponseAsync(p => p.Content = "That preset was not found or is no longer available. Use `/dkp sources`."); return; }
+        var source = Guid.TryParse(preset, out var presetId) ? sources?.SingleOrDefault(x => x.PresetId == presetId) : null;
+        if (source is null) { await ModifyOriginalResponseAsync(p => p.Content = "Select an available preset from the dropdown. It may no longer be available."); return; }
         var targetIds = ExtractDiscordIds(users);
         if (targetIds.Length == 0) { await ModifyOriginalResponseAsync(p => p.Content = "Tag at least one Discord member, for example `@UserA @UserB`."); return; }
         var result = await api.RequestDkpAsync(Context.User.Id.ToString(), source.PresetId, quantity, targetIds, comment, CancellationToken.None);

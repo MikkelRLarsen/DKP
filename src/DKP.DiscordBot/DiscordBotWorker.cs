@@ -23,7 +23,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             LogLevel = LogSeverity.Info,
             AlwaysDownloadUsers = false
         });
-        interactions = new InteractionService(client.Rest);
+        interactions = new InteractionService(client.Rest, new InteractionServiceConfig { EnableAutocompleteHandlers = true });
         services = new ServiceCollection().AddSingleton(api).AddSingleton(settings).AddSingleton(interactions).BuildServiceProvider();
         client.Log += LogAsync;
         client.Ready += RegisterCommandsAsync;

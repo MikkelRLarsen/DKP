@@ -22,7 +22,7 @@ public sealed class AchievementModule(DkpApiClient api) : InteractionModuleBase<
             if (!string.IsNullOrWhiteSpace(definition.Description)) output.AppendLine($"  {definition.Description}");
         }
         if (overview.Definitions.Count == 0) output.AppendLine("No active achievements are currently available.");
-        output.AppendLine("\nUse `/achievement request` to request an available or previously revoked achievement.");
+        output.AppendLine("\nUse `/achievement request` and select an available or previously revoked achievement from the dropdown.");
         await ModifyOriginalResponseAsync(p => p.Content = output.ToString());
     }
 
@@ -33,14 +33,14 @@ public sealed class AchievementRequestModule(DkpApiClient api) : InteractionModu
 {
     [SlashCommand("request-many", "Request an achievement for yourself and tagged members", runMode: RunMode.Async)]
     public async Task RequestManyAsync(
-        [Summary("achievement", "The achievement key shown by /achievements")] string achievement,
+        [Summary("achievement", "Select an available achievement")] [Autocomplete<AchievementAutocompleteHandler>] string achievement,
         [Summary("users", "Space-separated Discord mentions, for example @UserA @UserB")] string users,
         [Summary("comment", "Optional comment for the Officer")] string? comment = null)
     {
         await DeferAsync(ephemeral: true);
         var overview = await api.GetAchievementsAsync(Context.User.Id.ToString(), CancellationToken.None);
-        var definition = overview?.Definitions.SingleOrDefault(x => string.Equals(x.Key, achievement.Trim(), StringComparison.OrdinalIgnoreCase));
-        if (definition is null) { await ModifyOriginalResponseAsync(p => p.Content = "That achievement was not found. Use `/achievements` to see valid keys."); return; }
+        var definition = Guid.TryParse(achievement, out var achievementId) ? overview?.Definitions.SingleOrDefault(x => x.Id == achievementId) : null;
+        if (definition is null) { await ModifyOriginalResponseAsync(p => p.Content = "Select an available achievement from the dropdown."); return; }
         var targetIds = ExtractDiscordIds(users);
         if (targetIds.Length == 0)
         {
@@ -85,12 +85,12 @@ public sealed class AchievementRequestModule(DkpApiClient api) : InteractionModu
     }
 
     [SlashCommand("request", "Request an available achievement", runMode: RunMode.Async)]
-    public async Task RequestAsync([Summary("achievement", "The achievement key shown by /achievements")] string achievement, [Summary("comment", "Optional comment for the Officer")] string? comment = null)
+    public async Task RequestAsync([Summary("achievement", "Select an available achievement")] [Autocomplete<AchievementAutocompleteHandler>] string achievement, [Summary("comment", "Optional comment for the Officer")] string? comment = null)
     {
         await DeferAsync(ephemeral: true);
         var overview = await api.GetAchievementsAsync(Context.User.Id.ToString(), CancellationToken.None);
-        var definition = overview?.Definitions.SingleOrDefault(x => string.Equals(x.Key, achievement.Trim(), StringComparison.OrdinalIgnoreCase));
-        if (definition is null) { await ModifyOriginalResponseAsync(p => p.Content = "That achievement was not found. Use `/achievements` to see valid keys."); return; }
+        var definition = Guid.TryParse(achievement, out var achievementId) ? overview?.Definitions.SingleOrDefault(x => x.Id == achievementId) : null;
+        if (definition is null) { await ModifyOriginalResponseAsync(p => p.Content = "Select an available achievement from the dropdown."); return; }
         if (overview!.UserAchievements.Any(x => x.AchievementId == definition.Id && x.IsActive)) { await ModifyOriginalResponseAsync(p => p.Content = "You already have this achievement."); return; }
         if (overview.Requests.Any(x => x.AchievementId == definition.Id && x.IsPending)) { await ModifyOriginalResponseAsync(p => p.Content = "You already have a pending request for this achievement."); return; }
         var request = await api.RequestAchievementAsync(Context.User.Id.ToString(), definition.Id, comment, CancellationToken.None);
