@@ -9,7 +9,6 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<ShopItem> ShopItems => Set<ShopItem>();
     public DbSet<DkpAwardPreset> DkpAwardPresets => Set<DkpAwardPreset>();
     public DbSet<DkpAwardRequest> DkpAwardRequests => Set<DkpAwardRequest>();
-    public DbSet<GuildSetting> GuildSettings => Set<GuildSetting>();
     public DbSet<DkpEvent> DkpEvents => Set<DkpEvent>();
     public DbSet<AchievementDefinition> AchievementDefinitions => Set<AchievementDefinition>();
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
@@ -122,8 +121,6 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
         });
-        model.Entity<GuildSetting>().HasKey(x => x.Id);
-        model.Entity<GuildSetting>().HasData(new { Id = 1, DefaultReserveLimit = 0 });
         var seedTime = new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Utc);
         model.Entity<ShopItem>().HasData(new { Id = Guid.Parse("00000000-0000-0000-0000-000000000008"), Key = "soft-reserve", Name = "Soft Reserve", Description = "Additional Soft Reserve", Price = 10, MaxPerUser = 2, IsActive = true, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)null });
         foreach (var (bonus, price) in new[] { (10, 10), (20, 30), (30, 60), (40, 120) })

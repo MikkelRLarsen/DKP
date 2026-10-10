@@ -30,6 +30,10 @@ Dette dokument er projektets papirspor for den planlagte udviklingsrækkefølge.
 | 13e | LootReserve modifiers | Færdig |
 | 14 | Deployment og production hardening | Planlagt |
 
+### Seneste LootReserve-exportændring
+
+LootReserve-exporten bruger nu addon’et som autoritet for den grundlæggende reservegrænse. Export-kolonnen hedder `ExtraReserve` i stedet for `ReserveLimit` og beregnes som aktive SoftReserves minus aktive SoftReserve-penalties. Værdien må gerne være negativ, og der findes ikke længere en default reservegrænse eller minimum-1-validering i DKP-systemet. Den gamle `GuildSettings`-storage er fjernet med migrationen `20261010094757_RemoveLootReserveDefaultLimit`.
+
 ## Arkitektoniske regler
 
 - Blazor afhænger kun af facade-kontrakter og IoC-registrering.
@@ -410,11 +414,11 @@ Generere en kopiérbar CSV-formateret tekstliste til LootReserve uden fil-downlo
 
 - Officer-only `/admin/loot-reserve` under Administration.
 - RadzenDataGrid med alle medlemmer, character-valg og Main Character som default.
-- Midlertidig override af ReserveLimit og RollBonus.
+- Midlertidig override af ExtraReserve og RollBonus.
 - Visuel strikethrough, hvor fravalgte medlemmer udelades fra outputtet.
-- Output i `RadzenTextArea` med `FirstName,LastName,ReserveLimit,RollBonus`.
+- Output i `RadzenTextArea` med `FirstName,LastName,ExtraReserve,RollBonus`.
 - Copy-to-clipboard via browser Clipboard API; ingen CSV-fil downloades.
-- Default ReserveLimit gemmes i guild settings.
+- Addon’et leverer selv den grundlæggende reservegrænse; DKP-systemet eksporterer kun ExtraReserve.
 - RollBonus-tiers seedes som shop-items med én aktiv bonus pr. bruger.
 
 ### Acceptkriterier

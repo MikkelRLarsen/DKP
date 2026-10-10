@@ -68,7 +68,6 @@ public static class DependencyInjection
 		services.AddScoped<IShopRepository, ShopRepository>();
 		services.AddScoped<IPresetRepository, PresetRepository>();
 		services.AddScoped<IDkpAwardRequestRepository, DkpAwardRequestRepository>();
-		services.AddScoped<IGuildSettingsRepository, GuildSettingsRepository>();
 		services.AddScoped<IEventLedgerRepository, EventLedgerRepository>();
 		services.AddScoped<IEventProjectionRebuilder, EventProjectionRebuilder>();
 		services.AddScoped<IAccountQueries, AccountQueries>();
@@ -103,7 +102,6 @@ public static class DependencyInjection
 		services.AddScoped<IDkpAwardRequestQueries, DkpAwardRequestQueries>();
 		services.AddScoped<IDkpAwardRequestCommands, DkpAwardRequestCommandService>();
 		services.AddScoped<ILootReserveQueries, LootReserveQueries>();
-		services.AddScoped<ILootReserveCommands, LootReserveCommandService>();
 		services.AddScoped<ILootReserveConsumptionCommands, LootReserveConsumptionCommandService>();
 		services.AddScoped<ILootReserveConsumptionQueries, LootReserveConsumptionQueries>();
 		services.AddScoped<ILootReserveModifierCommands, LootReserveModifierCommandService>();

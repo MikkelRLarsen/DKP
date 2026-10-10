@@ -53,16 +53,15 @@ public sealed class AccountAndAuthorizationTests : DatabaseTest
         await member.Characters.SetMainCharacterAsync(main.Id);
         var purchase = Assert.Single(await member.Shop.PurchaseAsync(new(SoftReserveId, 2)));
         var admin = As("officer");
-        await admin.Settings.UpdateSettingsAsync(new(1));
         var query = new LootReserveQueries(admin.Queries);
         var rows = await query.GetMembersAsync();
         var row = rows.Single(x => x.UserId == Member.Id);
-        Assert.Equal(3, row.ReserveLimit);
+        Assert.Equal(2, row.ExtraReserve);
         Assert.Equal(main.Id, row.Characters[0].Id);
         Assert.True(row.IsReady);
         Assert.False(rows.Single(x => x.UserId == Other.Id).IsReady);
         await member.Shop.CancelAsync(purchase.Id);
-        Assert.Equal(1, (await query.GetMembersAsync()).Single(x => x.UserId == Member.Id).ReserveLimit);
+        Assert.Equal(0, (await query.GetMembersAsync()).Single(x => x.UserId == Member.Id).ExtraReserve);
     }
 
     [Theory]
@@ -79,7 +78,6 @@ public sealed class AccountAndAuthorizationTests : DatabaseTest
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => rig.Shop.PurchaseForUsersAsync(new(SoftReserveId, 1, [Member.Id])));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => rig.Roles.SetRoleAsync(new(Other.Id, UserRole.Officer)));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => rig.Blocks.BlockAsync(new(Other.Id, null)));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => rig.Settings.UpdateSettingsAsync(new(1)));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new LootReserveQueries(rig.Queries).GetMembersAsync());
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ShopQueries(rig.Queries).GetAllPurchasesAsync());
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new UserAdministrationQueries(rig.Queries).GetAllAsync());

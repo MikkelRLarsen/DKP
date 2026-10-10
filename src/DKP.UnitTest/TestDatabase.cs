@@ -114,7 +114,6 @@ public sealed class TestRig
         Blocks = new(Context, Users, new BootstrapPolicy(), new FixedTime());
         Provisioning = new(Users, new BootstrapPolicy(), new FixedTime(), Session);
         Queries = new(factory, new TestIdentity(id));
-        Settings = new(Context, new GuildSettingsRepository(Session));
     }
     public CommandUnitOfWork Session { get; }
     public TestDbFactory Factory { get; }
@@ -130,6 +129,5 @@ public sealed class TestRig
     public UserRoleCommandService Roles { get; }
     public UserBlockCommandService Blocks { get; }
     public UserProvisioningService Provisioning { get; }
-    public LootReserveCommandService Settings { get; }
     public QuerySession Queries { get; }
 }

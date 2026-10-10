@@ -140,7 +140,6 @@ public sealed class ReplayAndActivityTests : DatabaseTest
         Assert.Equal(7, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(0, (await db.GuildSettings.SingleAsync()).DefaultReserveLimit);
         var sr = await db.ShopItems.SingleAsync(x => x.Key == "soft-reserve");
         Assert.Equal(10, sr.Price);
         Assert.Equal(2, sr.MaxPerUser);
