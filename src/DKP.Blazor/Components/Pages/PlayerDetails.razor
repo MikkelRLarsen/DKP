@@ -1,0 +1,133 @@
+@page "/members/{UserId:guid}"
+@attribute [Authorize]
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IPlayerDetailsQueries PlayerDetailsQueries
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<PageTitle>Player Details</PageTitle>
+
+@if (loading)
+{
+    <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        <RadzenText Text="Loading player details..." />
+    </RadzenStack>
+}
+else if (player is null)
+{
+    <RadzenStack Gap="1rem">
+        <RadzenAlert AlertStyle="AlertStyle.Warning">The selected player could not be found.</RadzenAlert>
+        <RadzenButton Text="Back to Guild Members" Icon="arrow_back" ButtonStyle="ButtonStyle.Light" Click="@BackToMembers" />
+    </RadzenStack>
+}
+else
+{
+    <RadzenStack Gap="1.5rem">
+        <RadzenButton Text="Back to Guild Members" Icon="arrow_back" ButtonStyle="ButtonStyle.Light" Click="@BackToMembers" Style="width: fit-content;" />
+
+        <div>
+            <h1>Player Details</h1>
+            <RadzenText Text="Character and DKP overview" TextStyle="TextStyle.Subtitle2" />
+        </div>
+
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenCard>
+                    <RadzenText Text="Discord" TextStyle="TextStyle.Overline" />
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem">
+                        @if (player.AvatarUrl is not null)
+                        {
+                            <RadzenImage Path="@player.AvatarUrl" Style="width: 3.5rem; height: 3.5rem; border-radius: 50%;" />
+                        }
+                        <RadzenText Text="@player.DiscordName" TextStyle="TextStyle.H5" />
+                    </RadzenStack>
+                </RadzenCard>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenCard>
+                    <RadzenText Text="Current DKP" TextStyle="TextStyle.Overline" />
+                    <RadzenText Text="@player.DkpHistory.Balance.Amount.ToString("+#;-#;0")" Style="font-size: 2.5rem; font-weight: 700;" />
+                </RadzenCard>
+            </RadzenColumn>
+        </RadzenRow>
+
+        <RadzenCard>
+            <RadzenText Text="Characters" TextStyle="TextStyle.H5" />
+            @if (player.Characters.Count == 0)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" Style="margin-top: 1rem;">This player has no characters.</RadzenAlert>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@player.Characters" TItem="CharacterDto" AllowPaging="false" AllowSorting="true" EmptyText="No characters found." Style="margin-top: 1rem;">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="CharacterDto" Property="FirstName" Title="First name">
+                            <Template Context="character">
+                                @if (character.IsMain)
+                                {
+                                    <RadzenText Text="⭐" />
+                                }
+                                @character.FirstName
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="CharacterDto" Property="LastName" Title="Last name" />
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenText Text="DKP History" TextStyle="TextStyle.H5" />
+            @if (player.DkpHistory.Transactions.Count == 0)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" Style="margin-top: 1rem;">This player has no DKP transactions.</RadzenAlert>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@player.DkpHistory.Transactions" TItem="DkpTransactionDto" AllowPaging="true" PageSize="10" AllowSorting="true" EmptyText="No transactions found." Style="margin-top: 1rem;">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="DkpTransactionDto" Property="CreatedAtUtc" Title="Date">
+                            <Template Context="transaction">@transaction.CreatedAtUtc.ToLocalTime().ToString("g")</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DkpTransactionDto" Property="Amount" Title="DKP">
+                            <Template Context="transaction">
+                                <RadzenBadge Text="@(transaction.Amount > 0 ? $"+{transaction.Amount}" : transaction.Amount.ToString())" BadgeStyle="@(transaction.Amount >= 0 ? BadgeStyle.Success : BadgeStyle.Danger)" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="DkpTransactionDto" Property="Reason" Title="Reason" />
+                        <RadzenDataGridColumn TItem="DkpTransactionDto" Property="CreatedByDiscordName" Title="Created by" />
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+    </RadzenStack>
+}
+
+@code {
+    [Parameter]
+    public Guid UserId { get; set; }
+
+    private PlayerDetailsDto? player;
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            player = await PlayerDetailsQueries.GetAsync(UserId);
+        }
+        catch (Exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load player", "Please try again later.");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void BackToMembers()
+        => NavigationManager.NavigateTo("/members");
+}

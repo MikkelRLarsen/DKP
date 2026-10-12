@@ -6,7 +6,9 @@
   <Folder Name="/src/">
     <File Path="Directory.Packages.props" />
     <Project Path="src/DKP.Application/DKP.Application.csproj" Id="f824777f-8d7d-4d8d-87a5-9cb6b06c5f36" />
+    <Project Path="src/DKP.Api/DKP.Api.csproj" />
     <Project Path="src/DKP.Blazor/DKP.Blazor.csproj" Id="bbb65135-bbda-4e1b-8e11-97549d71676c" />
+    <Project Path="src/DKP.DiscordBot/DKP.DiscordBot.csproj" />
     <Project Path="src/DKP.Domain/DKP.Domain.csproj" Id="cd1839c4-2f85-4c67-bac8-d8fab43dc2ff" />
     <Project Path="src/DKP.Facade/DKP.Facade.csproj" Id="64dc759c-4b82-4599-8cf1-d0d1f4af153f" />
     <Project Path="src/DKP.Infrastructure/DKP.Infrastructure.csproj" Id="c90d063e-2c39-48fe-9295-1c9ebdc05460" />

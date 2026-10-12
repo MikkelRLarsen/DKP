@@ -2,5 +2,77 @@
 @attribute [Authorize(Roles = "Officer")]
 
 <PageTitle>Administration</PageTitle>
-<h1>Administration</h1>
-<RadzenAlert AlertStyle="AlertStyle.Info">Officer administration will be available in the next vertical slice.</RadzenAlert>
+
+<RadzenStack Gap="1.5rem">
+    <div>
+        <h1>Administration</h1>
+        <RadzenText Text="Manage DKP and guild users" TextStyle="TextStyle.Subtitle2" />
+    </div>
+
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard>
+                <RadzenStack Gap="0.75rem">
+                    <RadzenText Text="DKP Management" TextStyle="TextStyle.H5" />
+                    <RadzenText Text="Add or remove DKP for guild members." />
+                    <RadzenButton Text="Open DKP Management" Icon="account_balance_wallet" ButtonStyle="ButtonStyle.Primary" Click="@OpenDkpManagement" />
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard><RadzenStack Gap="0.75rem"><RadzenText Text="Achievements" TextStyle="TextStyle.H5" /><RadzenText Text="Award achievement-based DKP to guild members." /><RadzenButton Text="Open Achievements" Icon="emoji_events" ButtonStyle="ButtonStyle.Primary" Click="@OpenAchievements" /></RadzenStack></RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard>
+                <RadzenStack Gap="0.75rem">
+                    <RadzenText Text="DKP Presets" TextStyle="TextStyle.H5" />
+                    <RadzenText Text="Create predefined awards and manage their lifetime limits." />
+                    <RadzenButton Text="Open DKP Presets" Icon="rule" ButtonStyle="ButtonStyle.Primary" Click="@OpenDkpPresets" />
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard>
+                <RadzenStack Gap="0.75rem">
+                    <RadzenText Text="Shop Purchases" TextStyle="TextStyle.H5" />
+                    <RadzenText Text="Review purchases and buy items for guild members." />
+                    <RadzenButton Text="Open Shop Purchases" Icon="shopping_bag" ButtonStyle="ButtonStyle.Primary" Click="@OpenShopPurchases" />
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard>
+                <RadzenStack Gap="0.75rem">
+                    <RadzenText Text="Shop Catalog" TextStyle="TextStyle.H5" />
+                    <RadzenText Text="Create, edit and activate shop items." />
+                    <RadzenButton Text="Open Shop Catalog" Icon="storefront" ButtonStyle="ButtonStyle.Primary" Click="@OpenShopCatalog" />
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard><RadzenStack Gap="0.75rem"><RadzenText Text="LootReserve Export" TextStyle="TextStyle.H5" /><RadzenText Text="Select characters and copy addon-ready text." /><RadzenButton Text="Open LootReserve Export" Icon="file_copy" ButtonStyle="ButtonStyle.Primary" Click="@OpenLootReserve" /></RadzenStack></RadzenCard>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenCard>
+                <RadzenStack Gap="0.75rem">
+                    <RadzenText Text="User Management" TextStyle="TextStyle.H5" />
+                    <RadzenText Text="Manage Member and Officer roles." />
+                    <RadzenButton Text="Open User Management" Icon="manage_accounts" ButtonStyle="ButtonStyle.Primary" Click="@OpenUserManagement" />
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+</RadzenStack>
+
+@code {
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = default!;
+
+    private void OpenDkpManagement() => NavigationManager.NavigateTo("/admin/dkp");
+    private void OpenDkpPresets() => NavigationManager.NavigateTo("/admin/dkp-presets");
+    private void OpenUserManagement() => NavigationManager.NavigateTo("/admin/users");
+    private void OpenLootReserve() => NavigationManager.NavigateTo("/admin/loot-reserve");
+    private void OpenShopCatalog() => NavigationManager.NavigateTo("/admin/shop");
+    private void OpenShopPurchases() => NavigationManager.NavigateTo("/admin/shop/purchases");
+    private void OpenAchievements() => NavigationManager.NavigateTo("/admin/achievements");
+}

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -10,7 +10,8 @@
     <ProjectReference Include="..\DKP.Application\DKP.Application.csproj" />
     <ProjectReference Include="..\DKP.Domain\DKP.Domain.csproj" />
     <ProjectReference Include="..\DKP.Infrastructure\DKP.Infrastructure.csproj" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+    <ProjectReference Include="..\DKP.Blazor\DKP.Blazor.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

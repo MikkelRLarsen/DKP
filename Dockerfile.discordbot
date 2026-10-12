@@ -1,0 +1,14 @@
+# Build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY DKP.slnx Directory.Packages.props ./
+COPY src ./src
+RUN dotnet restore src/DKP.DiscordBot/DKP.DiscordBot.csproj
+RUN dotnet publish src/DKP.DiscordBot/DKP.DiscordBot.csproj --configuration Release --no-restore --output /app/publish /p:UseAppHost=false
+
+# Runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+COPY --from=build /app/publish ./
+ENTRYPOINT ["dotnet", "DKP.DiscordBot.dll"]

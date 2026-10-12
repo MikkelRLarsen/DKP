@@ -1,0 +1,182 @@
+@page "/admin/users"
+@attribute [Authorize(Roles = "Officer")]
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IUserAdministrationQueries UserAdministrationQueries
+@inject IUserRoleCommands UserRoleCommands
+@inject IUserBlockCommands UserBlockCommands
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<PageTitle>User Management</PageTitle>
+
+<RadzenStack Gap="1.5rem">
+    <div>
+        <h1>User Management</h1>
+        <RadzenText Text="Manage Member and Officer roles" TextStyle="TextStyle.Subtitle2" />
+    </div>
+
+    @if (loading)
+    {
+        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Style="min-height: 16rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            <RadzenText Text="Loading users..." />
+        </RadzenStack>
+    }
+    else if (loadFailed)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger">Unable to load user roles.</RadzenAlert>
+    }
+    else
+    {
+        <RadzenCard>
+            <RadzenFormField Text="Block reason (optional)" Style="max-width: 32rem; width: 100%; margin-bottom: 1rem;">
+                <ChildContent><RadzenTextBox @bind-Value="blockReason" MaxLength="500" Placeholder="Reason used when blocking a member" Style="width:100%;" Disabled="@saving" /></ChildContent>
+            </RadzenFormField>
+            <RadzenDataGrid Data="@users" TItem="UserSummary" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No users found." Responsive="true">
+                <Columns>
+                    <RadzenDataGridColumn TItem="UserSummary" Property="DiscordName" Title="Discord name" />
+                    <RadzenDataGridColumn TItem="UserSummary" Property="MainCharacterName" Title="Main character" />
+                    <RadzenDataGridColumn TItem="UserSummary" Property="Role" Title="Role" />
+                    <RadzenDataGridColumn TItem="UserSummary" Title="Block status" Sortable="false" Filterable="false">
+                        <Template Context="user">
+                            <RadzenBadge Text="@(user.IsBlocked ? "Blocked" : "Active")" BadgeStyle="@(user.IsBlocked ? BadgeStyle.Danger : BadgeStyle.Success)" />
+                            @if (user.IsBlocked && !string.IsNullOrWhiteSpace(user.BlockReason))
+                            {
+                                <RadzenText Text="@user.BlockReason" TextStyle="TextStyle.Caption" Style="display:block;" />
+                            }
+                        </Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="UserSummary" Title="Actions" Sortable="false" Filterable="false">
+                        <Template Context="user">
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap=".5rem">
+                                <RadzenButton Text="@(user.Role == UserRole.Officer ? "Set Member" : "Set Officer")" Icon="@(user.Role == UserRole.Officer ? "person" : "admin_panel_settings")" ButtonStyle="@(user.Role == UserRole.Officer ? ButtonStyle.Light : ButtonStyle.Primary)" Size="ButtonSize.Small" Click="@(() => ChangeRoleAsync(user))" Disabled="@saving" />
+                                @if (user.IsBlocked)
+                                {
+                                    <RadzenButton Text="Unblock" Icon="lock_open" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" Click="@(() => UnblockAsync(user))" Disabled="@saving" />
+                                }
+                                else
+                                {
+                                    <RadzenButton Text="Block" Icon="block" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => BlockAsync(user))" Disabled="@saving" />
+                                }
+                            </RadzenStack>
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private IReadOnlyList<UserSummary> users = Array.Empty<UserSummary>();
+    private bool loading = true;
+    private bool loadFailed;
+    private bool saving;
+    private string blockReason = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            users = await UserAdministrationQueries.GetAllAsync();
+        }
+        catch (Exception)
+        {
+            loadFailed = true;
+            NotificationService.Notify(NotificationSeverity.Error, "Unable to load users", "Please try again later.");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task ChangeRoleAsync(UserSummary user)
+    {
+        if (saving) return;
+        var newRole = user.Role == UserRole.Officer ? UserRole.Member : UserRole.Officer;
+        var roleName = newRole == UserRole.Officer ? "Officer" : "Member";
+        saving = true;
+        try
+        {
+            var confirmed = await DialogService.Confirm($"Are you sure you want to set {user.DisplayName} as {roleName}?", "Confirm role change", new ConfirmOptions { OkButtonText = "Confirm", CancelButtonText = "Cancel" });
+            if (confirmed != true)
+            {
+                return;
+            }
+
+            if (!await UserRoleCommands.SetRoleAsync(new SetUserRoleRequest(user.Id, newRole)))
+                throw new KeyNotFoundException("The selected user no longer exists.");
+            NotificationService.Notify(NotificationSeverity.Success, "Role updated", $"{user.DisplayName} is now a {roleName}.");
+            await MutationFeedback.RefreshAsync(async () => users = await UserAdministrationQueries.GetAllAsync(), NotificationService);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Not authorized", "Only Officers can manage user roles.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Role change rejected", exception.Message);
+        }
+        catch (KeyNotFoundException)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "User not found", "The selected user no longer exists.");
+        }
+        catch (Exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Role update failed", "Please try again later.");
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task BlockAsync(UserSummary user)
+    {
+        if (saving) return;
+        saving = true;
+        try
+        {
+            if (await DialogService.Confirm($"Are you sure you want to block {user.DisplayName}?", "Confirm member block", new ConfirmOptions { OkButtonText = "Block", CancelButtonText = "Cancel" }) != true) return;
+
+            if (!await UserBlockCommands.BlockAsync(new BlockUserRequest(user.Id, blockReason)))
+                throw new KeyNotFoundException("The selected user no longer exists.");
+            NotificationService.Notify(NotificationSeverity.Success, "Member blocked", $"{user.DisplayName} can no longer log in or use DKP features.");
+            await MutationFeedback.RefreshAsync(async () => users = await UserAdministrationQueries.GetAllAsync(), NotificationService);
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Block failed", exception.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task UnblockAsync(UserSummary user)
+    {
+        if (saving) return;
+        saving = true;
+        try
+        {
+            if (await DialogService.Confirm($"Remove the block from {user.DisplayName}?", "Confirm unblock") != true) return;
+
+            if (!await UserBlockCommands.UnblockAsync(user.Id))
+                throw new KeyNotFoundException("The selected user no longer exists.");
+            NotificationService.Notify(NotificationSeverity.Success, "Member unblocked", $"{user.DisplayName} can log in again.");
+            await MutationFeedback.RefreshAsync(async () => users = await UserAdministrationQueries.GetAllAsync(), NotificationService);
+        }
+        catch (Exception exception)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Unblock failed", exception.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

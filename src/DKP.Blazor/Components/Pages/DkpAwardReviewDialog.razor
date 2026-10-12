@@ -1,0 +1,22 @@
+@inject DialogService DialogService
+
+<RadzenStack Gap="1rem" Style="min-width: min(32rem, 80vw);">
+    <RadzenText Text="@Title" TextStyle="TextStyle.H5" />
+    <RadzenText Text="@Description" />
+    <RadzenFormField Text="Comment (optional)" Style="width:100%;"><ChildContent><RadzenTextArea @bind-Value="comment" MaxLength="500" Rows="4" Style="width:100%;" /></ChildContent></RadzenFormField>
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap=".75rem">
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="@(() => DialogService.Close(null))" />
+        <RadzenButton Text="@ConfirmText" ButtonStyle="@ButtonStyle" Click="Submit" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Review request";
+    [Parameter] public string Description { get; set; } = string.Empty;
+    [Parameter] public string ConfirmText { get; set; } = "Confirm";
+    [Parameter] public ButtonStyle ButtonStyle { get; set; } = ButtonStyle.Primary;
+    private string? comment;
+    private void Submit() => DialogService.Close(new DkpAwardReviewDialogResult(comment?.Trim()));
+
+    public sealed record DkpAwardReviewDialogResult(string? Comment);
+}

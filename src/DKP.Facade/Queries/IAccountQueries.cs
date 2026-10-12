@@ -4,5 +4,5 @@ namespace DKP.Facade.Queries;
 
 public interface IAccountQueries
 {
-	Task<DashboardDto?> GetDashboardAsync(string discordId, CancellationToken cancellationToken = default);
+	Task<DashboardDto?> GetDashboardAsync(CancellationToken cancellationToken = default);
 }

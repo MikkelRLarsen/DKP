@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DKP.Domain\DKP.Domain.csproj" />
+    <ProjectReference Include="..\DKP.Facade\DKP.Facade.csproj" />
   </ItemGroup>
 
 </Project>

@@ -4,20 +4,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DKP.Infrastructure.Persistence;
 
-public sealed class UserRepository(DkpDbContext db) : IUserRepository
+public sealed class UserRepository(CommandUnitOfWork session) : IUserRepository
 {
 	public Task<User?> FindByDiscordIdAsync(string discordId, CancellationToken cancellationToken = default)
-		=> db.Users.SingleOrDefaultAsync(user => user.DiscordId == discordId, cancellationToken);
+		=> session.Db.Users.SingleOrDefaultAsync(user => user.DiscordId == discordId, cancellationToken);
 
 	public Task<User?> FindByIdAsync(Guid id, CancellationToken cancellationToken = default)
-		=> db.Users.SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
+		=> session.Db.Users.SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
 
 	public Task AddAsync(User user, CancellationToken cancellationToken = default)
 	{
-		db.Users.Add(user);
+		session.Db.Users.Add(user);
 		return Task.CompletedTask;
 	}
-
-	public Task SaveChangesAsync(CancellationToken cancellationToken = default)
-		=> db.SaveChangesAsync(cancellationToken);
 }

@@ -1,0 +1,32 @@
+@using DKP.Facade.Contracts
+@inject DialogService DialogService
+
+<RadzenStack Gap="1rem" Style="min-width: min(32rem, 80vw);">
+    <RadzenText Text="@Source.Name" TextStyle="TextStyle.H5" />
+    <RadzenText Text="@($"{Source.Amount} DKP")" />
+    <RadzenText Text="@Source.Reason" />
+    <RadzenFormField Text="Quantity" Style="width:100%;"><ChildContent><RadzenNumeric @bind-Value="quantity" Min="1" Max="@Source.Remaining" ShowUpDown="false" Style="width:100%;" /></ChildContent></RadzenFormField>
+    <RadzenFormField Text="Comment (optional)" Style="width:100%;">
+        <ChildContent>
+            <RadzenTextArea @bind-Value="comment" MaxLength="500" Rows="4" Style="width:100%;" Placeholder="Tell an Officer why you are requesting this award..." />
+        </ChildContent>
+    </RadzenFormField>
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap=".75rem">
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="@(() => DialogService.Close(null))" />
+        <RadzenButton Text="Submit request" Icon="send" ButtonStyle="ButtonStyle.Primary" Click="Submit" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public DkpAcquisitionSourceDto Source { get; set; } = null!;
+    private int quantity = 1;
+    private string? comment;
+
+    private void Submit()
+    {
+        if (quantity < 1 || quantity > Source.Remaining || (!string.IsNullOrWhiteSpace(comment) && comment.Trim().Length > 500)) return;
+        DialogService.Close(new DkpAwardRequestDialogResult(quantity, comment?.Trim()));
+    }
+
+    public sealed record DkpAwardRequestDialogResult(int Quantity, string? Comment);
+}

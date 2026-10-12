@@ -1,0 +1,35 @@
+@page "/account/access-denied"
+@attribute [AllowAnonymous]
+
+<PageTitle>Access denied</PageTitle>
+
+<RadzenCard Style="max-width: 42rem; margin: 4rem auto; text-align: center;">
+    <RadzenIcon Icon="gpp_bad" Style="font-size: 4rem; color: var(--rz-danger);" />
+    <RadzenHeading Size="H2">Access denied</RadzenHeading>
+
+    @if (Reason == "guild")
+    {
+        <RadzenText Text="You do not have access to this DKP system." TextStyle="TextStyle.H5" />
+        <RadzenText Text="You must be a member of the configured Discord server. Join the Discord server and try again." Style="margin-top: 1rem;" />
+    }
+    else if (Reason == "blocked")
+    {
+        <RadzenText Text="Your Discord user is blocked from this DKP system." TextStyle="TextStyle.H5" />
+        <RadzenText Text="Contact an Officer if you believe this is a mistake." Style="margin-top: 1rem;" />
+    }
+    else
+    {
+        <RadzenText Text="Discord login could not be completed." TextStyle="TextStyle.H5" />
+        <RadzenText Text="Please try again or contact an Officer if the problem continues." Style="margin-top: 1rem;" />
+    }
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap=".75rem" Style="margin-top: 1.5rem;">
+        <RadzenButton Text="Try Discord login again" Icon="login" ButtonStyle="ButtonStyle.Primary" Path="/account/login" />
+        <RadzenButton Text="Back to home" Icon="home" ButtonStyle="ButtonStyle.Light" Path="/" />
+    </RadzenStack>
+</RadzenCard>
+
+@code {
+    [Parameter, SupplyParameterFromQuery(Name = "reason")]
+    public string? Reason { get; set; }
+}
