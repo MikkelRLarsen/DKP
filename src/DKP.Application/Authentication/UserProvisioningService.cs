@@ -9,8 +9,11 @@ public sealed class UserProvisioningService(
 	TimeProvider timeProvider,
 	ICommandUnitOfWork unitOfWork) : IUserProvisioningService
 {
-	public Task<User> ProvisionAsync(DiscordUserProfile profile, CancellationToken cancellationToken = default)
-		=> unitOfWork.ExecuteAsync([], async () =>
+	public async Task<User> ProvisionAsync(DiscordUserProfile profile, CancellationToken cancellationToken = default)
+		=> (await ProvisionWithStatusAsync(profile, cancellationToken)).User;
+
+	public Task<UserProvisioningResult> ProvisionWithStatusAsync(DiscordUserProfile profile, CancellationToken cancellationToken = default)
+		=> unitOfWork.ExecuteAsync<UserProvisioningResult>([], async () =>
 	{
 		if (string.IsNullOrWhiteSpace(profile.DiscordId))
 		{
@@ -24,6 +27,7 @@ public sealed class UserProvisioningService(
 
 		var user = await users.FindByDiscordIdAsync(profile.DiscordId, cancellationToken);
 
+		var created = user is null;
 		if (user is null)
 		{
 			var role = officerIdentityPolicy.IsOfficer(profile.DiscordId)
@@ -38,6 +42,6 @@ public sealed class UserProvisioningService(
 			var role = officerIdentityPolicy.IsOfficer(profile.DiscordId) ? UserRole.Officer : user.Role;
 			user.UpdateProfile(profile.DiscordName, profile.AvatarUrl, role);
 		}
-		return user;
+		return new UserProvisioningResult(user, created);
 	}, cancellationToken);
 }
