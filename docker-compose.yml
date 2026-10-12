@@ -127,7 +127,7 @@ services:
       - dkp-network
 
   watchtower:
-    image: containrrr/watchtower:latest
+    image: nickfedor/watchtower:latest
     restart: unless-stopped
     environment:
       WATCHTOWER_CLEANUP: "true"
