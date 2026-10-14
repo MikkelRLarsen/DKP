@@ -1,6 +1,6 @@
 namespace DKP.Facade.Contracts;
 
-public enum BulletinClaimStatus { Pending, Approved, Rejected, Cancelled }
+public enum BulletinClaimStatus { Pending, Approved, Rejected, Cancelled, Reverted }
 public sealed record CreateBulletinItemRequest(string Title, string Description, int DkpAmount, int MaxCompletions, bool UniquePerUser, DateTime? DeadlineUtc);
 public sealed record UpdateBulletinItemRequest(string Title, string Description, int DkpAmount, int MaxCompletions, bool UniquePerUser, DateTime? DeadlineUtc);
 public sealed record CreateBulletinClaimRequest(Guid BulletinItemId, int Quantity, string? Comment);

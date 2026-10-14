@@ -43,7 +43,7 @@
             }
         </RadzenRow>
     }
-    <RadzenCard><RadzenText Text="My claims" TextStyle="TextStyle.H5" /><RadzenDataGrid Data="@claims" TItem="BulletinClaimDto" AllowPaging="true" PageSize="10" EmptyText="No claims yet."><Columns><RadzenDataGridColumn TItem="BulletinClaimDto" Property="BulletinTitle" Title="Item" /><RadzenDataGridColumn TItem="BulletinClaimDto" Property="Quantity" Title="Quantity" /><RadzenDataGridColumn TItem="BulletinClaimDto" Property="Status" Title="Status" /><RadzenDataGridColumn TItem="BulletinClaimDto" Property="CreatedAtUtc" Title="Created" /><RadzenDataGridColumn TItem="BulletinClaimDto" Title="Actions"><Template Context="claim">@if (claim.Status == BulletinClaimStatus.Pending) { <RadzenButton Text="Cancel" Size="ButtonSize.Small" Click="@(() => CancelAsync(claim))" Disabled="@submitting" /> }</Template></RadzenDataGridColumn></Columns></RadzenDataGrid></RadzenCard>
+    <RadzenCard><RadzenText Text="My claims" TextStyle="TextStyle.H5" /><RadzenDataGrid Data="@claims" TItem="BulletinClaimDto" AllowPaging="true" PageSize="10" EmptyText="No claims yet."><Columns><RadzenDataGridColumn TItem="BulletinClaimDto" Property="BulletinTitle" Title="Item" /><RadzenDataGridColumn TItem="BulletinClaimDto" Property="Quantity" Title="Quantity" /><RadzenDataGridColumn TItem="BulletinClaimDto" Title="Status"><Template Context="claim"><RadzenBadge Text="@GetStatusText(claim.Status)" BadgeStyle="@GetStatusStyle(claim.Status)" /></Template></RadzenDataGridColumn><RadzenDataGridColumn TItem="BulletinClaimDto" Property="CreatedAtUtc" Title="Created" /><RadzenDataGridColumn TItem="BulletinClaimDto" Title="Actions"><Template Context="claim">@if (claim.Status == BulletinClaimStatus.Pending) { <RadzenButton Text="Cancel" Size="ButtonSize.Small" Click="@(() => CancelAsync(claim))" Disabled="@submitting" /> }</Template></RadzenDataGridColumn></Columns></RadzenDataGrid></RadzenCard>
 </RadzenStack>
 
 @code {
@@ -52,6 +52,22 @@
     private readonly Dictionary<Guid, int> quantities = [];
     private readonly Dictionary<Guid, string?> comments = [];
     private bool loading = true, submitting;
+    private static string GetStatusText(BulletinClaimStatus status) => status switch
+    {
+        BulletinClaimStatus.Pending => "Pending",
+        BulletinClaimStatus.Approved => "Approved",
+        BulletinClaimStatus.Rejected => "Rejected",
+        BulletinClaimStatus.Cancelled => "Cancelled",
+        BulletinClaimStatus.Reverted => "Reverted",
+        _ => "Unknown"
+    };
+    private static BadgeStyle GetStatusStyle(BulletinClaimStatus status) => status switch
+    {
+        BulletinClaimStatus.Approved => BadgeStyle.Success,
+        BulletinClaimStatus.Pending => BadgeStyle.Warning,
+        BulletinClaimStatus.Rejected or BulletinClaimStatus.Reverted => BadgeStyle.Danger,
+        _ => BadgeStyle.Light
+    };
     protected override async Task OnInitializedAsync() { try { await ReloadAsync(); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to load bulletin board", ex.Message); } finally { loading = false; } }
     private async Task ReloadAsync() { items = await BulletinQueries.GetAvailableItemsAsync(); claims = await BulletinQueries.GetMyClaimsAsync(); foreach (var item in items) { quantities[item.Id] = Math.Clamp(quantities.GetValueOrDefault(item.Id, 1), 1, Math.Max(1, item.RemainingQuantity)); comments.TryAdd(item.Id, null); } }
     private async Task ClaimAsync(BulletinItemDto item) { if (submitting) return; submitting = true; try { var quantity = item.UniquePerUser ? 1 : quantities.GetValueOrDefault(item.Id, 1); await BulletinCommands.ClaimAsync(new CreateBulletinClaimRequest(item.Id, quantity, comments.GetValueOrDefault(item.Id))); NotificationService.Notify(NotificationSeverity.Success, "Claim submitted", "Your claim is pending officer approval."); await ReloadAsync(); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to submit claim", ex.Message); } finally { submitting = false; } }
