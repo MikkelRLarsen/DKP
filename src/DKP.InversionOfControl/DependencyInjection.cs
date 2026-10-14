@@ -12,11 +12,13 @@ using DKP.Application.Presets;
 using DKP.Application.DkpAwardRequests;
 using DKP.Application.LootReserve;
 using DKP.Application.Achievements;
+using DKP.Application.Bulletins;
 
 using DKP.Facade.Commands;
 using DKP.Facade.Queries;
 using DKP.Infrastructure.Persistence;
 using DKP.Infrastructure.Queries;
+using DKP.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -109,6 +111,10 @@ public static class DependencyInjection
 		services.AddScoped<IAchievementCommands, AchievementCommandService>();
 		services.AddScoped<IAchievementQueries, AchievementQueries>();
 		services.AddScoped<IAchievementRepository, AchievementRepository>();
+		services.AddScoped<IBulletinRepository, BulletinRepository>();
+		services.AddScoped<IBulletinCommands, BulletinCommandService>();
+		services.AddScoped<IBulletinQueries, BulletinQueries>();
+		services.AddHostedService<BulletinExpirationWorker>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));
 		services.AddAuthentication(options =>

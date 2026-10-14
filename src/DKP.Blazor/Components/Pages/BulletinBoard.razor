@@ -1,0 +1,59 @@
+@page "/bulletin"
+@attribute [Authorize]
+@using DKP.Facade.Commands
+@using DKP.Facade.Contracts
+@using DKP.Facade.Queries
+@inject IBulletinQueries BulletinQueries
+@inject IBulletinCommands BulletinCommands
+@inject NotificationService NotificationService
+
+<PageTitle>Bulletin Board</PageTitle>
+<RadzenStack Gap="1rem">
+    <div><h1>Bulletin Board</h1><RadzenText Text="Available guild activities and DKP rewards." TextStyle="TextStyle.Subtitle2" /></div>
+    @if (loading) { <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" /> }
+    else if (items.Count == 0) { <RadzenAlert AlertStyle="AlertStyle.Info">No bulletin items are currently available.</RadzenAlert> }
+    else {
+        <RadzenRow Gap="1rem">
+            @foreach (var item in items)
+            {
+                <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                    <RadzenCard Style="@(item.HasActiveClaim ? "border:2px solid #dc3545; opacity:.78;" : null)">
+                        <RadzenStack Gap=".6rem">
+                            <RadzenText Text="@item.Title" TextStyle="TextStyle.H5" />
+                            <RadzenText Text="@item.Description" />
+                            <RadzenText Text="@($"{item.DkpAmount} DKP per quantity · {item.RemainingQuantity} remaining")" TextStyle="TextStyle.Body2" />
+                            @if (item.DeadlineUtc is not null) { <RadzenText Text="@($"Deadline: {item.DeadlineUtc.Value.ToLocalTime()}")" TextStyle="TextStyle.Caption" /> }
+                            @if (item.HasActiveClaim)
+                            {
+                                <RadzenAlert AlertStyle="AlertStyle.Danger">You have already claimed this item. It can only be claimed once per user.</RadzenAlert>
+                            }
+                            else if (item.UniquePerUser)
+                            {
+                                <RadzenFormField Text="Quantity" Style="width:100%;"><ChildContent><RadzenTextBox Value="1 (only once per user)" ReadOnly="true" Style="width:100%;" /></ChildContent></RadzenFormField>
+                            }
+                            else
+                            {
+                                <RadzenFormField Text="Quantity" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int" @bind-Value="quantities[item.Id]" Min="1" Max="@item.RemainingQuantity" Placeholder="Quantity" Style="width:100%;" Disabled="@submitting" /></ChildContent></RadzenFormField>
+                            }
+                            <RadzenTextArea @bind-Value="comments[item.Id]" Placeholder="Optional comment" MaxLength="500" Rows="2" Style="width:100%;" Disabled="@submitting" />
+                            <RadzenButton Text="Claim" Icon="send" ButtonStyle="ButtonStyle.Primary" Click="@(() => ClaimAsync(item))" Disabled="@(submitting || item.RemainingQuantity <= 0 || item.HasActiveClaim)" />
+                        </RadzenStack>
+                    </RadzenCard>
+                </RadzenColumn>
+            }
+        </RadzenRow>
+    }
+    <RadzenCard><RadzenText Text="My claims" TextStyle="TextStyle.H5" /><RadzenDataGrid Data="@claims" TItem="BulletinClaimDto" AllowPaging="true" PageSize="10" EmptyText="No claims yet."><Columns><RadzenDataGridColumn TItem="BulletinClaimDto" Property="BulletinTitle" Title="Item" /><RadzenDataGridColumn TItem="BulletinClaimDto" Property="Quantity" Title="Quantity" /><RadzenDataGridColumn TItem="BulletinClaimDto" Property="Status" Title="Status" /><RadzenDataGridColumn TItem="BulletinClaimDto" Property="CreatedAtUtc" Title="Created" /><RadzenDataGridColumn TItem="BulletinClaimDto" Title="Actions"><Template Context="claim">@if (claim.Status == BulletinClaimStatus.Pending) { <RadzenButton Text="Cancel" Size="ButtonSize.Small" Click="@(() => CancelAsync(claim))" Disabled="@submitting" /> }</Template></RadzenDataGridColumn></Columns></RadzenDataGrid></RadzenCard>
+</RadzenStack>
+
+@code {
+    private IReadOnlyList<BulletinItemDto> items = [];
+    private IReadOnlyList<BulletinClaimDto> claims = [];
+    private readonly Dictionary<Guid, int> quantities = [];
+    private readonly Dictionary<Guid, string?> comments = [];
+    private bool loading = true, submitting;
+    protected override async Task OnInitializedAsync() { try { await ReloadAsync(); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to load bulletin board", ex.Message); } finally { loading = false; } }
+    private async Task ReloadAsync() { items = await BulletinQueries.GetAvailableItemsAsync(); claims = await BulletinQueries.GetMyClaimsAsync(); foreach (var item in items) { quantities[item.Id] = Math.Clamp(quantities.GetValueOrDefault(item.Id, 1), 1, Math.Max(1, item.RemainingQuantity)); comments.TryAdd(item.Id, null); } }
+    private async Task ClaimAsync(BulletinItemDto item) { if (submitting) return; submitting = true; try { var quantity = item.UniquePerUser ? 1 : quantities.GetValueOrDefault(item.Id, 1); await BulletinCommands.ClaimAsync(new CreateBulletinClaimRequest(item.Id, quantity, comments.GetValueOrDefault(item.Id))); NotificationService.Notify(NotificationSeverity.Success, "Claim submitted", "Your claim is pending officer approval."); await ReloadAsync(); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to submit claim", ex.Message); } finally { submitting = false; } }
+    private async Task CancelAsync(BulletinClaimDto claim) { if (submitting) return; submitting = true; try { await BulletinCommands.CancelClaimAsync(claim.Id); NotificationService.Notify(NotificationSeverity.Success, "Claim cancelled", "The reserved charge is available again."); await ReloadAsync(); } catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Unable to cancel claim", ex.Message); } finally { submitting = false; } }
+}

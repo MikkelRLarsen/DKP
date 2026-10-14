@@ -14,6 +14,8 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
     public DbSet<ShopItemAchievementRequirement> ShopItemAchievementRequirements => Set<ShopItemAchievementRequirement>();
     public DbSet<DiscordNotificationOutbox> DiscordNotificationOutbox => Set<DiscordNotificationOutbox>();
+    public DbSet<BulletinItem> BulletinItems => Set<BulletinItem>();
+    public DbSet<BulletinClaim> BulletinClaims => Set<BulletinClaim>();
 
     private void GuardEvents()
     {
@@ -109,6 +111,28 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.Property(x => x.Payload).HasColumnType("jsonb");
             e.Property(x => x.LastError).HasMaxLength(500);
             e.HasIndex(x => new { x.SentAtUtc, x.NextAttemptAtUtc });
+        });
+        model.Entity<BulletinItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(128);
+            e.Property(x => x.Description).HasMaxLength(2000);
+            e.HasIndex(x => new { x.IsActive, x.DeadlineUtc });
+            e.Property(x => x.IsHidden).HasDefaultValue(false);
+            e.Property(x => x.IsAutoDeactivated).HasDefaultValue(false);
+        });
+        model.Entity<BulletinClaim>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.Comment).HasMaxLength(500);
+            e.Property(x => x.ReviewComment).HasMaxLength(500);
+            e.Property(x => x.DkpEventIdsJson).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.BulletinItemId, x.Status });
+            e.HasIndex(x => new { x.UserId, x.BulletinItemId, x.Status });
+            e.HasOne<BulletinItem>().WithMany().HasForeignKey(x => x.BulletinItemId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
         });
         model.Entity<DkpEvent>(e =>
         {

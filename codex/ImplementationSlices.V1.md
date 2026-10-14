@@ -861,6 +861,108 @@ Gør systemet deploymentklart med Dockerfile, Docker Compose for app/PostgreSQL/
 
 Deployment-testen skal dække shop, refundering, blokering og DKP presets.
 
+## Slice 14.c – Approve/Deny requests direkte fra Discord
+
+Status: Planlagt.
+
+Formålet er at lade Officers behandle nye requests direkte fra Discord via knapper på request-notifikationen. Flowet bygger på button-interaction-modellen fra Slice 14.a og gælder request-typer med et eksisterende approve/reject-flow, eksempelvis DKP requests, achievement requests og senere bulletin claims.
+
+### Discord-besked
+
+Når en ny request oprettes, sendes en besked til `DISCORD_OFFICER_CHANNEL_ID` med:
+
+- Discord-navn og main character for den anmodende bruger.
+- Request-type.
+- Source, achievement eller bulletin item.
+- Quantity, DKP-beløb og årsag, hvor relevant.
+- Oprettelsestidspunkt.
+- To knapper: `Approve` og `Deny`.
+
+Beskeden må ikke ping’e brugere eller roller og skal sendes med `AllowedMentions.None`.
+
+Knapperne får korte `custom_id`-værdier, som identificerer requesten og handlingen:
+
+```text
+request:approve:<request-id>
+request:deny:<request-id>
+```
+
+Request-ID’et er kun en reference. Botten og API’et skal altid genlæse og validere request-state serverside.
+
+### Approve-flow
+
+1. Officer klikker `Approve`.
+2. Botten sender straks en deferred/ephemeral response, så Discord-interactionen ikke timeout’er.
+3. Botten sender request-ID og Discord User ID til API’et sammen med bot-service-secret.
+4. API’et mapper Discord User ID til intern `User`.
+5. Application validerer, at brugeren findes, ikke er blokeret og har rollen `Officer` i databasen.
+6. Requesten genlæses under den eksisterende command-lock.
+7. Request-type, ownership, active state, quantity, limits og event-store state valideres på ny.
+8. Godkendelse og eventuel DKP-tildeling gennemføres atomisk.
+9. Requesten markeres som behandlet, og den tilknyttede Discord-notifikation slettes eller opdateres.
+10. Den klikkende Officer får ephemeral feedback om succes eller en kort forklaring på fejlen.
+
+### Deny-flow
+
+`Deny` følger samme sikkerheds- og state-flow som `Approve`, men opretter ikke et DKP-event. Den kan åbne en modal, hvor Officer kan angive en valgfri afvisningsårsag med samme længdegrænse som webflowet.
+
+Efter succes:
+
+- Requesten skifter til `Rejected`.
+- Eventuelle pending reservationer frigives efter de eksisterende regler.
+- Den oprindelige officer-notifikation slettes eller opdateres til behandlet status.
+- Officer får en ephemeral bekræftelse.
+
+### Authorization og sikkerhed
+
+- Discord User ID fra interactionen er actor-identiteten; actor kan ikke sendes som et frit request-felt.
+- Botten må kun kalde API’et med `X-DKP-Bot-Secret` og den aktuelle `X-DKP-Discord-User-Id`.
+- Officer-rollen kontrolleres i databasen/Application-laget og ikke kun via Discord-kanalrolle.
+- Members, ukendte brugere og blokerede brugere afvises serverside.
+- En request kan kun godkendes eller afvises én gang.
+- Samtidige klik på `Approve`/`Deny` giver højst én stateændring og højst ét DKP-event.
+- Udløbne, annullerede, allerede godkendte eller allerede afviste requests returnerer en kontrolleret fejl.
+
+### Feedback og outbox
+
+Feedback gives ephemeral til den Officer, der klikkede:
+
+- `Request approved.`
+- `Request denied.`
+- `You are not authorized to process requests.`
+- `This request has already been processed.`
+- En kort valideringsfejl uden interne exception-detaljer.
+
+Discord-notifikationen håndteres via den eksisterende database-backed outbox. Delete/update skal være retrybar og idempotent. Hvis Discord er midlertidigt utilgængelig, må requestens databaseoperation ikke rulles tilbage alene på grund af notifikationsfejlen.
+
+### Tests og manuel verifikation
+
+Tests skal dække:
+
+- Officer kan approve via Discord button.
+- Officer kan deny via Discord button.
+- Member afvises serverside, selv om medlemmet kan se eller manipulere en button-interaction.
+- Ukendt og blokeret Discord-bruger afvises.
+- Korrekt actor gemmes.
+- Approve opretter højst ét DKP-event.
+- Deny opretter ikke et DKP-event.
+- Dobbeltklik og samtidige approve/deny-operationer er idempotente.
+- Stale eller allerede behandlede requests giver feedback uden ny stateændring.
+- Discord API-fejl giver kontrolleret feedback og retrybar outbox-state.
+- Notifikationen slettes eller opdateres efter behandling.
+- Ingen mentions eller uønskede pings sendes.
+
+Manuel smoke-test:
+
+1. Opret en DKP- eller achievement-request som Member.
+2. Bekræft request-beskeden i officer-kanalen.
+3. Klik `Approve` som Officer og kontrollér feedback, request-status, event og saldo.
+4. Opret en ny request og klik `Deny`.
+5. Gentag klik på en allerede behandlet request.
+6. Test samme knap som Member og bekræft serverside-afvisning.
+
+Der forventes ingen ny event-type. Eksisterende request- og event-flow genbruges; der kan dog være behov for metadata eller migration, hvis request-notifikationens Discord message identity ikke allerede kan identificere requesten.
+
 ## Teststrategi for alle slices
 
 Hver slice skal som minimum have:
