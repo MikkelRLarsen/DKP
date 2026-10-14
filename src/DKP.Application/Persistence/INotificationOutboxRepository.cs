@@ -6,4 +6,5 @@ public interface INotificationOutboxRepository
 {
     Task AddAsync(DiscordNotificationOutbox notification, CancellationToken cancellationToken = default);
     Task RequestDeletionAsync(Guid requestId, DateTime nowUtc, CancellationToken cancellationToken = default);
+    Task SyncBulletinAsync(Guid bulletinItemId, string payload, bool delete, DateTime nowUtc, CancellationToken cancellationToken = default);
 }

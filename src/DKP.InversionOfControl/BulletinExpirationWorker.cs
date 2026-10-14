@@ -25,6 +25,10 @@ internal sealed class BulletinExpirationWorker(IDbContextFactory<DkpDbContext> f
         {
             await using var db = await factory.CreateDbContextAsync(stoppingToken);
             var now = time.GetUtcNow().UtcDateTime;
+            var expiredItemIds = await db.BulletinItems
+                .Where(x => x.IsActive && x.DeadlineUtc.HasValue && x.DeadlineUtc.Value <= now)
+                .Select(x => x.Id)
+                .ToArrayAsync(stoppingToken);
             var expiredCount = await db.BulletinItems
                 .Where(x => x.IsActive && x.DeadlineUtc.HasValue && x.DeadlineUtc.Value <= now)
                 .ExecuteUpdateAsync(setters => setters
@@ -43,6 +47,18 @@ internal sealed class BulletinExpirationWorker(IDbContextFactory<DkpDbContext> f
                 var pending = itemClaims.Where(x => x.Status == DKP.Domain.BulletinClaimStatus.Pending).Sum(x => x.Quantity);
                 var approved = itemClaims.Where(x => x.Status == DKP.Domain.BulletinClaimStatus.Approved).Sum(x => x.Quantity);
                 if ((item.DeadlineUtc is DateTime deadline && deadline <= now) || (pending == 0 && approved >= item.MaxCompletions)) item.DeactivateAutomatically(now);
+            }
+
+            var deactivatedItemIds = expiredItemIds
+                .Concat(items.Where(x => !x.IsActive).Select(x => x.Id))
+                .Distinct()
+                .ToArray();
+            if (deactivatedItemIds.Length > 0)
+            {
+                var notifications = await db.DiscordNotificationOutbox
+                    .Where(x => x.NotificationType == "BulletinItem" && x.RequestId.HasValue && deactivatedItemIds.Contains(x.RequestId.Value))
+                    .ToArrayAsync(stoppingToken);
+                foreach (var notification in notifications) notification.RequestDeletion(now);
             }
             await db.SaveChangesAsync(stoppingToken);
         }

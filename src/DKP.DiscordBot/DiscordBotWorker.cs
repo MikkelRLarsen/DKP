@@ -79,7 +79,24 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                                     var channel = GetNotificationChannel(notification.NotificationType);
                                     if (channel is null)
                                         throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
-                                    message = await channel.SendMessageAsync(FormatNotification(notification.NotificationType, notification.Payload), allowedMentions: AllowedMentions.None);
+                                    var content = FormatNotification(notification.NotificationType, notification.Payload);
+                                    if (notification.Action == "update" && notification.DiscordMessageId is ulong messageId)
+                                    {
+                                        var existing = await channel.GetMessageAsync(messageId);
+                                        if (existing is IUserMessage existingUserMessage)
+                                        {
+                                            await existingUserMessage.ModifyAsync(properties => properties.Content = content);
+                                            message = existingUserMessage;
+                                        }
+                                        else
+                                        {
+                                            message = await channel.SendMessageAsync(content, allowedMentions: AllowedMentions.None);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        message = await channel.SendMessageAsync(content, allowedMentions: AllowedMentions.None);
+                                    }
                                 }
                                 await api.MarkNotificationSentAsync(notification.Id, message.Id, cancellationToken);
                             }
@@ -109,6 +126,20 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         {
             using var document = JsonDocument.Parse(payload);
             var root = document.RootElement;
+            if (notificationType == "BulletinItem")
+            {
+                var title = Safe(GetString(root, "Title") ?? "Bulletin item");
+                var description = Safe(GetString(root, "Description"));
+                var dkp = root.TryGetProperty("DkpAmount", out var dkpElement) ? dkpElement.GetInt32() : 0;
+                var remaining = root.TryGetProperty("RemainingQuantity", out var remainingElement) ? remainingElement.GetInt32() : 0;
+                var pending = root.TryGetProperty("PendingQuantity", out var pendingElement) ? pendingElement.GetInt32() : 0;
+                var max = root.TryGetProperty("MaxCompletions", out var maxElement) ? maxElement.GetInt32() : 0;
+                var bulletinMessage = $"**{title}**\n{description}\nDKP: {dkp}\nRemaining: {remaining}/{max}";
+                if (pending > 0) bulletinMessage += $"\nPending claims: {pending}";
+                if (root.TryGetProperty("DeadlineUtc", out var deadline) && deadline.ValueKind != JsonValueKind.Null && deadline.TryGetDateTime(out var deadlineUtc))
+                    bulletinMessage += $"\nDeadline: {deadlineUtc:u}";
+                return bulletinMessage.Trim();
+            }
             if (notificationType == "DkpSourceCreated")
             {
                 var sourceKind = Safe(GetString(root, "Kind") ?? "DKP source");

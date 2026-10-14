@@ -33,20 +33,22 @@ Der skal genereres EF-migration. Tests skal dække charges, deadlines, `UniquePe
 
 ## Slice 2 – Bulletin Board live Discord-opslag
 
-Status: Planlagt.
+Status: Implementeret.
 
 Synkronisér aktive bulletin items til `DISCORD_MEDLEM_CHANNEL_ID` via den eksisterende Discord-bot og database-backed outbox.
 
 - Ét aktivt bulletin item har én Discord-besked.
 - Beskeden viser titel, beskrivelse, DKP, deadline og resterende charges.
 - Beskeden opdateres ved claim, approval, cancellation eller anden ændring af charges.
-- Beskeden slettes ved deaktivering, deadline eller `0` charges.
+- Beskeden slettes ved deaktivering, eller når deadline er overskredet.
+- Ved `0` charges beholdes beskeden, hvis der stadig er pending claims; den slettes først, når quantity er `0` og alle pending claims er behandlet.
+- Pending claims ændres ikke automatisk, selv om Discord-opslaget slettes efter deadline.
 - Create/update/delete er retrybare og idempotente.
 - Ingen brugere eller roller pinges; brug `AllowedMentions.None`.
 - Discord-fejl må ikke rollbacke den underliggende bulletin-operation.
 - Hvis channel-id mangler, fungerer webflowet fortsat uden Discord-synkronisering.
 
-Der skal være stabil notification identity og message metadata, så beskeden kan redigeres eller genskabes. Tests skal dække outbox-retry, slettet Discord-besked, duplicate events og korrekt livscyklus.
+Der bruges stabil notification identity og message metadata, så beskeden kan redigeres eller genskabes. Existing `DiscordNotificationOutbox` genbruges, og der kræves ingen ny migration. Tests skal dække outbox-retry, slettet Discord-besked, duplicate events og korrekt livscyklus.
 
 ## Slice 3 – Discord interaction PoC
 

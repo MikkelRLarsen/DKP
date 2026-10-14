@@ -3,16 +3,18 @@ using DKP.Application.Persistence;
 using DKP.Domain;
 using DKP.Facade.Commands;
 using DKP.Facade.Contracts;
+using System.Text.Json;
 
 namespace DKP.Application.Bulletins;
 
-public sealed class BulletinCommandService(CommandContext context, IBulletinRepository repository, IEventLedgerRepository ledger, TimeProvider time) : IBulletinCommands
+public sealed class BulletinCommandService(CommandContext context, IBulletinRepository repository, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IBulletinCommands
 {
     public Task<BulletinItemDto> CreateItemAsync(CreateBulletinItemRequest input, CancellationToken ct = default) => context.ExecuteAsync([], true, async actor =>
     {
         var now = time.GetUtcNow().UtcDateTime;
         var item = new BulletinItem(input.Title, input.Description, input.DkpAmount, input.MaxCompletions, input.UniquePerUser, input.DeadlineUtc, now);
         await repository.AddItemAsync(item, ct);
+        await SyncNotificationAsync(item, now, ct);
         return ToItemDto(item, 0, 0, now);
     }, ct);
 
@@ -21,20 +23,28 @@ public sealed class BulletinCommandService(CommandContext context, IBulletinRepo
         var item = await repository.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Bulletin item not found.");
         var reserved = await repository.GetReservedQuantityAsync(itemId, ct);
         item.Update(input.Title, input.Description, input.DkpAmount, input.MaxCompletions, input.UniquePerUser, input.DeadlineUtc, time.GetUtcNow().UtcDateTime, reserved);
-        item.RestoreAfterDeadlineExtension(time.GetUtcNow().UtcDateTime, reserved);
-        return ToItemDto(item, reserved, 0, time.GetUtcNow().UtcDateTime);
+        var now = time.GetUtcNow().UtcDateTime;
+        item.RestoreAfterDeadlineExtension(now, reserved);
+        await SyncNotificationAsync(item, now, ct);
+        return ToItemDto(item, reserved, 0, now);
     }, ct);
 
     public Task SetItemActiveAsync(Guid itemId, bool isActive, CancellationToken ct = default) => context.ExecuteAsync([], true, async actor =>
     {
         var item = await repository.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Bulletin item not found.");
-        item.SetActive(isActive, time.GetUtcNow().UtcDateTime); return true;
+        var now = time.GetUtcNow().UtcDateTime;
+        item.SetActive(isActive, now);
+        await SyncNotificationAsync(item, now, ct);
+        return true;
     }, ct);
 
     public Task SetItemHiddenAsync(Guid itemId, bool isHidden, CancellationToken ct = default) => context.ExecuteAsync([], true, async actor =>
     {
         var item = await repository.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Bulletin item not found.");
-        item.SetHidden(isHidden, time.GetUtcNow().UtcDateTime); return true;
+        var now = time.GetUtcNow().UtcDateTime;
+        item.SetHidden(isHidden, now);
+        await SyncNotificationAsync(item, now, ct);
+        return true;
     }, ct);
 
     public Task<BulletinClaimDto> ClaimAsync(CreateBulletinClaimRequest input, CancellationToken ct = default) => context.ExecuteAsync([], false, async actor =>
@@ -48,6 +58,7 @@ public sealed class BulletinCommandService(CommandContext context, IBulletinRepo
         if (input.Quantity > item.MaxCompletions - reserved) throw new InvalidOperationException("The requested quantity exceeds the remaining charges.");
         var claim = new BulletinClaim(item.Id, actor.Id, input.Quantity, input.Comment, now);
         await repository.AddClaimAsync(claim, ct);
+        await SyncNotificationAsync(item, now, ct);
         return ToClaimDto(claim, actor, item, null);
     }, ct);
 
@@ -55,7 +66,11 @@ public sealed class BulletinCommandService(CommandContext context, IBulletinRepo
     {
         var claim = await repository.FindClaimAsync(claimId, ct) ?? throw new KeyNotFoundException("Bulletin claim not found.");
         if (claim.UserId != actor.Id) throw new UnauthorizedAccessException("You can only cancel your own claim.");
-        claim.Cancel(time.GetUtcNow().UtcDateTime); return true;
+        var now = time.GetUtcNow().UtcDateTime;
+        claim.Cancel(now);
+        var item = await repository.FindItemAsync(claim.BulletinItemId, ct) ?? throw new KeyNotFoundException("Bulletin item not found.");
+        await SyncNotificationAsync(item, now, ct);
+        return true;
     }, ct);
 
     public Task ApproveClaimAsync(Guid claimId, ReviewBulletinClaimRequest input, CancellationToken ct = default) => ReviewAsync(claimId, input.Comment, true, ct);
@@ -69,6 +84,7 @@ public sealed class BulletinCommandService(CommandContext context, IBulletinRepo
         var amount = checked(item.DkpAmount * claim.Quantity);
         var entry = await ledger.PostAsync(target.Id, officer.Id, Guid.NewGuid(), now, new DkpPosted(-amount, $"Reverted bulletin claim: {item.Title}"), ct);
         claim.Revert(officer.Id, entry.Id, input.Comment, now);
+        await SyncNotificationAsync(item, now, ct);
         return true;
     }, ct);
 
@@ -78,14 +94,33 @@ public sealed class BulletinCommandService(CommandContext context, IBulletinRepo
         var target = await context.TargetAsync(claim.UserId, ct);
         var item = await repository.FindItemAsync(claim.BulletinItemId, ct) ?? throw new KeyNotFoundException("Bulletin item not found.");
         var now = time.GetUtcNow().UtcDateTime;
-        if (!approve) { claim.Reject(officer.Id, comment, now); return true; }
+        if (!approve)
+        {
+            claim.Reject(officer.Id, comment, now);
+            await SyncNotificationAsync(item, now, ct);
+            return true;
+        }
         var operationId = Guid.NewGuid();
         var amount = checked(item.DkpAmount * claim.Quantity);
         var entry = await ledger.PostAsync(target.Id, officer.Id, operationId, now, new DkpPosted(amount, item.Title), ct);
         claim.Approve(officer.Id, [entry.Id], comment, now);
         if (await repository.GetReservedQuantityAsync(item.Id, ct) >= item.MaxCompletions && await repository.GetPendingQuantityAsync(item.Id, ct) == 0) item.DeactivateAutomatically(now);
+        await SyncNotificationAsync(item, now, ct);
         return true;
     }, ct);
+
+    private async Task SyncNotificationAsync(BulletinItem item, DateTime now, CancellationToken ct)
+    {
+        var reserved = await repository.GetReservedQuantityAsync(item.Id, ct);
+        var pending = await repository.GetPendingQuantityAsync(item.Id, ct);
+        var remaining = Math.Max(0, item.MaxCompletions - reserved);
+        var delete = !item.IsActive || item.IsHidden || item.IsExpired(now) || (remaining == 0 && pending == 0);
+        var payload = JsonSerializer.Serialize(new BulletinNotificationPayload(
+            item.Title, item.Description, item.DkpAmount, item.DeadlineUtc, remaining, pending, item.MaxCompletions, now));
+        await outbox.SyncBulletinAsync(item.Id, payload, delete, now, ct);
+    }
+
+    private sealed record BulletinNotificationPayload(string Title, string Description, int DkpAmount, DateTime? DeadlineUtc, int RemainingQuantity, int PendingQuantity, int MaxCompletions, DateTime UpdatedAtUtc);
 
     private static BulletinItemDto ToItemDto(BulletinItem item, int reserved, int approved, DateTime now) => new(item.Id, item.Title, item.Description, item.DkpAmount, item.MaxCompletions, reserved - approved, approved, Math.Max(0, item.MaxCompletions - reserved), item.UniquePerUser, item.DeadlineUtc, item.IsActive, item.IsEffectivelyActive(now, reserved), item.CreatedAtUtc, item.UpdatedAtUtc, item.IsHidden, false);
     private static BulletinClaimDto ToClaimDto(BulletinClaim claim, User user, BulletinItem item, string? reviewer) => new(claim.Id, item.Id, user.Id, user.DiscordName, user.Characters.FirstOrDefault(x => x.IsMain) is { } main ? $"{main.FirstName} {main.LastName}" : null, item.Title, claim.Quantity, claim.Comment, (DKP.Facade.Contracts.BulletinClaimStatus)claim.Status, claim.CreatedAtUtc, claim.ReviewedAtUtc, reviewer, claim.ReviewComment, claim.DkpEventIds);

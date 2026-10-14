@@ -44,6 +44,17 @@ public sealed class DiscordNotificationOutbox
         ClaimedUntilUtc = null;
     }
 
+    public void QueueUpdate(string payload, DateTime now)
+    {
+        Payload = payload;
+        SentAtUtc = null;
+        DeleteRequestedAtUtc = null;
+        DeletedAtUtc = null;
+        NextAttemptAtUtc = now;
+        ClaimedUntilUtc = null;
+        LastError = null;
+    }
+
     public void RequestDeletion(DateTime now)
     {
         DeleteRequestedAtUtc ??= now;
