@@ -142,7 +142,7 @@ Implementeret i migrationerne `20261015124425_Slice6ShopPurchaseLimits` og `2026
 
 ## Slice 7 – Dark Mode
 
-Status: Planlagt.
+Status: Implementeret.
 
 Tilføj et gennemgående dark mode i Blazor/Radzen:
 
@@ -155,6 +155,8 @@ Tilføj et gennemgående dark mode i Blazor/Radzen:
 - Tilgængelig label og tooltip for toggle.
 
 Der kræves ingen migration. Tests og manuel verifikation dækker reload, system preference, login/logout, mobile layout og kontrast.
+
+Implementeret med global theme-toggle i layoutet, `light`/`dark`-valg, localStorage persistence, tidlig theme-applikation via `theme.js` og dark-mode styling for Radzen-layout, cards, grids, navigation og formularfelter. Der er ingen databaseændringer.
 
 ## Teststrategi for V2
 

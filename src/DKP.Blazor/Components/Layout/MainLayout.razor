@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject IJSRuntime JS
 
 <RadzenLayout>
     <RadzenHeader>
@@ -6,6 +7,7 @@
             <RadzenText Text="Guild DKP" Style="font-size: 1.25rem; font-weight: 700;" />
             <AuthorizeView>
                 <Authorized>
+                    <button type="button" class="theme-toggle" @onclick="CycleThemeAsync" aria-label="Change color theme" title="Change color theme">@ThemeLabel</button>
                     <RadzenButton Text="Logout" Icon="logout" ButtonStyle="ButtonStyle.Light" Path="/account/logout" />
                 </Authorized>
             </AuthorizeView>
@@ -23,3 +25,29 @@
 
 <RadzenDialog />
 <RadzenNotification />
+
+@code {
+    private static readonly string[] ThemeOptions = ["light", "dark"];
+    private string theme = "light";
+    private string ThemeLabel => theme switch
+    {
+        "light" => "Light",
+        "dark" => "Dark",
+        _ => "Light"
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        theme = await JS.InvokeAsync<string>("dkpTheme.getPreference");
+        await JS.InvokeVoidAsync("dkpTheme.apply", theme);
+        StateHasChanged();
+    }
+
+    private async Task CycleThemeAsync()
+    {
+        var index = Array.IndexOf(ThemeOptions, theme);
+        theme = ThemeOptions[(index + 1) % ThemeOptions.Length];
+        await JS.InvokeVoidAsync("dkpTheme.setPreference", theme);
+    }
+}

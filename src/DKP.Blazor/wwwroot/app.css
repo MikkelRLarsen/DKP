@@ -2,6 +2,305 @@ html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
+html[data-theme="dark"] body {
+    background: #0f141b;
+    color: #edf2f7;
+    color-scheme: dark;
+}
+
+html[data-theme="dark"] {
+    --rz-body-background-color: #0f141b;
+    --rz-base-background-color: #1b2430;
+    --rz-panel-background-color: #1b2430;
+    --rz-card-background-color: #202b38;
+    --rz-text-color: #edf2f7;
+    --rz-text-secondary-color: #b8c4d1;
+    --rz-border-normal: #405064;
+    --rz-grid-header-background-color: #2a3746;
+    --rz-grid-header-color: #f4f7fa;
+    --rz-grid-cell-color: #e6edf4;
+    --rz-input-background-color: #202b38;
+    --rz-input-color: #f4f7fa;
+}
+
+html[data-theme="dark"] body,
+html[data-theme="dark"] .rz-layout,
+html[data-theme="dark"] .rz-body,
+html[data-theme="dark"] .rz-main,
+html[data-theme="dark"] .rz-content {
+    background-color: #0f141b !important;
+    color: #edf2f7 !important;
+}
+
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] h6,
+html[data-theme="dark"] p,
+html[data-theme="dark"] .content > * {
+    color: #f4f7fa !important;
+}
+
+html[data-theme="dark"] .content > p,
+html[data-theme="dark"] .content > div > p {
+    color: #bdc9d6 !important;
+}
+
+html[data-theme="dark"] .rz-sidebar,
+html[data-theme="dark"] .rz-header,
+html[data-theme="dark"] .rz-card,
+html[data-theme="dark"] .rz-panel-menu,
+html[data-theme="dark"] .rz-fieldset,
+html[data-theme="dark"] .rz-accordion,
+html[data-theme="dark"] .rz-accordion-content,
+html[data-theme="dark"] .rz-dialog,
+html[data-theme="dark"] .rz-dialog-content,
+html[data-theme="dark"] .rz-popup {
+    background-color: #1b2430 !important;
+    color: #edf2f7 !important;
+    border-color: #405064 !important;
+}
+
+html[data-theme="dark"] .rz-card {
+    background-color: #202b38 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+}
+
+html[data-theme="dark"] .rz-header {
+    background-color: #18212c !important;
+    border-bottom: 1px solid #405064;
+}
+
+html[data-theme="dark"] .rz-sidebar {
+    background-color: #18212c !important;
+    border-color: #405064 !important;
+}
+
+html[data-theme="dark"] .rz-textbox,
+html[data-theme="dark"] .rz-dropdown,
+html[data-theme="dark"] .rz-inputtext,
+html[data-theme="dark"] .rz-calendar,
+html[data-theme="dark"] .rz-multiselect,
+html[data-theme="dark"] .rz-numeric,
+html[data-theme="dark"] .rz-datepicker,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] input,
+html[data-theme="dark"] select {
+    background-color: #202b38 !important;
+    color: #f2f6fb;
+    border-color: #61728a !important;
+}
+
+html[data-theme="dark"] .rz-textbox,
+html[data-theme="dark"] .rz-inputtext,
+html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="number"],
+html[data-theme="dark"] input[type="search"],
+html[data-theme="dark"] input[type="date"],
+html[data-theme="dark"] textarea {
+    min-height: 2.35rem;
+    background: #273548 !important;
+    border: 1px solid #71849b !important;
+    border-radius: .3rem;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .25);
+}
+
+html[data-theme="dark"] .rz-textbox:focus,
+html[data-theme="dark"] .rz-inputtext:focus,
+html[data-theme="dark"] input:focus,
+html[data-theme="dark"] textarea:focus {
+    background: #2d3e53 !important;
+    border-color: #8bc7ff !important;
+    box-shadow: 0 0 0 .15rem rgba(139, 199, 255, .22), inset 0 1px 2px rgba(0, 0, 0, .25);
+    outline: none;
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder,
+html[data-theme="dark"] .rz-inputtext::placeholder {
+    color: #aebdcb !important;
+    opacity: 1;
+}
+
+html[data-theme="dark"] label,
+html[data-theme="dark"] .rz-form-field-label,
+html[data-theme="dark"] .rz-text,
+html[data-theme="dark"] .rz-body,
+html[data-theme="dark"] .rz-card h1,
+html[data-theme="dark"] .rz-card h2,
+html[data-theme="dark"] .rz-card h3,
+html[data-theme="dark"] .rz-card h4,
+html[data-theme="dark"] .rz-card h5,
+html[data-theme="dark"] .rz-card p,
+html[data-theme="dark"] .rz-card span,
+html[data-theme="dark"] .rz-card div {
+    color: #edf2f7;
+}
+
+html[data-theme="dark"] .rz-grid-table,
+html[data-theme="dark"] .rz-datatable,
+html[data-theme="dark"] table {
+    background-color: #202b38 !important;
+    color: #e6edf4 !important;
+    border-color: #405064 !important;
+}
+
+html[data-theme="dark"] .rz-grid-table thead th,
+html[data-theme="dark"] .rz-grid-table tbody td,
+html[data-theme="dark"] .rz-datatable-thead th,
+html[data-theme="dark"] .rz-datatable-tbody td,
+html[data-theme="dark"] table th,
+html[data-theme="dark"] table td {
+    background-color: #202b38 !important;
+    color: #e6edf4 !important;
+    border-color: #405064 !important;
+}
+
+html[data-theme="dark"] .rz-grid-table thead th,
+html[data-theme="dark"] .rz-datatable-thead th,
+html[data-theme="dark"] table thead th {
+    background-color: #2a3746 !important;
+    color: #ffffff !important;
+}
+
+html[data-theme="dark"] .rz-accordion-header,
+html[data-theme="dark"] .rz-panel-menu-item,
+html[data-theme="dark"] .rz-panel-menu-item-wrapper,
+html[data-theme="dark"] .rz-tabview-nav li,
+html[data-theme="dark"] .rz-paginator {
+    background-color: #263342 !important;
+    color: #edf2f7 !important;
+    border-color: #405064 !important;
+}
+
+html[data-theme="dark"] .rz-accordion-header:hover,
+html[data-theme="dark"] .rz-panel-menu-item:hover,
+html[data-theme="dark"] .rz-tabview-nav li:hover {
+    background-color: #344457 !important;
+}
+
+html[data-theme="dark"] .rz-dropdown-panel,
+html[data-theme="dark"] .rz-multiselect-panel,
+html[data-theme="dark"] .rz-autocomplete-panel,
+html[data-theme="dark"] .rz-listbox,
+html[data-theme="dark"] .rz-dropdown-item,
+html[data-theme="dark"] .rz-multiselect-item {
+    background-color: #202b38 !important;
+    color: #edf2f7 !important;
+    border-color: #405064 !important;
+}
+
+html[data-theme="dark"] .rz-dropdown-item:hover,
+html[data-theme="dark"] .rz-multiselect-item:hover,
+html[data-theme="dark"] .rz-grid-table tbody tr:hover {
+    background-color: #344457 !important;
+    color: #ffffff !important;
+}
+
+html[data-theme="dark"] a,
+html[data-theme="dark"] .btn-link {
+    color: #7fc4ff;
+}
+
+html[data-theme="dark"] .rz-button-light,
+html[data-theme="dark"] .btn-light {
+    background-color: #344457 !important;
+    color: #ffffff !important;
+    border-color: #61728a !important;
+}
+
+html[data-theme="dark"] .rz-header .rz-button,
+html[data-theme="dark"] .rz-header .rz-button-light,
+html[data-theme="dark"] .rz-header button {
+    background-color: #344457 !important;
+    color: #ffffff !important;
+    border: 1px solid #61728a !important;
+}
+
+html[data-theme="dark"] .rz-header .rz-button:hover,
+html[data-theme="dark"] .rz-header .rz-button-light:hover,
+html[data-theme="dark"] .rz-header button:hover {
+    background-color: #43566c !important;
+    color: #ffffff !important;
+}
+
+/* Neutral Radzen controls (View, Clear filter and pagination). */
+html[data-theme="dark"] .rz-button-secondary,
+html[data-theme="dark"] .rz-button-light,
+html[data-theme="dark"] .rz-button-base,
+html[data-theme="dark"] .rz-button-outline-secondary,
+html[data-theme="dark"] [class*="rz-button-light"],
+html[data-theme="dark"] [class*="rz-button-secondary"],
+html[data-theme="dark"] .rz-paginator-element,
+html[data-theme="dark"] .rz-paginator-page,
+html[data-theme="dark"] .rz-paginator-first,
+html[data-theme="dark"] .rz-paginator-prev,
+html[data-theme="dark"] .rz-paginator-next,
+html[data-theme="dark"] .rz-paginator-last {
+    background-color: #344457 !important;
+    color: #ffffff !important;
+    border-color: #61728a !important;
+}
+
+html[data-theme="dark"] .rz-button-secondary:hover,
+html[data-theme="dark"] .rz-button-light:hover,
+html[data-theme="dark"] .rz-button-base:hover,
+html[data-theme="dark"] .rz-button-outline-secondary:hover,
+html[data-theme="dark"] [class*="rz-button-light"]:hover,
+html[data-theme="dark"] [class*="rz-button-secondary"]:hover,
+html[data-theme="dark"] .rz-paginator-element:hover,
+html[data-theme="dark"] .rz-paginator-page:hover {
+    background-color: #43566c !important;
+    color: #ffffff !important;
+}
+
+html[data-theme="dark"] .rz-paginator-page.rz-state-active,
+html[data-theme="dark"] .rz-paginator-page.rz-state-selected,
+html[data-theme="dark"] .rz-paginator-element.rz-state-active {
+    background-color: #5b7898 !important;
+    color: #ffffff !important;
+    border-color: #8eb5d8 !important;
+}
+
+/* Radzen's default ButtonStyle has no explicit style class in some versions. */
+html[data-theme="dark"] button.rz-button:not(.rz-primary):not(.rz-secondary):not(.rz-light):not(.rz-success):not(.rz-danger):not(.rz-warning):not(.rz-info),
+html[data-theme="dark"] button.rz-button:not([class*="rz-button-primary"]):not([class*="rz-button-secondary"]):not([class*="rz-button-light"]):not([class*="rz-button-success"]):not([class*="rz-button-danger"]):not([class*="rz-button-warning"]):not([class*="rz-button-info"]),
+html[data-theme="dark"] .rz-paginator button {
+    background-color: #344457 !important;
+    color: #ffffff !important;
+    border: 1px solid #61728a !important;
+}
+
+html[data-theme="dark"] button.rz-button:not(.rz-primary):not(.rz-secondary):not(.rz-light):not(.rz-success):not(.rz-danger):not(.rz-warning):not(.rz-info):hover,
+html[data-theme="dark"] .rz-paginator button:hover {
+    background-color: #43566c !important;
+    color: #ffffff !important;
+}
+
+html[data-theme="dark"] .rz-badge-light,
+html[data-theme="dark"] .rz-badge.rz-light,
+html[data-theme="dark"] [class*="rz-badge-light"] {
+    background-color: #4b5c70 !important;
+    color: #ffffff !important;
+    border-color: #71849b !important;
+}
+
+.theme-toggle {
+    border: 1px solid currentColor;
+    border-radius: .35rem;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    padding: .35rem .65rem;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+    background: rgba(127, 127, 127, .18);
+}
+
 a, .btn-link {
     color: #006bb7;
 }
