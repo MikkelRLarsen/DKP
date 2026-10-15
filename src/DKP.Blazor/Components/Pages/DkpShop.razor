@@ -28,6 +28,7 @@
                     <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Property="MaxPerUser" Title="Limit" />
                     <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Property="ActiveQuantity" Title="Active" />
                     <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Property="UsedQuantity" Title="Used" />
+                    <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Title="Purchase limits" Sortable="false"><Template Context="item">@LimitSummary(item)</Template></RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="ShopItemAvailabilityDto" Property="RemainingQuantity" Title="Remaining">
                         <Template Context="item"><RadzenBadge Text="@item.RemainingQuantity.ToString()" BadgeStyle="@AvailabilityStyle(item)" /></Template>
                     </RadzenDataGridColumn>
@@ -40,7 +41,7 @@
             @if (selectedItem is not null) { <RadzenText Text="@(selectedItem.Description + $" Cost: {selectedItem.Price} DKP per unit.")" />
                 @if (selectedItem.AchievementRequirements.Count > 0) { <RadzenText>Required achievements: @string.Join(", ", selectedItem.AchievementRequirements.Select(x => x.AchievementName))</RadzenText> }
                 @if (MissingRequirements(selectedItem).Count > 0) { <RadzenAlert AlertStyle="AlertStyle.Warning">You are missing: @string.Join(", ", MissingRequirements(selectedItem).Select(x => x.AchievementName))</RadzenAlert> }
-                @if (SelectedAvailability is not null) { <RadzenText Text="@($"Active: {SelectedAvailability.ActiveQuantity}, Used: {SelectedAvailability.UsedQuantity}, Remaining: {SelectedAvailability.RemainingQuantity} of {SelectedAvailability.MaxPerUser}")" /> }
+                @if (SelectedAvailability is not null) { <RadzenText Text="@($"Active: {SelectedAvailability.ActiveQuantity}, Used: {SelectedAvailability.UsedQuantity}, Remaining: {SelectedAvailability.RemainingQuantity} of {SelectedAvailability.MaxPerUser}. {LimitSummary(SelectedAvailability)}")" /> }
                 <RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Max="@(Math.Max(1, SelectedAvailability?.RemainingQuantity ?? 0))" Disabled="@(saving || MissingRequirements(selectedItem).Count > 0 || SelectedAvailability?.IsAvailable != true)" /><RadzenButton Text="Purchase" Icon="shopping_cart" Click="PurchaseAsync" Disabled="@(saving || MissingRequirements(selectedItem).Count > 0 || SelectedAvailability?.IsAvailable != true)" /> }
             @if (SelectedAvailability?.IsAvailable == false) { <RadzenAlert AlertStyle="AlertStyle.Warning">You have reached the purchase limit for this item.</RadzenAlert> }
         </RadzenStack></RadzenAccordionItem>
@@ -80,6 +81,17 @@
         "Cancelled" => BadgeStyle.Light,
         _ => BadgeStyle.Info
     };
+
+    private static string LimitSummary(ShopItemAvailabilityDto item)
+    {
+        var limits = new List<string>();
+        if (item.PurchaseLimitKey is not null) limits.Add($"group: {item.PurchaseLimitKey}");
+        if (item.MaxActivePerUser is int active) limits.Add($"active max {active}");
+        if (item.MaxPerDay is int daily) limits.Add($"day {item.DailyRemaining ?? 0}/{daily} left");
+        if (item.MaxPerWeek is int weekly) limits.Add($"week {item.WeeklyRemaining ?? 0}/{weekly} left");
+        if (item.MaxPerMonth is int monthly) limits.Add($"month {item.MonthlyRemaining ?? 0}/{monthly} left");
+        return limits.Count == 0 ? "No additional limits" : string.Join(" · ", limits);
+    }
 
     protected override async Task OnInitializedAsync()
     {

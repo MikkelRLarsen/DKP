@@ -63,6 +63,161 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.ToTable("AchievementDefinitions");
                 });
 
+            modelBuilder.Entity("DKP.Domain.BulletinClaim", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BulletinItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DkpEventIdsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReviewComment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("BulletinItemId", "Status");
+
+                    b.HasIndex("UserId", "BulletinItemId", "Status");
+
+                    b.ToTable("BulletinClaims");
+                });
+
+            modelBuilder.Entity("DKP.Domain.BulletinItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeadlineUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("DkpAmount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsAutoDeactivated")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsHidden")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("MaxCompletions")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("UniquePerUser")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive", "DeadlineUtc");
+
+                    b.ToTable("BulletinItems");
+                });
+
+            modelBuilder.Entity("DKP.Domain.BulletinTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("DefaultDeadlineOffset")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("DkpAmount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MaxCompletions")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("UniquePerUser")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("BulletinTemplates");
+                });
+
             modelBuilder.Entity("DKP.Domain.Character", b =>
                 {
                     b.Property<Guid>("Id")
@@ -335,12 +490,27 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsHidden")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<int?>("MaxActivePerUser")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxPerDay")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxPerMonth")
+                        .HasColumnType("integer");
+
                     b.Property<int>("MaxPerUser")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxPerWeek")
                         .HasColumnType("integer");
 
                     b.Property<string>("Name")
@@ -350,6 +520,13 @@ namespace DKP.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Price")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("PurchaseLimitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PurchaseLimitKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<int?>("RollBonusValue")
                         .HasColumnType("integer");
@@ -362,6 +539,8 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
+                    b.HasIndex("PurchaseLimitId");
+
                     b.ToTable("ShopItems");
 
                     b.HasData(
@@ -371,6 +550,7 @@ namespace DKP.Infrastructure.Persistence.Migrations
                             CreatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Additional Soft Reserve",
                             IsActive = true,
+                            IsHidden = false,
                             Key = "soft-reserve",
                             MaxPerUser = 2,
                             Name = "Soft Reserve",
@@ -383,6 +563,7 @@ namespace DKP.Infrastructure.Persistence.Migrations
                             CreatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Roll bonus +10",
                             IsActive = true,
+                            IsHidden = false,
                             Key = "roll-bonus-10",
                             MaxPerUser = 1,
                             Name = "RollBonus 10",
@@ -396,6 +577,7 @@ namespace DKP.Infrastructure.Persistence.Migrations
                             CreatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Roll bonus +20",
                             IsActive = true,
+                            IsHidden = false,
                             Key = "roll-bonus-20",
                             MaxPerUser = 1,
                             Name = "RollBonus 20",
@@ -409,6 +591,7 @@ namespace DKP.Infrastructure.Persistence.Migrations
                             CreatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Roll bonus +30",
                             IsActive = true,
+                            IsHidden = false,
                             Key = "roll-bonus-30",
                             MaxPerUser = 1,
                             Name = "RollBonus 30",
@@ -422,6 +605,7 @@ namespace DKP.Infrastructure.Persistence.Migrations
                             CreatedAtUtc = new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Roll bonus +40",
                             IsActive = true,
+                            IsHidden = false,
                             Key = "roll-bonus-40",
                             MaxPerUser = 1,
                             Name = "RollBonus 40",
@@ -444,6 +628,49 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.HasIndex("AchievementId");
 
                     b.ToTable("ShopItemAchievementRequirements");
+                });
+
+            modelBuilder.Entity("DKP.Domain.ShopPurchaseLimit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("MaxActivePerUser")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxPerDay")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxPerMonth")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxPerUser")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxPerWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SharedKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SharedKey")
+                        .IsUnique();
+
+                    b.ToTable("ShopPurchaseLimits");
                 });
 
             modelBuilder.Entity("DKP.Domain.User", b =>
@@ -542,6 +769,26 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.ToTable("UserAchievements");
                 });
 
+            modelBuilder.Entity("DKP.Domain.BulletinClaim", b =>
+                {
+                    b.HasOne("DKP.Domain.BulletinItem", null)
+                        .WithMany()
+                        .HasForeignKey("BulletinItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DKP.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("DKP.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DKP.Domain.Character", b =>
                 {
                     b.HasOne("DKP.Domain.User", "User")
@@ -595,6 +842,14 @@ namespace DKP.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("DKP.Domain.ShopItem", b =>
+                {
+                    b.HasOne("DKP.Domain.ShopPurchaseLimit", null)
+                        .WithMany()
+                        .HasForeignKey("PurchaseLimitId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("DKP.Domain.ShopItemAchievementRequirement", b =>

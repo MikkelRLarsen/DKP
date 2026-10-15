@@ -10,6 +10,7 @@
             <RadzenPanelMenuItem Text="DKP Shop" Icon="shopping_cart" Path="/dkp-shop" />
             <RadzenPanelMenuItem Text="Guild Members" Icon="groups" Path="/members" />
             <RadzenPanelMenuItem Text="Guild Activity" Icon="history" Path="/activity" />
+            <RadzenPanelMenuItem Text="Bulletin Board" Icon="campaign" Path="/bulletin" />
             <AuthorizeView Roles="Officer">
                 <Authorized Context="officerContext">
                     <RadzenPanelMenuItem Text="Administration" Icon="admin_panel_settings">
@@ -22,6 +23,7 @@
                         <RadzenPanelMenuItem Text="Shop Purchases" Icon="shopping_bag" Path="/admin/shop/purchases" />
                         <RadzenPanelMenuItem Text="User Management" Icon="manage_accounts" Path="/admin/users" />
                         <RadzenPanelMenuItem Text="LootReserve Export" Icon="file_copy" Path="/admin/loot-reserve" />
+                        <RadzenPanelMenuItem Text="Bulletin Board" Icon="campaign" Path="/admin/bulletin" />
                     </RadzenPanelMenuItem>
                 </Authorized>
             </AuthorizeView>

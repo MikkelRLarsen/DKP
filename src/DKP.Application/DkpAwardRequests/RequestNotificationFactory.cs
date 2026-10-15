@@ -7,7 +7,7 @@ internal static class RequestNotificationFactory
 {
     public static DiscordNotificationOutbox Create(DkpAwardRequest request, string userName, string sourceName, int amount, string kind, DateTime now)
     {
-        var payload = JsonSerializer.Serialize(new RequestNotificationPayload(kind, userName, sourceName, amount, request.Quantity, request.Comment, now));
+        var payload = JsonSerializer.Serialize(new RequestNotificationPayload(request.Id, kind, userName, sourceName, amount, request.Quantity, request.Comment, now));
         return new DiscordNotificationOutbox("DkpAwardRequestCreated", payload, now, request.Id);
     }
 
@@ -18,6 +18,6 @@ internal static class RequestNotificationFactory
         return new DiscordNotificationOutbox("DkpAwardRequestReviewed", payload, now, request.Id, recipientDiscordId);
     }
 
-    private sealed record RequestNotificationPayload(string Kind, string UserName, string SourceName, int Amount, int Quantity, string? Comment, DateTime CreatedAtUtc);
+    private sealed record RequestNotificationPayload(Guid RequestId, string Kind, string UserName, string SourceName, int Amount, int Quantity, string? Comment, DateTime CreatedAtUtc);
     private sealed record RequestReviewNotificationPayload(string Kind, string UserName, string SourceName, int Amount, int Quantity, string Action, string? ReviewComment, string ReviewerName, DateTime ReviewedAtUtc);
 }

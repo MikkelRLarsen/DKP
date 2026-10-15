@@ -6,6 +6,7 @@ namespace DKP.Infrastructure.Queries;
 public sealed class AchievementQueries(QuerySession session) : IAchievementQueries
 {
     public Task<IReadOnlyList<AchievementDefinitionDto>> GetDefinitionsAsync(CancellationToken ct = default) => session.ReadAsync<IReadOnlyList<AchievementDefinitionDto>>(false, async (db, _) => await db.AchievementDefinitions.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name).Select(x => new AchievementDefinitionDto(x.Id, x.Key, x.Name, x.Description, x.DkpAmount, x.IsActive)).ToArrayAsync(ct), ct);
+    public Task<IReadOnlyList<AchievementDefinitionDto>> GetAllDefinitionsAsync(CancellationToken ct = default) => session.ReadAsync<IReadOnlyList<AchievementDefinitionDto>>(true, async (db, _) => await db.AchievementDefinitions.AsNoTracking().OrderBy(x => x.IsActive ? 0 : 1).ThenBy(x => x.Name).Select(x => new AchievementDefinitionDto(x.Id, x.Key, x.Name, x.Description, x.DkpAmount, x.IsActive)).ToArrayAsync(ct), ct);
     public Task<IReadOnlyList<UserAchievementDto>> GetUserAchievementsAsync(Guid? userId = null, CancellationToken ct = default) => session.ReadAsync<IReadOnlyList<UserAchievementDto>>(false, async (db, actor) =>
     {
         if (userId is not null && userId != actor.Id && actor.Role != DKP.Domain.UserRole.Officer) throw new UnauthorizedAccessException("You cannot view another user's achievements.");

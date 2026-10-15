@@ -8,6 +8,7 @@ namespace DKP.Application.Shop;
 public sealed class BotShopCommandService(
     IUserRepository users,
     IShopRepository catalog,
+    IShopPurchaseLimitRepository purchaseLimits,
     IAchievementRepository achievements,
     IEventLedgerRepository ledger,
     ICommandUnitOfWork unitOfWork,
@@ -21,7 +22,10 @@ public sealed class BotShopCommandService(
 
             var item = await catalog.FindItemAsync(request.ShopItemId, ct)
                 ?? throw new KeyNotFoundException("Shop item not found.");
+            var allItems = await catalog.GetItemsAsync(ct);
+            var configuredLimits = await purchaseLimits.GetAllAsync(false, ct);
             if (!item.IsActive) throw new InvalidOperationException("Shop item is inactive.");
+            if (!ShopPurchaseLimitRules.IsEnabled(item, configuredLimits)) throw new InvalidOperationException("The purchase limit for this item is inactive.");
             if (item.RollBonusValue is not null && request.Quantity != 1)
                 throw new ArgumentException("Only one RollBonus unit can be purchased.");
 
@@ -35,9 +39,9 @@ public sealed class BotShopCommandService(
 
             var state = await ledger.GetStateAsync(actor.Id, ct);
             if (state.Balance < cost) throw new InvalidOperationException($"Insufficient DKP ({cost} required).");
-            var owned = ShopPurchaseLimitRules.OwnedQuantity(state, item);
-            if ((long)owned + request.Quantity > item.MaxPerUser)
-                throw new InvalidOperationException($"Maximum {item.MaxPerUser} for {item.Name} has been reached.");
+            var limits = ShopPurchaseLimitRules.Evaluate(state, item, allItems, configuredLimits, time.GetUtcNow().UtcDateTime);
+            if (request.Quantity > limits.RemainingQuantity)
+                throw new InvalidOperationException($"The purchase limit for {item.Name} allows {limits.RemainingQuantity} more.");
             if (item.RollBonusValue is not null && state.HasActiveRollBonus())
                 throw new InvalidOperationException("You already have an active RollBonus.");
 

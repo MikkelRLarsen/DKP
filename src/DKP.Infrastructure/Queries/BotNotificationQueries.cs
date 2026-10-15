@@ -21,6 +21,7 @@ public sealed class BotNotificationQueries(IDbContextFactory<Persistence.DkpDbCo
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return rows.Select(x => new DiscordNotificationDto(x.Id, x.NotificationType, x.Payload, x.Attempts,
-            x.SentAtUtc is null ? "send" : "delete", x.DiscordMessageId, x.RecipientDiscordUserId)).ToArray();
+            x.DeleteRequestedAtUtc is not null ? "delete" : x.DiscordMessageId is null ? "send" : "update",
+            x.DiscordMessageId, x.RecipientDiscordUserId)).ToArray();
     }
 }

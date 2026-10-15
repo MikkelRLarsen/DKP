@@ -33,17 +33,17 @@ public sealed class BotShopQueries(IDbContextFactory<DkpDbContext> factory) : IB
             .Where(x => x.UserId == user.Id && x.RevokedAtUtc == null)
             .Select(x => x.AchievementId).ToHashSetAsync(ct);
 
+        var allItems = await db.ShopItems.AsNoTracking().ToArrayAsync(ct);
+        var configuredLimits = await db.ShopPurchaseLimits.AsNoTracking().ToArrayAsync(ct);
         return items.Select(item =>
         {
             var itemRequirements = requirements.Where(x => x.ShopItemId == item.Id).ToArray();
-            var purchases = state.Purchases.Values.Where(p => p.ShopItemId == item.Id && p.CancelledAtUtc is null).ToArray();
-            var active = purchases.Where(p => !p.IsConsumed).Sum(p => p.Quantity);
-            var used = purchases.Where(p => p.IsConsumed).Sum(p => p.Quantity);
-            var counted = ShopPurchaseLimitRules.UsesActiveLimit(item) ? active : active + used;
-            var rollBonusBlockedByAnotherTier = item.RollBonusValue is not null && state.HasActiveRollBonus() && active == 0;
-            var remaining = rollBonusBlockedByAnotherTier ? 0 : Math.Max(0, item.MaxPerUser - counted);
+            var limits = ShopPurchaseLimitRules.Evaluate(state, item, allItems, configuredLimits, DateTime.UtcNow);
+            var rollBonusBlockedByAnotherTier = item.RollBonusValue is not null && state.HasActiveRollBonus() && limits.ActiveQuantity == 0;
+            var remaining = rollBonusBlockedByAnotherTier || !ShopPurchaseLimitRules.IsEnabled(item, configuredLimits) ? 0 : limits.RemainingQuantity;
             var requirementsMet = itemRequirements.All(x => ownedAchievements.Contains(x.AchievementId));
-            return new ShopItemAvailabilityDto(item.Id, item.Key, item.Name, item.Description, item.Price, item.MaxPerUser, item.RollBonusValue, active, used, counted, remaining, remaining > 0 && requirementsMet, itemRequirements.Select(x => x.Dto).ToArray());
+            var inherited = item.PurchaseLimitId is Guid limitId ? configuredLimits.SingleOrDefault(x => x.Id == limitId) : null;
+            return new ShopItemAvailabilityDto(item.Id, item.Key, item.Name, item.Description, item.Price, inherited?.MaxPerUser ?? item.MaxPerUser, item.RollBonusValue, limits.ActiveQuantity, limits.UsedQuantity, limits.CountedQuantity, remaining, remaining > 0 && requirementsMet, itemRequirements.Select(x => x.Dto).ToArray(), inherited?.SharedKey ?? item.PurchaseLimitKey, inherited?.MaxActivePerUser ?? item.MaxActivePerUser, inherited?.MaxPerDay ?? item.MaxPerDay, inherited?.MaxPerWeek ?? item.MaxPerWeek, inherited?.MaxPerMonth ?? item.MaxPerMonth, limits.DailyRemaining, limits.WeeklyRemaining, limits.MonthlyRemaining);
         }).ToArray();
     }
 

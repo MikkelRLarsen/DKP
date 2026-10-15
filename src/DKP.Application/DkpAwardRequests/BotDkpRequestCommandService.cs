@@ -28,8 +28,11 @@ public sealed class BotDkpRequestCommandService(
             foreach (var target in targets)
             {
                 var state = await ledger.GetStateAsync(target.Id, ct);
-                if (state.PresetUsage.GetValueOrDefault(preset.Id) + quantity > preset.MaxApplicationsPerUser)
-                    throw new InvalidOperationException($"{target.DiscordName} has only {Math.Max(0, preset.MaxApplicationsPerUser - state.PresetUsage.GetValueOrDefault(preset.Id))} remaining application(s).");
+                var approved = state.PresetUsage.GetValueOrDefault(preset.Id);
+                var pending = await requests.GetPendingQuantityAsync(target.Id, preset.Id, ct);
+                var remaining = Math.Max(0, preset.MaxApplicationsPerUser - approved - pending);
+                if (quantity > remaining)
+                    throw new InvalidOperationException($"{target.DiscordName} has only {remaining} remaining application(s) after pending requests.");
             }
             var now = time.GetUtcNow().UtcDateTime;
             var result = new List<DkpAwardRequestDto>(targets.Count);

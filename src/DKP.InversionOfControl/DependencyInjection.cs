@@ -12,11 +12,13 @@ using DKP.Application.Presets;
 using DKP.Application.DkpAwardRequests;
 using DKP.Application.LootReserve;
 using DKP.Application.Achievements;
+using DKP.Application.Bulletins;
 
 using DKP.Facade.Commands;
 using DKP.Facade.Queries;
 using DKP.Infrastructure.Persistence;
 using DKP.Infrastructure.Queries;
+using DKP.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -66,6 +68,7 @@ public static class DependencyInjection
 		services.AddScoped<IUserRepository, UserRepository>();
 		services.AddScoped<ICharacterRepository, CharacterRepository>();
 		services.AddScoped<IShopRepository, ShopRepository>();
+		services.AddScoped<IShopPurchaseLimitRepository, ShopPurchaseLimitRepository>();
 		services.AddScoped<IPresetRepository, PresetRepository>();
 		services.AddScoped<IDkpAwardRequestRepository, DkpAwardRequestRepository>();
 		services.AddScoped<IEventLedgerRepository, EventLedgerRepository>();
@@ -97,10 +100,14 @@ public static class DependencyInjection
 		services.AddScoped<IShopQueries, ShopQueries>();
 		services.AddScoped<IShopPurchaseQueries, ShopPurchaseQueries>();
 		services.AddScoped<IShopCommands, ShopCommandService>();
+		services.AddScoped<IShopPurchaseLimitCommands, ShopPurchaseLimitCommandService>();
+		services.AddScoped<IShopPurchaseLimitQueries, ShopPurchaseLimitQueries>();
 		services.AddScoped<IDkpPresetQueries, DkpPresetQueries>();
 		services.AddScoped<IDkpPresetCommands, DkpPresetCommandService>();
 		services.AddScoped<IDkpAwardRequestQueries, DkpAwardRequestQueries>();
 		services.AddScoped<IDkpAwardRequestCommands, DkpAwardRequestCommandService>();
+		services.AddScoped<IBotAwardRequestReviewCommands, DkpAwardRequestCommandService>();
+		services.AddScoped<IBotAwardRequestQueries, BotAwardRequestQueries>();
 		services.AddScoped<ILootReserveQueries, LootReserveQueries>();
 		services.AddScoped<ILootReserveConsumptionCommands, LootReserveConsumptionCommandService>();
 		services.AddScoped<ILootReserveConsumptionQueries, LootReserveConsumptionQueries>();
@@ -109,6 +116,15 @@ public static class DependencyInjection
 		services.AddScoped<IAchievementCommands, AchievementCommandService>();
 		services.AddScoped<IAchievementQueries, AchievementQueries>();
 		services.AddScoped<IAchievementRepository, AchievementRepository>();
+		services.AddScoped<IBulletinRepository, BulletinRepository>();
+		services.AddScoped<IBulletinTemplateRepository, BulletinTemplateRepository>();
+		services.AddScoped<IBulletinCommands, BulletinCommandService>();
+		services.AddScoped<IBulletinTemplateCommands, BulletinTemplateCommandService>();
+		services.AddScoped<IBulletinQueries, BulletinQueries>();
+		services.AddScoped<IBulletinTemplateQueries, BulletinTemplateQueries>();
+		services.AddScoped<IBotBulletinQueries, BotBulletinQueries>();
+		services.AddScoped<IBotBulletinCommands, BotBulletinCommandService>();
+		services.AddHostedService<BulletinExpirationWorker>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));
 		services.AddAuthentication(options =>

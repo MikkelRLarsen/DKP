@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace DKP.DiscordBot;
 
@@ -46,6 +47,15 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public async Task<bool> CancelDkpRequestAsync(string discordUserId, Guid requestId, CancellationToken cancellationToken)
         => await SendShopAsync<object>(HttpMethod.Delete, $"/api/bot/dkp/requests/{requestId:D}", discordUserId, null, cancellationToken) is not null;
 
+    public Task<IReadOnlyList<BotAwardRequestDto>?> GetPendingAwardRequestsAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BotAwardRequestDto>>(HttpMethod.Get, "/api/bot/requests/pending", discordUserId, null, cancellationToken);
+
+    public async Task<bool> ApproveAwardRequestAsync(string discordUserId, Guid requestId, string? comment, CancellationToken cancellationToken)
+        => await SendShopAsync<object>(HttpMethod.Post, $"/api/bot/requests/{requestId:D}/approve", discordUserId, new ReviewInput(comment), cancellationToken) is not null;
+
+    public async Task<bool> RejectAwardRequestAsync(string discordUserId, Guid requestId, string? comment, CancellationToken cancellationToken)
+        => await SendShopAsync<object>(HttpMethod.Post, $"/api/bot/requests/{requestId:D}/reject", discordUserId, new ReviewInput(comment), cancellationToken) is not null;
+
     public async Task<IReadOnlyList<BotCharacterDto>?> GetCharactersAsync(string discordUserId, CancellationToken cancellationToken)
         => await SendCharactersAsync(HttpMethod.Get, "/api/bot/characters", discordUserId, null, cancellationToken) as IReadOnlyList<BotCharacterDto>;
 
@@ -63,6 +73,21 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
 
     public Task<IReadOnlyList<BotShopItemDto>?> GetShopItemsAsync(string discordUserId, CancellationToken cancellationToken)
         => SendShopAsync<IReadOnlyList<BotShopItemDto>>(HttpMethod.Get, "/api/bot/shop", discordUserId, null, cancellationToken);
+
+    public Task<IReadOnlyList<BotBulletinItemDto>?> GetBulletinItemsAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BotBulletinItemDto>>(HttpMethod.Get, "/api/bot/bulletin", discordUserId, null, cancellationToken);
+
+    public Task<BulletinClaimDto?> ClaimBulletinAsync(string discordUserId, Guid itemId, int quantity, CancellationToken cancellationToken)
+        => SendShopAsync<BulletinClaimDto>(HttpMethod.Post, "/api/bot/bulletin/claims", discordUserId, new BotBulletinClaimInput(itemId, quantity), cancellationToken);
+
+    public Task<IReadOnlyList<BulletinClaimDto>?> GetPendingBulletinClaimsAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BulletinClaimDto>>(HttpMethod.Get, "/api/bot/bulletin/claims/pending", discordUserId, null, cancellationToken);
+
+    public async Task<bool> ApproveBulletinClaimAsync(string discordUserId, Guid claimId, CancellationToken cancellationToken)
+        => await SendShopAsync<object>(HttpMethod.Post, $"/api/bot/bulletin/claims/{claimId:D}/approve", discordUserId, null, cancellationToken) is not null;
+
+    public async Task<bool> DenyBulletinClaimAsync(string discordUserId, Guid claimId, CancellationToken cancellationToken)
+        => await SendShopAsync<object>(HttpMethod.Post, $"/api/bot/bulletin/claims/{claimId:D}/deny", discordUserId, null, cancellationToken) is not null;
 
     public Task<IReadOnlyList<BotShopAvailabilityDto>?> GetShopAvailabilityAsync(string discordUserId, CancellationToken cancellationToken)
         => SendShopAsync<IReadOnlyList<BotShopAvailabilityDto>>(HttpMethod.Get, "/api/bot/shop/availability", discordUserId, null, cancellationToken);
@@ -115,7 +140,8 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
             using var response = await httpClient.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("DKP shop API request failed with status {StatusCode}", response.StatusCode);
+                var error = await response.Content.ReadAsStringAsync(cancellationToken);
+                logger.LogWarning("DKP shop API request failed with status {StatusCode}: {Error}", response.StatusCode, error.Length > 500 ? error[..500] : error);
                 return default;
             }
             if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
@@ -130,6 +156,11 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             logger.LogWarning("DKP shop API request timed out.");
+            return default;
+        }
+        catch (JsonException exception)
+        {
+            logger.LogWarning(exception, "DKP shop API returned an unexpected response format.");
             return default;
         }
     }
@@ -221,11 +252,15 @@ public sealed record BalanceDto(int Amount);
 public sealed record DkpTransactionDto(Guid Id, int Amount, string Reason, DateTime CreatedAtUtc, string CreatedByDiscordName);
 public sealed record BotDkpSourceDto(Guid PresetId, string Name, int Amount, string Reason, int Applications, int MaxApplications, int Remaining);
 public sealed record BotDkpRequestInput(Guid PresetId, int Quantity, IReadOnlyList<string>? TargetDiscordIds, string? Comment);
+public sealed record ReviewInput(string? Comment);
 public sealed record CharacterInputDto(string FirstName, string LastName);
 public sealed record BotCharacterDto(Guid Id, string FirstName, string LastName, bool IsMain);
 public sealed record ShopPurchaseInput(Guid ShopItemId, int Quantity);
 public sealed record BotShopItemDto(Guid Id, string Key, string Name, string Description, int Price, int MaxPerUser, bool IsActive, IReadOnlyList<BotShopRequirementDto>? AchievementRequirements);
-public sealed record BotShopAvailabilityDto(Guid ShopItemId, string Key, string Name, string Description, int Price, int MaxPerUser, int? RollBonusValue, int ActiveQuantity, int UsedQuantity, int CountedQuantity, int RemainingQuantity, bool IsAvailable, IReadOnlyList<BotShopRequirementDto> AchievementRequirements)
+public sealed record BotBulletinItemDto(Guid Id, string Title, string Description, int DkpAmount, int RemainingQuantity, bool UniquePerUser, DateTime? DeadlineUtc);
+public sealed record BotBulletinClaimInput(Guid BulletinItemId, int Quantity);
+public sealed record BulletinClaimDto(Guid Id, Guid BulletinItemId, Guid UserId, string DiscordName, string? MainCharacter, string BulletinTitle, int Quantity, string? Comment, JsonElement Status, DateTime CreatedAtUtc);
+public sealed record BotShopAvailabilityDto(Guid ShopItemId, string Key, string Name, string Description, int Price, int MaxPerUser, int? RollBonusValue, int ActiveQuantity, int UsedQuantity, int CountedQuantity, int RemainingQuantity, bool IsAvailable, IReadOnlyList<BotShopRequirementDto> AchievementRequirements, string? PurchaseLimitKey = null, int? MaxActivePerUser = null, int? MaxPerDay = null, int? MaxPerWeek = null, int? MaxPerMonth = null, int? DailyRemaining = null, int? WeeklyRemaining = null, int? MonthlyRemaining = null)
 {
     public bool IsRollBonus => RollBonusValue is not null;
 }

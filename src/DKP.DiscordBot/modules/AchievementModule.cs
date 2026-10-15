@@ -1,5 +1,7 @@
 using System.Text;
+using Discord;
 using Discord.Interactions;
+using Discord.WebSocket;
 
 namespace DKP.DiscordBot.modules;
 
@@ -31,6 +33,56 @@ public sealed class AchievementModule(DkpApiClient api) : InteractionModuleBase<
 [Group("achievement", "Request an achievement DKP award")]
 public sealed class AchievementRequestModule(DkpApiClient api) : InteractionModuleBase<SocketInteractionContext>
 {
+    [ComponentInteraction("source:request:achievement:*", true)]
+    public async Task RequestSourceButtonAsync(string achievementId)
+    {
+        if (!Guid.TryParse(achievementId, out var id)) { await RespondAsync("This achievement button is invalid.", ephemeral: true); return; }
+        var overview = await api.GetAchievementsAsync(Context.User.Id.ToString(), CancellationToken.None);
+        var definition = overview?.Definitions.SingleOrDefault(x => x.Id == id);
+        if (definition is null) { await RespondAsync("This achievement is no longer available.", ephemeral: true); return; }
+        if (overview!.UserAchievements.Any(x => x.AchievementId == id && x.IsActive))
+        {
+            await RespondAsync("You already have this achievement. No new request can be created.", ephemeral: true);
+            return;
+        }
+        if (overview.Requests.Any(x => x.AchievementId == id && x.IsPending))
+        {
+            await RespondAsync("You already have a pending request for this achievement.", ephemeral: true);
+            return;
+        }
+        var menu = new SelectMenuBuilder()
+            .WithCustomId($"source:achievement-action:{id:D}")
+            .WithPlaceholder("Confirm achievement request")
+            .WithMinValues(1).WithMaxValues(1)
+            .AddOption("Request achievement", "request", "Submit this achievement request")
+            .AddOption("Cancel", "cancel", "Do not submit a request");
+        await RespondAsync($"Request **{definition.Name}** for **1** DKP award?", components: new ComponentBuilder().WithSelectMenu(menu).Build(), ephemeral: true);
+    }
+
+    [ComponentInteraction("source:achievement-action:*", true)]
+    public async Task RequestSourceActionAsync(string achievementId)
+    {
+        var component = Context.Interaction as SocketMessageComponent;
+        var action = component?.Data.Values.FirstOrDefault();
+        if (!Guid.TryParse(achievementId, out var id) || action is not ("request" or "cancel"))
+        {
+            await RespondAsync("Select a valid action and try again.", ephemeral: true);
+            return;
+        }
+        if (action == "cancel")
+        {
+            await RespondAsync("Achievement request cancelled.", ephemeral: true);
+            return;
+        }
+        await DeferAsync(ephemeral: true);
+        var overview = await api.GetAchievementsAsync(Context.User.Id.ToString(), CancellationToken.None);
+        var definition = overview?.Definitions.SingleOrDefault(x => x.Id == id);
+        var request = await api.RequestAchievementAsync(Context.User.Id.ToString(), id, null, CancellationToken.None);
+        await ModifyOriginalResponseAsync(p => p.Content = request is null
+            ? "The achievement request could not be created."
+            : $"Achievement request submitted for **{definition?.Name ?? "the selected achievement"}** (quantity 1). An Officer must approve it.");
+    }
+
     [SlashCommand("request-many", "Request an achievement for yourself and tagged members", runMode: RunMode.Async)]
     public async Task RequestManyAsync(
         [Summary("achievement", "Select an available achievement")] [Autocomplete<AchievementAutocompleteHandler>] string achievement,

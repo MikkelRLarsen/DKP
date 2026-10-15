@@ -5,6 +5,8 @@
 @using DKP.Facade.Queries
 @inject IShopQueries ShopQueries
 @inject IShopCommands ShopCommands
+@inject IShopPurchaseLimitCommands PurchaseLimitCommands
+@inject IShopPurchaseLimitQueries PurchaseLimitQueries
 @inject IAchievementQueries AchievementQueries
 @inject DialogService DialogService
 @inject NotificationService NotificationService
@@ -26,6 +28,37 @@
     }
     else
     {
+        <RadzenAccordion Multiple="true">
+            <Items>
+        <RadzenAccordionItem Text="Purchase limits" Icon="rule">
+        <RadzenCard>
+            <RadzenText Text="Purchase limits" TextStyle="TextStyle.H5" />
+            <RadzenText Text="Reusable rules that shop items can inherit." TextStyle="TextStyle.Body2" />
+            <RadzenRow Gap="1rem" Style="margin-top:1rem;">
+                <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Shared key" Style="width:100%;"><ChildContent><RadzenTextBox @bind-Value="limitKey" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="2"><RadzenFormField Text="Maximum per user" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int?" @bind-Value="limitMaxPerUser" Min="1" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="2"><RadzenFormField Text="Maximum active per user" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int?" @bind-Value="limitMaxActive" Min="1" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="2"><RadzenFormField Text="Maximum per day" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int?" @bind-Value="limitDaily" Min="1" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="2"><RadzenFormField Text="Maximum per week" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int?" @bind-Value="limitWeekly" Min="1" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="2"><RadzenFormField Text="Maximum per month" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int?" @bind-Value="limitMonthly" Min="1" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
+            </RadzenRow>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap=".5rem" Style="margin-top:1rem;">
+                <RadzenButton Text="@(editingLimitId is null ? "Create limit" : "Save limit")" Click="SaveLimitAsync" Disabled="@saving" />
+                @if (editingLimitId is not null) { <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="ResetLimit" Disabled="@saving" /> }
+            </RadzenStack>
+            <RadzenDataGrid Data="@purchaseLimits" TItem="ShopPurchaseLimitDto" AllowPaging="true" AllowSorting="true" Style="margin-top:1rem;">
+                <Columns>
+                    <RadzenDataGridColumn TItem="ShopPurchaseLimitDto" Property="SharedKey" Title="Shared key" />
+                    <RadzenDataGridColumn TItem="ShopPurchaseLimitDto" Property="MaxPerUser" Title="Max per user" />
+                    <RadzenDataGridColumn TItem="ShopPurchaseLimitDto" Title="Periods"><Template Context="limit">@LimitSummary(limit)</Template></RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="ShopPurchaseLimitDto" Title="Status"><Template Context="limit">@(limit.IsActive ? "Active" : "Inactive")</Template></RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="ShopPurchaseLimitDto" Title="Actions"><Template Context="limit"><RadzenButton Text="Edit" Size="ButtonSize.Small" Click="@(() => BeginEditLimit(limit))" Disabled="@saving" /> <RadzenButton Text="@(limit.IsActive ? "Deactivate" : "Activate")" Size="ButtonSize.Small" Click="@(() => ToggleLimitAsync(limit))" Disabled="@saving" /></Template></RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenCard>
+
+        </RadzenAccordionItem>
+        <RadzenAccordionItem Text="Create or edit shop item" Icon="edit">
         <RadzenCard>
             <RadzenStack Gap="1rem">
                 <RadzenText Text="@(editingId is null ? "Create shop item" : "Edit shop item")" TextStyle="TextStyle.H5" />
@@ -46,10 +79,17 @@
                         </RadzenFormField>
                     </RadzenColumn>
                     <RadzenColumn Size="12" SizeMD="2">
-                        <RadzenFormField Text="Max per user" Style="width:100%;">
-                            <ChildContent><RadzenNumeric @bind-Value="form.MaxPerUser" Min="1" Style="width:100%;" Disabled="@saving" /></ChildContent>
+                            <RadzenFormField Text="Max per user (item fallback)" Style="width:100%;">
+                            <ChildContent><RadzenNumeric @bind-Value="form.MaxPerUser" Min="0" Placeholder="No limit when inherited" Style="width:100%;" Disabled="@saving" /></ChildContent>
                         </RadzenFormField>
                     </RadzenColumn>
+                </RadzenRow>
+                <RadzenRow Gap="1rem">
+                    <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Purchase limit (optional)" Style="width:100%;"><ChildContent><RadzenDropDown TValue="Guid?" @bind-Value="form.PurchaseLimitId" Data="@activePurchaseLimits" TextProperty="SharedKey" ValueProperty="Id" AllowClear="true" Placeholder="Use item-specific limits" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="2"><RadzenFormField Text="Max active (optional)" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int?" @bind-Value="form.MaxActivePerUser" Min="1" Placeholder="No limit" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="2"><RadzenFormField Text="Max per day" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int?" @bind-Value="form.MaxPerDay" Min="1" Placeholder="No limit" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="2"><RadzenFormField Text="Max per week" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int?" @bind-Value="form.MaxPerWeek" Min="1" Placeholder="No limit" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="2"><RadzenFormField Text="Max per month" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int?" @bind-Value="form.MaxPerMonth" Min="1" Placeholder="No limit" Style="width:100%;" Disabled="@saving" /></ChildContent></RadzenFormField></RadzenColumn>
                 </RadzenRow>
                 <RadzenFormField Text="Description" Style="width:100%;">
                     <ChildContent><RadzenTextArea @bind-Value="form.Description" MaxLength="500" Rows="3" Style="width:100%;" Disabled="@saving" /></ChildContent>
@@ -67,29 +107,39 @@
             </RadzenStack>
         </RadzenCard>
 
+        </RadzenAccordionItem>
+        <RadzenAccordionItem Text="Shop catalog" Icon="storefront">
         <RadzenCard>
             <RadzenText Text="Shop catalog" TextStyle="TextStyle.H5" />
-            <RadzenDataGrid Data="@items" TItem="ShopItemDto" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No shop items found." Style="margin-top:1rem;">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".5rem" Style="margin-top:.75rem;"><RadzenCheckBox @bind-Value="showHidden" /><RadzenText Text="Show hidden items" /></RadzenStack>
+            <RadzenDataGrid Data="@VisibleItems" TItem="ShopItemDto" AllowPaging="true" PageSize="10" AllowSorting="true" AllowFiltering="true" FilterMode="FilterMode.Simple" EmptyText="No shop items found." Style="margin-top:1rem;">
                 <Columns>
                     <RadzenDataGridColumn TItem="ShopItemDto" Property="Name" Title="Name" />
                     <RadzenDataGridColumn TItem="ShopItemDto" Property="Key" Title="Key" />
                     <RadzenDataGridColumn TItem="ShopItemDto" Property="Price" Title="Price" />
                     <RadzenDataGridColumn TItem="ShopItemDto" Property="MaxPerUser" Title="Max per user" />
+                    <RadzenDataGridColumn TItem="ShopItemDto" Property="PurchaseLimitSharedKey" Title="Purchase limit" />
+                    <RadzenDataGridColumn TItem="ShopItemDto" Property="MaxActivePerUser" Title="Max active" />
+                    <RadzenDataGridColumn TItem="ShopItemDto" Title="Time limits"><Template Context="item">@TimeLimits(item)</Template></RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="ShopItemDto" Title="Achievement requirements" Sortable="false"><Template Context="item">@(item.AchievementRequirements is { Count: > 0 } ? string.Join(", ", item.AchievementRequirements.Select(x => x.AchievementName)) : "None")</Template></RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="ShopItemDto" Property="IsActive" Title="Status">
-                        <Template Context="item"><RadzenBadge Text="@(item.IsActive ? "Active" : "Inactive")" BadgeStyle="@(item.IsActive ? BadgeStyle.Success : BadgeStyle.Light)" /></Template>
+                        <Template Context="item"><RadzenStack Orientation="Orientation.Horizontal" Gap=".35rem"><RadzenBadge Text="@(item.IsActive ? "Active" : "Inactive")" BadgeStyle="@(item.IsActive ? BadgeStyle.Success : BadgeStyle.Light)" />@if (item.IsHidden) { <RadzenBadge Text="Hidden" BadgeStyle="BadgeStyle.Warning" /> }</RadzenStack></Template>
                     </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="ShopItemDto" Title="Actions" Sortable="false" Filterable="false">
                         <Template Context="item">
                             <RadzenStack Orientation="Orientation.Horizontal" Gap=".5rem">
                                 <RadzenButton Text="Edit" Icon="edit" Size="ButtonSize.Small" Click="@(() => BeginEdit(item))" Disabled="@saving" />
                                 <RadzenButton Text="@(item.IsActive ? "Deactivate" : "Activate")" Icon="@(item.IsActive ? "visibility_off" : "visibility")" Size="ButtonSize.Small" ButtonStyle="@(item.IsActive ? ButtonStyle.Light : ButtonStyle.Success)" Click="@(() => ToggleActiveAsync(item))" Disabled="@saving" />
+                                <RadzenButton Text="@(item.IsHidden ? "Show" : "Hide")" Icon="@(item.IsHidden ? "visibility" : "visibility_off")" Size="ButtonSize.Small" Click="@(() => ToggleHiddenAsync(item))" Disabled="@saving" />
                             </RadzenStack>
                         </Template>
                     </RadzenDataGridColumn>
                 </Columns>
             </RadzenDataGrid>
         </RadzenCard>
+        </RadzenAccordionItem>
+            </Items>
+        </RadzenAccordion>
     }
 </RadzenStack>
 
@@ -100,12 +150,15 @@
     private Guid? editingId;
     private bool loading = true;
     private bool saving;
+    private bool showHidden;
+    private IEnumerable<ShopItemDto> VisibleItems => items.Where(x => showHidden || !x.IsHidden);
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
             achievements = await AchievementQueries.GetDefinitionsAsync();
+            purchaseLimits = await PurchaseLimitQueries.GetAllAsync();
             await ReloadAsync();
         }
         catch (Exception exception)
@@ -118,7 +171,7 @@
         }
     }
 
-    private async Task ReloadAsync() => items = await ShopQueries.GetAllItemsAsync();
+    private async Task ReloadAsync() { items = await ShopQueries.GetAllItemsAsync(); purchaseLimits = await PurchaseLimitQueries.GetAllAsync(); }
 
     private void BeginEdit(ShopItemDto item)
     {
@@ -128,6 +181,12 @@
         form.Description = item.Description;
         form.Price = item.Price;
         form.MaxPerUser = item.MaxPerUser;
+        form.PurchaseLimitKey = item.PurchaseLimitKey ?? string.Empty;
+        form.PurchaseLimitId = item.PurchaseLimitId;
+        form.MaxActivePerUser = item.MaxActivePerUser;
+        form.MaxPerDay = item.MaxPerDay;
+        form.MaxPerWeek = item.MaxPerWeek;
+        form.MaxPerMonth = item.MaxPerMonth;
         form.AchievementIds = item.AchievementRequirements.Select(x => x.AchievementId).ToArray();
     }
 
@@ -139,22 +198,28 @@
         form.Description = string.Empty;
         form.Price = 1;
         form.MaxPerUser = 1;
+        form.PurchaseLimitKey = string.Empty;
+        form.PurchaseLimitId = null;
+        form.MaxActivePerUser = null;
+        form.MaxPerDay = null;
+        form.MaxPerWeek = null;
+        form.MaxPerMonth = null;
         form.AchievementIds = [];
     }
 
     private async Task SaveAsync()
     {
         if (saving) return;
-        if (string.IsNullOrWhiteSpace(form.Key) || string.IsNullOrWhiteSpace(form.Name) || string.IsNullOrWhiteSpace(form.Description) || form.Price <= 0 || form.MaxPerUser <= 0)
+        if (string.IsNullOrWhiteSpace(form.Key) || string.IsNullOrWhiteSpace(form.Name) || string.IsNullOrWhiteSpace(form.Description) || form.Price <= 0 || (form.PurchaseLimitId is null && form.MaxPerUser <= 0))
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Validation error", "Key, name, description, positive price and maximum are required.");
+            NotificationService.Notify(NotificationSeverity.Error, "Validation error", "Key, name, description and positive price are required. Add an item limit or a fallback maximum.");
             return;
         }
 
         saving = true;
         try
         {
-            var input = new ShopItemInput(form.Key, form.Name, form.Description, form.Price, form.MaxPerUser, form.AchievementIds.ToArray());
+            var input = new ShopItemInput(form.Key, form.Name, form.Description, form.Price, form.MaxPerUser, form.AchievementIds.ToArray(), form.PurchaseLimitKey, form.MaxActivePerUser, form.MaxPerDay, form.MaxPerWeek, form.MaxPerMonth, form.PurchaseLimitId);
             if (editingId is Guid id)
             {
                 await ShopCommands.UpdateItemAsync(id, input);
@@ -206,6 +271,73 @@
         }
     }
 
+    private async Task ToggleHiddenAsync(ShopItemDto item)
+    {
+        if (saving) return;
+        saving = true;
+        try
+        {
+            await ShopCommands.SetHiddenAsync(item.Id, !item.IsHidden);
+            NotificationService.Notify(NotificationSeverity.Success, "Shop catalog updated", $"{item.Name} is now {(item.IsHidden ? "visible" : "hidden")} in the catalog.");
+            await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to hide/show shop item", exception.Message); }
+        finally { saving = false; }
+    }
+
+    private static string TimeLimits(ShopItemDto item)
+    {
+        var limits = new List<string>();
+        if (item.MaxPerDay is int day) limits.Add($"day: {day}");
+        if (item.MaxPerWeek is int week) limits.Add($"week: {week}");
+        if (item.MaxPerMonth is int month) limits.Add($"month: {month}");
+        return limits.Count == 0 ? "None" : string.Join(", ", limits);
+    }
+
+    private static string LimitSummary(ShopPurchaseLimitDto limit)
+    {
+        var values = new List<string>();
+        if (limit.MaxActivePerUser is int active) values.Add($"active: {active}");
+        if (limit.MaxPerDay is int day) values.Add($"day: {day}");
+        if (limit.MaxPerWeek is int week) values.Add($"week: {week}");
+        if (limit.MaxPerMonth is int month) values.Add($"month: {month}");
+        return values.Count == 0 ? "None" : string.Join(", ", values);
+    }
+
+    private void BeginEditLimit(ShopPurchaseLimitDto limit)
+    {
+        editingLimitId = limit.Id; limitKey = limit.SharedKey; limitMaxPerUser = limit.MaxPerUser;
+        limitMaxActive = limit.MaxActivePerUser; limitDaily = limit.MaxPerDay; limitWeekly = limit.MaxPerWeek; limitMonthly = limit.MaxPerMonth;
+    }
+
+    private void ResetLimit()
+    {
+        editingLimitId = null; limitKey = string.Empty; limitMaxPerUser = null; limitMaxActive = null; limitDaily = null; limitWeekly = null; limitMonthly = null;
+    }
+
+    private async Task SaveLimitAsync()
+    {
+        if (saving) return;
+        saving = true;
+        try
+        {
+            var input = new ShopPurchaseLimitInput(limitKey, limitMaxPerUser, limitMaxActive, limitDaily, limitWeekly, limitMonthly);
+            if (editingLimitId is Guid id) await PurchaseLimitCommands.UpdateAsync(id, input); else await PurchaseLimitCommands.CreateAsync(input);
+            ResetLimit(); await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService);
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to save purchase limit", exception.Message); }
+        finally { saving = false; }
+    }
+
+    private async Task ToggleLimitAsync(ShopPurchaseLimitDto limit)
+    {
+        if (saving) return;
+        saving = true;
+        try { await PurchaseLimitCommands.SetActiveAsync(limit.Id, !limit.IsActive); await MutationFeedback.RefreshAsync(ReloadAsync, NotificationService); }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to update purchase limit", exception.Message); }
+        finally { saving = false; }
+    }
+
     private sealed class ShopItemForm
     {
         public string Key { get; set; } = string.Empty;
@@ -213,6 +345,22 @@
         public string Description { get; set; } = string.Empty;
         public int Price { get; set; } = 1;
         public int MaxPerUser { get; set; } = 1;
+        public string PurchaseLimitKey { get; set; } = string.Empty;
+        public Guid? PurchaseLimitId { get; set; }
+        public int? MaxActivePerUser { get; set; }
+        public int? MaxPerDay { get; set; }
+        public int? MaxPerWeek { get; set; }
+        public int? MaxPerMonth { get; set; }
         public IEnumerable<Guid> AchievementIds { get; set; } = [];
     }
+
+    private IReadOnlyList<ShopPurchaseLimitDto> purchaseLimits = [];
+    private IReadOnlyList<ShopPurchaseLimitDto> activePurchaseLimits => purchaseLimits.Where(x => x.IsActive).ToArray();
+    private Guid? editingLimitId;
+    private string limitKey = string.Empty;
+    private int? limitMaxPerUser;
+    private int? limitMaxActive;
+    private int? limitDaily;
+    private int? limitWeekly;
+    private int? limitMonthly;
 }

@@ -24,24 +24,33 @@ public sealed class DkpPresetCommandService(CommandContext context, IPresetRepos
             var now = time.GetUtcNow().UtcDateTime;
             var preset = new DkpAwardPreset(input.Name.Trim(), input.Amount, input.Reason.Trim(), input.MaxApplicationsPerUser, now);
             await presets.AddAsync(preset, ct);
-            await outbox.AddAsync(SourceNotificationFactory.Create("DKP preset", preset.Name, preset.Reason, preset.Amount, preset.MaxApplicationsPerUser, officer.DiscordName, now), ct);
+            await outbox.AddAsync(SourceNotificationFactory.Create("DKP preset", preset.Id, preset.Name, preset.Reason, preset.Amount, preset.MaxApplicationsPerUser, officer.DiscordName, now), ct);
             return Dto(preset);
         }, ct);
 
     public Task<DkpAwardPresetDto> UpdateAsync(Guid presetId, DkpAwardPresetInput input, CancellationToken ct = default)
-        => context.ExecuteAsync([], true, async _ =>
+        => context.ExecuteAsync([], true, async officer =>
         {
             Validate(input);
             var preset = await presets.FindAsync(presetId, ct) ?? throw new KeyNotFoundException("Preset not found.");
-            preset.Update(input.Name.Trim(), input.Amount, input.Reason.Trim(), input.MaxApplicationsPerUser, time.GetUtcNow().UtcDateTime);
+            var now = time.GetUtcNow().UtcDateTime;
+            preset.Update(input.Name.Trim(), input.Amount, input.Reason.Trim(), input.MaxApplicationsPerUser, now);
+            if (preset.IsActive)
+            {
+                var payload = System.Text.Json.JsonSerializer.Serialize(new { Kind = "DKP preset", SourceId = preset.Id, preset.Name, Description = preset.Reason, Amount = preset.Amount, Limit = (int?)preset.MaxApplicationsPerUser, CreatedBy = officer.DiscordName, CreatedAtUtc = now });
+                await outbox.SyncSourceAsync(preset.Id, preset.Name, payload, false, now, ct);
+            }
             return Dto(preset);
         }, ct);
 
     public Task SetActiveAsync(Guid presetId, bool active, CancellationToken ct = default)
-        => context.ExecuteAsync([], true, async _ =>
+        => context.ExecuteAsync([], true, async officer =>
         {
             var preset = await presets.FindAsync(presetId, ct) ?? throw new KeyNotFoundException("Preset not found.");
-            preset.SetActive(active, time.GetUtcNow().UtcDateTime);
+            var now = time.GetUtcNow().UtcDateTime;
+            preset.SetActive(active, now);
+            var payload = System.Text.Json.JsonSerializer.Serialize(new { Kind = "DKP preset", SourceId = preset.Id, preset.Name, Description = preset.Reason, Amount = preset.Amount, Limit = (int?)preset.MaxApplicationsPerUser, CreatedBy = officer.DiscordName, CreatedAtUtc = now });
+            await outbox.SyncSourceAsync(preset.Id, preset.Name, payload, !active, now, ct);
             return true;
         }, ct);
 

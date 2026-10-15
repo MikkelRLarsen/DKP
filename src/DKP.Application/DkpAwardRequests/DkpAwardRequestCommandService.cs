@@ -6,7 +6,7 @@ using DKP.Facade.Contracts;
 
 namespace DKP.Application.DkpAwardRequests;
 
-public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAwardRequestRepository requests, IPresetRepository presets, IAchievementRepository achievements, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IDkpAwardRequestCommands
+public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAwardRequestRepository requests, IPresetRepository presets, IAchievementRepository achievements, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IDkpAwardRequestCommands, IBotAwardRequestReviewCommands
 {
     public Task<DkpAwardRequestDto> CreateAsync(CreateDkpAwardRequestRequest input, CancellationToken ct = default) => context.ExecuteAsync([], false, async actor =>
     {
@@ -20,7 +20,9 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
             var preset = await presets.FindAsync(presetId, ct) ?? throw new KeyNotFoundException("Preset not found.");
             if (!preset.IsActive) throw new InvalidOperationException("Preset is inactive.");
             var state = await ledger.GetStateAsync(actor.Id, ct);
-            if (state.PresetUsage.GetValueOrDefault(preset.Id) + input.Quantity > preset.MaxApplicationsPerUser) throw new InvalidOperationException("The requested quantity exceeds your remaining lifetime limit.");
+            var approved = state.PresetUsage.GetValueOrDefault(preset.Id);
+            var pending = await requests.GetPendingQuantityAsync(actor.Id, preset.Id, ct);
+            if (approved + pending + input.Quantity > preset.MaxApplicationsPerUser) throw new InvalidOperationException($"The requested quantity exceeds your remaining lifetime limit. You have {Math.Max(0, preset.MaxApplicationsPerUser - approved - pending)} remaining after pending requests.");
             var request = new DkpAwardRequest(actor.Id, preset.Id, null, input.Quantity, comment, time.GetUtcNow().UtcDateTime);
             await requests.AddAsync(request, ct);
             await outbox.AddAsync(RequestNotificationFactory.Create(request, actor.DiscordName, preset.Name, preset.Amount, "DKP", request.CreatedAtUtc), ct);
@@ -45,7 +47,15 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
     public Task ApproveAsync(Guid requestId, ReviewDkpAwardRequestRequest input, CancellationToken ct = default) => ReviewAsync(requestId, input.Comment, true, ct);
     public Task RejectAsync(Guid requestId, ReviewDkpAwardRequestRequest input, CancellationToken ct = default) => ReviewAsync(requestId, input.Comment, false, ct);
 
-    private Task<bool> ReviewAsync(Guid requestId, string? rawComment, bool approve, CancellationToken ct) => context.ExecuteAsync([requestId], true, async officer =>
+    public Task<bool> ApproveAsync(string discordId, Guid requestId, string? comment, CancellationToken ct = default)
+        => ReviewAsync(requestId, comment, true, ct, discordId);
+
+    public Task<bool> RejectAsync(string discordId, Guid requestId, string? comment, CancellationToken ct = default)
+        => ReviewAsync(requestId, comment, false, ct, discordId);
+
+    private Task<bool> ReviewAsync(Guid requestId, string? rawComment, bool approve, CancellationToken ct, string? discordId = null)
+    {
+        Func<User, Task<bool>> action = async officer =>
     {
         var request = await requests.FindAsync(requestId, ct) ?? throw new KeyNotFoundException("DKP request not found.");
         var target = await context.TargetAsync(request.UserId, ct);
@@ -98,7 +108,11 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
         await outbox.AddAsync(RequestNotificationFactory.CreateReview(request, target.DiscordId, target.DiscordName, sourceName, sourceAmount, sourceKind, true, reviewComment, officer.DiscordName, now), ct);
         await outbox.RequestDeletionAsync(request.Id, now, ct);
         return true;
-    }, ct);
+    };
+        return discordId is null
+            ? context.ExecuteAsync([requestId], true, action, ct)
+            : context.ExecuteAsDiscordUserAsync(discordId, [requestId], true, action, ct);
+    }
 
     private static string? Normalize(string? value, string field) { if (string.IsNullOrWhiteSpace(value)) return null; var result = value.Trim(); if (result.Length > 500) throw new ArgumentException($"{field} must be at most 500 characters."); return result; }
     private static DkpAwardRequestDto ToDto(DkpAwardRequest request, string discordName, AchievementDefinition? achievement, DkpAwardPreset? preset, string? reviewer) => new(request.Id, request.UserId, discordName, null, request.PresetId, request.AchievementId, achievement?.Name ?? preset!.Name, achievement?.DkpAmount ?? preset!.Amount, request.Quantity, achievement?.Description ?? preset!.Reason, request.Comment, ToStatus(request.Status), request.CreatedAtUtc, request.ReviewedAtUtc, reviewer, request.ReviewComment, request.DkpEventIds);

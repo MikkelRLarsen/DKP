@@ -6,5 +6,6 @@ public interface IDkpAwardRequestRepository
 {
     Task<DkpAwardRequest?> FindAsync(Guid id, CancellationToken cancellationToken = default);
     Task<bool> HasPendingAsync(Guid userId, Guid? presetId, Guid? achievementId, CancellationToken cancellationToken = default);
+    Task<int> GetPendingQuantityAsync(Guid userId, Guid presetId, CancellationToken cancellationToken = default);
     Task AddAsync(DkpAwardRequest request, CancellationToken cancellationToken = default);
 }

@@ -18,7 +18,27 @@ internal static class ReadModels
     {
         var items = await db.ShopItems.AsNoTracking().Where(x => !activeOnly || x.IsActive).OrderBy(x => x.Name).ThenBy(x => x.Id).ToArrayAsync(ct);
         var requirements = await db.ShopItemAchievementRequirements.AsNoTracking().Join(db.AchievementDefinitions.AsNoTracking(), r => r.AchievementId, a => a.Id, (r, a) => new { r.ShopItemId, Dto = new ShopItemAchievementRequirementDto(a.Id, a.Name) }).ToArrayAsync(ct);
-        return items.Select(x => new ShopItemDto(x.Id, x.Key, x.Name, x.Description, x.Price, x.MaxPerUser, x.IsActive, requirements.Where(r => r.ShopItemId == x.Id).Select(r => r.Dto).ToArray())).ToArray();
+        var limits = await db.ShopPurchaseLimits.AsNoTracking().ToDictionaryAsync(x => x.Id, ct);
+        return items.Select(x =>
+        {
+            var inherited = x.PurchaseLimitId is Guid limitId && limits.TryGetValue(limitId, out var configured) ? configured : null;
+            return new ShopItemDto(
+                x.Id,
+                x.Key,
+                x.Name,
+                x.Description,
+                x.Price,
+                inherited?.MaxPerUser ?? x.MaxPerUser,
+                x.IsActive,
+                requirements.Where(r => r.ShopItemId == x.Id).Select(r => r.Dto).ToArray(),
+                x.PurchaseLimitKey,
+                inherited?.MaxActivePerUser ?? x.MaxActivePerUser,
+                inherited?.MaxPerDay ?? x.MaxPerDay,
+                inherited?.MaxPerWeek ?? x.MaxPerWeek,
+                inherited?.MaxPerMonth ?? x.MaxPerMonth,
+                x.PurchaseLimitId,
+                inherited?.SharedKey, x.IsHidden);
+        }).ToArray();
     }
     public static async Task<DkpHistoryDto> HistoryAsync(DkpDbContext db, Guid id, CancellationToken ct)
     {

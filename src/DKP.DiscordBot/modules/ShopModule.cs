@@ -1,5 +1,7 @@
 using System.Text;
+using Discord;
 using Discord.Interactions;
+using Discord.WebSocket;
 
 namespace DKP.DiscordBot.modules;
 
@@ -17,7 +19,12 @@ public sealed class ShopModule(DkpApiClient api) : InteractionModuleBase<SocketI
         foreach (var item in items)
         {
             var requirements = item.AchievementRequirements is { Count: > 0 } ? $" | Requires: {string.Join(", ", item.AchievementRequirements.Select(x => x.AchievementName))}" : string.Empty;
-            output.AppendLine($"**{item.Name}**: {item.Price} DKP each, {item.RemainingQuantity} available of {item.MaxPerUser}{(item.IsAvailable ? string.Empty : " (unavailable)")}{requirements}");
+            var limits = new List<string> { $"{item.RemainingQuantity} available of {item.MaxPerUser}" };
+            if (item.MaxActivePerUser is int active) limits.Add($"active max {active}");
+            if (item.MaxPerDay is int daily) limits.Add($"daily max {daily}");
+            if (item.MaxPerWeek is int weekly) limits.Add($"weekly max {weekly}");
+            if (item.MaxPerMonth is int monthly) limits.Add($"monthly max {monthly}");
+            output.AppendLine($"**{item.Name}**: {item.Price} DKP each, {string.Join(", ", limits)}{(item.IsAvailable ? string.Empty : " (unavailable)")}{requirements}");
             if (!string.IsNullOrWhiteSpace(item.Description)) output.AppendLine($"  {item.Description}");
         }
         output.AppendLine("\nUse `/shop buy` and select an item from the dropdown, then enter the quantity.");
@@ -39,6 +46,69 @@ public sealed class ShopModule(DkpApiClient api) : InteractionModuleBase<SocketI
         }
         var purchase = await api.PurchaseAsync(Context.User.Id.ToString(), new ShopPurchaseInput(item.ShopItemId, quantity), CancellationToken.None);
         await ModifyOriginalResponseAsync(p => p.Content = purchase is null ? "The purchase could not be completed. Check your DKP, item limit and achievement requirements." : $"Purchase completed: **{purchase.Quantity} x {purchase.ItemName}** for **{purchase.TotalDkpCost} DKP**.");
+    }
+
+    [ComponentInteraction("shop:buy:*", true)]
+    public async Task BuyButtonAsync(string itemId)
+    {
+        if (!Guid.TryParse(itemId, out var id))
+        {
+            await RespondAsync("This shop item button is invalid.", ephemeral: true);
+            return;
+        }
+
+        try
+        {
+            var items = await api.GetShopAvailabilityAsync(Context.User.Id.ToString(), CancellationToken.None);
+            var item = items?.SingleOrDefault(x => x.ShopItemId == id);
+            if (item is null || !item.IsAvailable || item.RemainingQuantity <= 0)
+            {
+                await RespondAsync("This shop item is not available for you. Check your DKP, achievement requirements and purchase limit.", ephemeral: true);
+                return;
+            }
+
+            var maximum = Math.Min(item.RemainingQuantity, 25);
+            var menu = new SelectMenuBuilder()
+                .WithCustomId($"shop:quantity:{id:D}")
+                .WithPlaceholder("Select quantity")
+                .WithMinValues(1)
+                .WithMaxValues(1);
+            for (var quantity = 1; quantity <= maximum; quantity++)
+                menu.AddOption(quantity.ToString(), quantity.ToString(), $"Buy {quantity} x {item.Name}");
+
+            await RespondAsync($"Select quantity for **{item.Name}** (up to {item.RemainingQuantity}).", components: new ComponentBuilder().WithSelectMenu(menu).Build(), ephemeral: true);
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"Shop button failed for {id}: {exception.Message}");
+            await RespondAsync("The shop item could not be loaded. Please use `/shop buy` instead.", ephemeral: true);
+        }
+    }
+
+    [ComponentInteraction("shop:quantity:*", true)]
+    public async Task BuyQuantityAsync(string itemId)
+    {
+        var component = Context.Interaction as SocketMessageComponent;
+        var value = component?.Data.Values.FirstOrDefault();
+        if (!Guid.TryParse(itemId, out var id) || !int.TryParse(value, out var quantity) || quantity <= 0)
+        {
+            await RespondAsync("Select a valid quantity and try again.", ephemeral: true);
+            return;
+        }
+
+        await DeferAsync(ephemeral: true);
+        try
+        {
+            var purchase = await api.PurchaseAsync(Context.User.Id.ToString(), new ShopPurchaseInput(id, quantity), CancellationToken.None);
+            await ModifyOriginalResponseAsync(p => p.Content = purchase is null
+                ? "The purchase could not be completed. Check your DKP, item limit and achievement requirements."
+                : $"Purchase completed: **{purchase.Quantity} x {purchase.ItemName}** for **{purchase.TotalDkpCost} DKP**.");
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"Shop quantity selection failed for {id}: {exception.Message}");
+            await ModifyOriginalResponseAsync(p => p.Content = "The purchase could not be completed. Please try again.");
+        }
     }
 }
 

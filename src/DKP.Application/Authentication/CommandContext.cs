@@ -10,7 +10,13 @@ public sealed class CommandContext(ICurrentUser currentUser, IUserRepository use
     {
         var discordId = await currentUser.GetDiscordIdAsync(ct);
         if (string.IsNullOrWhiteSpace(discordId)) throw new UnauthorizedAccessException("Login is required.");
-        return await unitOfWork.ExecuteAsync(userIds, async () =>
+        return await ExecuteAsDiscordUserAsync(discordId, userIds, officerOnly, action, ct);
+    }
+
+    public Task<T> ExecuteAsDiscordUserAsync<T>(string discordId, IReadOnlyCollection<Guid> userIds, bool officerOnly, Func<User, Task<T>> action, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(discordId)) throw new UnauthorizedAccessException("A Discord user is required.");
+        return unitOfWork.ExecuteAsync(userIds, async () =>
         {
             var actor = await users.FindByDiscordIdAsync(discordId, ct);
             if (actor is null || actor.IsBlocked || (officerOnly && actor.Role != Domain.UserRole.Officer))

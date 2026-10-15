@@ -7,6 +7,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<User> Users => Set<User>();
     public DbSet<Character> Characters => Set<Character>();
     public DbSet<ShopItem> ShopItems => Set<ShopItem>();
+    public DbSet<ShopPurchaseLimit> ShopPurchaseLimits => Set<ShopPurchaseLimit>();
     public DbSet<DkpAwardPreset> DkpAwardPresets => Set<DkpAwardPreset>();
     public DbSet<DkpAwardRequest> DkpAwardRequests => Set<DkpAwardRequest>();
     public DbSet<DkpEvent> DkpEvents => Set<DkpEvent>();
@@ -14,6 +15,9 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
     public DbSet<ShopItemAchievementRequirement> ShopItemAchievementRequirements => Set<ShopItemAchievementRequirement>();
     public DbSet<DiscordNotificationOutbox> DiscordNotificationOutbox => Set<DiscordNotificationOutbox>();
+    public DbSet<BulletinItem> BulletinItems => Set<BulletinItem>();
+    public DbSet<BulletinClaim> BulletinClaims => Set<BulletinClaim>();
+    public DbSet<BulletinTemplate> BulletinTemplates => Set<BulletinTemplate>();
 
     private void GuardEvents()
     {
@@ -50,8 +54,16 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.Key).IsUnique();
             e.Property(x => x.Key).HasMaxLength(64);
+            e.Property(x => x.PurchaseLimitKey).HasMaxLength(64);
             e.Property(x => x.Name).HasMaxLength(128);
             e.Property(x => x.Description).HasMaxLength(500);
+            e.HasOne<ShopPurchaseLimit>().WithMany().HasForeignKey(x => x.PurchaseLimitId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<ShopPurchaseLimit>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.SharedKey).IsUnique();
+            e.Property(x => x.SharedKey).HasMaxLength(64);
         });
         model.Entity<ShopItemAchievementRequirement>(e =>
         {
@@ -110,6 +122,37 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.Property(x => x.LastError).HasMaxLength(500);
             e.HasIndex(x => new { x.SentAtUtc, x.NextAttemptAtUtc });
         });
+        model.Entity<BulletinItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(128);
+            e.Property(x => x.Description).HasMaxLength(2000);
+            e.HasIndex(x => new { x.IsActive, x.DeadlineUtc });
+            e.Property(x => x.IsHidden).HasDefaultValue(false);
+            e.Property(x => x.IsAutoDeactivated).HasDefaultValue(false);
+        });
+        model.Entity<BulletinClaim>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.Comment).HasMaxLength(500);
+            e.Property(x => x.ReviewComment).HasMaxLength(500);
+            e.Property(x => x.DkpEventIdsJson).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.BulletinItemId, x.Status });
+            e.HasIndex(x => new { x.UserId, x.BulletinItemId, x.Status });
+            e.HasOne<BulletinItem>().WithMany().HasForeignKey(x => x.BulletinItemId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<BulletinTemplate>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.Name).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(128);
+            e.Property(x => x.Title).HasMaxLength(128);
+            e.Property(x => x.Description).HasMaxLength(2000);
+            e.Property(x => x.DefaultDeadlineOffset).HasConversion<long?>();
+        });
         model.Entity<DkpEvent>(e =>
         {
             e.HasKey(x => x.Id);
@@ -123,8 +166,8 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
         });
         var seedTime = new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Utc);
-        model.Entity<ShopItem>().HasData(new { Id = Guid.Parse("00000000-0000-0000-0000-000000000008"), Key = "soft-reserve", Name = "Soft Reserve", Description = "Additional Soft Reserve", Price = 10, MaxPerUser = 2, IsActive = true, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)null });
+        model.Entity<ShopItem>().HasData(new { Id = Guid.Parse("00000000-0000-0000-0000-000000000008"), Key = "soft-reserve", Name = "Soft Reserve", Description = "Additional Soft Reserve", Price = 10, MaxPerUser = 2, IsActive = true, IsHidden = false, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)null });
         foreach (var (bonus, price) in new[] { (10, 10), (20, 30), (30, 60), (40, 120) })
-            model.Entity<ShopItem>().HasData(new { Id = Guid.Parse($"00000000-0000-0000-0000-{bonus:D12}"), Key = $"roll-bonus-{bonus}", Name = $"RollBonus {bonus}", Description = $"Roll bonus +{bonus}", Price = price, MaxPerUser = 1, IsActive = true, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)bonus });
+            model.Entity<ShopItem>().HasData(new { Id = Guid.Parse($"00000000-0000-0000-0000-{bonus:D12}"), Key = $"roll-bonus-{bonus}", Name = $"RollBonus {bonus}", Description = $"Roll bonus +{bonus}", Price = price, MaxPerUser = 1, IsActive = true, IsHidden = false, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)bonus });
     }
 }
