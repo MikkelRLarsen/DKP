@@ -175,6 +175,25 @@ Synkronisér aktive shop-items til `DISCORD_MEDLEM_CHANNEL_ID` via den eksistere
 
 Implementeret med `ShopItem`-outbox-synkronisering, `ShopItem`-notification rendering i botten samt `shop:buy`/`shop:quantity` component-flow. Der er ingen ny migration.
 
+## Slice 9 – Discord member-kanaler som threads
+
+Status: Implementeret.
+
+Medlemsnotifikationer routes nu automatisk til stabile Discord public threads under `DISCORD_MEDLEM_CHANNEL_ID`:
+
+- `Bulletin Board`
+- `Achievements`
+- `DKP Sources`
+- `Shop`
+
+Medlemsrouting kan konfigureres med `DISCORD_MEMBER_NOTIFICATION_MODE=text` eller `forum`.
+
+- `text` bruger `DISCORD_MEDLEM_CHANNEL_ID` som parent og opretter/genbruger public threads med de fire faste kategorinavne.
+- `forum` bruger manuelt oprettede forum-post/thread IDs fra `DISCORD_BULLETIN_THREAD_ID`, `DISCORD_ACHIEVEMENTS_THREAD_ID`, `DISCORD_DKP_SOURCES_THREAD_ID` og `DISCORD_SHOP_THREAD_ID`.
+- Eksisterende outbox-flow bruges fortsat til create, update og delete, så beskeder opdateres eller fjernes i korrekt kanal/thread.
+- Officer-notifikationer forbliver i `DISCORD_OFFICER_CHANNEL_ID`, og der sendes ingen pings.
+- Der er ingen databaseændringer.
+
 ## Teststrategi for V2
 
 Hver slice skal som minimum have:

@@ -41,7 +41,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         await client.StartAsync();
         notificationCts = new CancellationTokenSource();
         notificationTask = NotificationLoopAsync(notificationCts.Token);
-        logger.LogInformation("Discord notification delivery enabled. Officer channel: {OfficerChannelId}; member channel: {MemberChannelId}.", settings.NotificationChannelId, settings.MemberNotificationChannelId);
+        logger.LogInformation("Discord notification delivery enabled. Officer channel: {OfficerChannelId}; member mode: {MemberNotificationMode}; member channel: {MemberChannelId}.", settings.NotificationChannelId, settings.MemberNotificationMode, settings.MemberNotificationChannelId);
         logger.LogInformation("Discord bot startup initiated for guild {GuildId}.", settings.GuildId);
     }
 
@@ -60,7 +60,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                         {
                             if (notification.Action == "delete")
                             {
-                                var channel = GetNotificationChannel(notification.NotificationType);
+                                var channel = await GetNotificationChannelAsync(notification.NotificationType, notification.Payload);
                                 if (channel is null)
                                     throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
                                 if (notification.DiscordMessageId is ulong messageId)
@@ -83,7 +83,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                                 }
                                 else
                                 {
-                                    var channel = GetNotificationChannel(notification.NotificationType);
+                                    var channel = await GetNotificationChannelAsync(notification.NotificationType, notification.Payload);
                                     if (channel is null)
                                         throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
                                     var content = FormatNotification(notification.NotificationType, notification.Payload);
@@ -239,12 +239,72 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         }
     }
 
-    private IMessageChannel? GetNotificationChannel(string notificationType)
+    private async Task<IMessageChannel?> GetNotificationChannelAsync(string notificationType, string payload)
     {
-        var channelId = notificationType is "DkpSourceCreated" or "BulletinItem" or "ShopItem"
+        var isMemberNotification = notificationType is "DkpSourceCreated" or "BulletinItem" or "ShopItem";
+        if (isMemberNotification && settings.MemberNotificationMode == "forum")
+        {
+            var threadId = MemberThreadId(notificationType, payload);
+            if (threadId is not ulong configuredThreadId || client is null) return null;
+            if (client.GetChannel(configuredThreadId) is IMessageChannel cachedChannel) return cachedChannel;
+            try
+            {
+                return await client.Rest.GetChannelAsync(configuredThreadId) as IMessageChannel;
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Unable to resolve configured member forum thread {ThreadId}.", configuredThreadId);
+                return null;
+            }
+        }
+
+        var channelId = isMemberNotification
             ? settings.MemberNotificationChannelId
             : settings.NotificationChannelId;
-        return channelId is ulong id ? client?.GetChannel(id) as IMessageChannel : null;
+        if (channelId is not ulong id || client?.GetChannel(id) is not IMessageChannel channel) return null;
+        if (!isMemberNotification || channel is not ITextChannel parent) return channel;
+
+        var threadName = ThreadName(notificationType, payload);
+        if (threadName is null) return channel;
+
+        var activeThreads = await parent.GetActiveThreadsAsync();
+        var existing = activeThreads.FirstOrDefault(x => x.Name.Equals(threadName, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null) return existing;
+
+        logger.LogInformation("Creating Discord member thread {ThreadName} in channel {ChannelId}.", threadName, parent.Id);
+        return await parent.CreateThreadAsync(threadName, ThreadType.PublicThread, ThreadArchiveDuration.OneWeek);
+    }
+
+    private static string? ThreadName(string notificationType, string payload)
+    {
+        if (notificationType == "BulletinItem") return "Bulletin Board";
+        if (notificationType == "ShopItem") return "Shop";
+        if (notificationType == "DkpSourceCreated")
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(payload);
+                return GetString(document.RootElement, "Kind")?.Equals("Achievement", StringComparison.OrdinalIgnoreCase) == true
+                    ? "Achievements"
+                    : "DKP Sources";
+            }
+            catch (JsonException) { return "DKP Sources"; }
+        }
+
+        return null;
+    }
+
+    private ulong? MemberThreadId(string notificationType, string payload)
+    {
+        var threadName = ThreadName(notificationType, payload);
+        return threadName switch
+        {
+            "Bulletin Board" => settings.BulletinThreadId,
+            "Achievements" => settings.AchievementsThreadId,
+            "DKP Sources" => settings.DkpSourcesThreadId,
+            "Shop" => settings.ShopThreadId,
+            _ => null
+        };
     }
 
     private static MessageComponent? BuildBulletinComponents(string payload)
