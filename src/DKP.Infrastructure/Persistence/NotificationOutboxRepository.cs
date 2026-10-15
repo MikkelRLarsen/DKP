@@ -12,10 +12,10 @@ public sealed class NotificationOutboxRepository(CommandUnitOfWork session) : IN
         return Task.CompletedTask;
     }
 
-    public async Task RequestDeletionAsync(Guid requestId, DateTime nowUtc, CancellationToken ct = default)
+    public async Task RequestDeletionAsync(Guid requestId, DateTime nowUtc, CancellationToken ct = default, string notificationType = "DkpAwardRequestCreated")
     {
         var notification = await session.Db.DiscordNotificationOutbox
-            .SingleOrDefaultAsync(x => x.RequestId == requestId && x.NotificationType == "DkpAwardRequestCreated", ct);
+            .SingleOrDefaultAsync(x => x.RequestId == requestId && x.NotificationType == notificationType, ct);
         notification?.RequestDeletion(nowUtc);
     }
 

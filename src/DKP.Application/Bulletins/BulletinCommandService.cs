@@ -58,6 +58,7 @@ public sealed class BulletinCommandService(CommandContext context, IBulletinRepo
         if (input.Quantity > item.MaxCompletions - reserved) throw new InvalidOperationException("The requested quantity exceeds the remaining charges.");
         var claim = new BulletinClaim(item.Id, actor.Id, input.Quantity, input.Comment, now);
         await repository.AddClaimAsync(claim, ct);
+        await outbox.AddAsync(CreateClaimNotification(claim, item, actor, now), ct);
         await SyncNotificationAsync(item, now, ct);
         return ToClaimDto(claim, actor, item, null);
     }, ct);
@@ -69,6 +70,7 @@ public sealed class BulletinCommandService(CommandContext context, IBulletinRepo
         var now = time.GetUtcNow().UtcDateTime;
         claim.Cancel(now);
         var item = await repository.FindItemAsync(claim.BulletinItemId, ct) ?? throw new KeyNotFoundException("Bulletin item not found.");
+        await outbox.RequestDeletionAsync(claim.Id, now, ct, "BulletinClaimCreated");
         await SyncNotificationAsync(item, now, ct);
         return true;
     }, ct);
@@ -97,6 +99,7 @@ public sealed class BulletinCommandService(CommandContext context, IBulletinRepo
         if (!approve)
         {
             claim.Reject(officer.Id, comment, now);
+            await outbox.RequestDeletionAsync(claim.Id, now, ct, "BulletinClaimCreated");
             await SyncNotificationAsync(item, now, ct);
             return true;
         }
@@ -104,6 +107,7 @@ public sealed class BulletinCommandService(CommandContext context, IBulletinRepo
         var amount = checked(item.DkpAmount * claim.Quantity);
         var entry = await ledger.PostAsync(target.Id, officer.Id, operationId, now, new DkpPosted(amount, item.Title), ct);
         claim.Approve(officer.Id, [entry.Id], comment, now);
+        await outbox.RequestDeletionAsync(claim.Id, now, ct, "BulletinClaimCreated");
         if (await repository.GetReservedQuantityAsync(item.Id, ct) >= item.MaxCompletions && await repository.GetPendingQuantityAsync(item.Id, ct) == 0) item.DeactivateAutomatically(now);
         await SyncNotificationAsync(item, now, ct);
         return true;
@@ -116,11 +120,23 @@ public sealed class BulletinCommandService(CommandContext context, IBulletinRepo
         var remaining = Math.Max(0, item.MaxCompletions - reserved);
         var delete = !item.IsActive || item.IsHidden || item.IsExpired(now) || (remaining == 0 && pending == 0);
         var payload = JsonSerializer.Serialize(new BulletinNotificationPayload(
-            item.Title, item.Description, item.DkpAmount, item.DeadlineUtc, remaining, pending, item.MaxCompletions, now));
+            item.Id, item.Title, item.Description, item.DkpAmount, item.DeadlineUtc, remaining, pending, item.MaxCompletions, now));
         await outbox.SyncBulletinAsync(item.Id, payload, delete, now, ct);
     }
 
-    private sealed record BulletinNotificationPayload(string Title, string Description, int DkpAmount, DateTime? DeadlineUtc, int RemainingQuantity, int PendingQuantity, int MaxCompletions, DateTime UpdatedAtUtc);
+    private sealed record BulletinNotificationPayload(Guid BulletinItemId, string Title, string Description, int DkpAmount, DateTime? DeadlineUtc, int RemainingQuantity, int PendingQuantity, int MaxCompletions, DateTime UpdatedAtUtc);
+
+    private static DiscordNotificationOutbox CreateClaimNotification(BulletinClaim claim, BulletinItem item, User user, DateTime now)
+        => new("BulletinClaimCreated", JsonSerializer.Serialize(new
+        {
+            ClaimId = claim.Id,
+            BulletinItemId = item.Id,
+            item.Title,
+            item.DkpAmount,
+            UserName = user.DiscordName,
+            Quantity = claim.Quantity,
+            claim.CreatedAtUtc
+        }), now, claim.Id);
 
     private static BulletinItemDto ToItemDto(BulletinItem item, int reserved, int approved, DateTime now) => new(item.Id, item.Title, item.Description, item.DkpAmount, item.MaxCompletions, reserved - approved, approved, Math.Max(0, item.MaxCompletions - reserved), item.UniquePerUser, item.DeadlineUtc, item.IsActive, item.IsEffectivelyActive(now, reserved), item.CreatedAtUtc, item.UpdatedAtUtc, item.IsHidden, false);
     private static BulletinClaimDto ToClaimDto(BulletinClaim claim, User user, BulletinItem item, string? reviewer) => new(claim.Id, item.Id, user.Id, user.DiscordName, user.Characters.FirstOrDefault(x => x.IsMain) is { } main ? $"{main.FirstName} {main.LastName}" : null, item.Title, claim.Quantity, claim.Comment, (DKP.Facade.Contracts.BulletinClaimStatus)claim.Status, claim.CreatedAtUtc, claim.ReviewedAtUtc, reviewer, claim.ReviewComment, claim.DkpEventIds);

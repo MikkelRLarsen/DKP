@@ -116,6 +116,44 @@ public sealed class ShopItemAutocompleteHandler : AutocompleteHandler
     private static string Shorten(string value) => value.Length <= 100 ? value : value[..97] + "...";
 }
 
+public sealed class BulletinItemAutocompleteHandler : AutocompleteHandler
+{
+    public override async Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction interaction, IParameterInfo parameter, IServiceProvider services)
+    {
+        var api = services.GetRequiredService<DkpApiClient>();
+        var items = await api.GetBulletinItemsAsync(context.User.Id.ToString(), CancellationToken.None);
+        if (items is null) return AutocompletionResult.FromSuccess([]);
+        var input = interaction.Data.Current.Value?.ToString() ?? string.Empty;
+        var suggestions = items
+            .Where(x => string.IsNullOrWhiteSpace(input) || x.Title.Contains(input, StringComparison.OrdinalIgnoreCase) || x.Description.Contains(input, StringComparison.OrdinalIgnoreCase))
+            .Take(25)
+            .Select(x => new AutocompleteResult(Shorten($"{x.Title} ({x.DkpAmount} DKP, {x.RemainingQuantity} left)"), x.Id.ToString("D")))
+            .ToArray();
+        return AutocompletionResult.FromSuccess(suggestions);
+    }
+
+    private static string Shorten(string value) => value.Length <= 100 ? value : value[..97] + "...";
+}
+
+public sealed class BulletinClaimAutocompleteHandler : AutocompleteHandler
+{
+    public override async Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction interaction, IParameterInfo parameter, IServiceProvider services)
+    {
+        var api = services.GetRequiredService<DkpApiClient>();
+        var claims = await api.GetPendingBulletinClaimsAsync(context.User.Id.ToString(), CancellationToken.None);
+        if (claims is null) return AutocompletionResult.FromSuccess([]);
+        var input = interaction.Data.Current.Value?.ToString() ?? string.Empty;
+        var suggestions = claims
+            .Where(x => string.IsNullOrWhiteSpace(input) || x.BulletinTitle.Contains(input, StringComparison.OrdinalIgnoreCase) || x.DiscordName.Contains(input, StringComparison.OrdinalIgnoreCase))
+            .Take(25)
+            .Select(x => new AutocompleteResult(Shorten($"{x.BulletinTitle} - {x.DiscordName} x{x.Quantity}"), x.Id.ToString("D")))
+            .ToArray();
+        return AutocompletionResult.FromSuccess(suggestions);
+    }
+
+    private static string Shorten(string value) => value.Length <= 100 ? value : value[..97] + "...";
+}
+
 public sealed class PurchaseAutocompleteHandler : AutocompleteHandler
 {
     public override async Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction interaction, IParameterInfo parameter, IServiceProvider services)

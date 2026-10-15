@@ -12,6 +12,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
     private DiscordSocketClient? client;
     private InteractionService? interactions;
     private ServiceProvider? services;
+    private ulong? bulletinCommandId;
     private CancellationTokenSource? notificationCts;
     private Task? notificationTask;
 
@@ -24,7 +25,12 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             AlwaysDownloadUsers = false
         });
         interactions = new InteractionService(client.Rest, new InteractionServiceConfig { EnableAutocompleteHandlers = true });
-        services = new ServiceCollection().AddSingleton(api).AddSingleton(settings).AddSingleton(interactions).BuildServiceProvider();
+        services = new ServiceCollection()
+            .AddLogging()
+            .AddSingleton(api)
+            .AddSingleton(settings)
+            .AddSingleton(interactions)
+            .BuildServiceProvider();
         client.Log += LogAsync;
         client.Ready += RegisterCommandsAsync;
         client.Disconnected += exception => { logger.LogWarning(exception, "Discord Gateway disconnected; the client will reconnect."); return Task.CompletedTask; };
@@ -80,22 +86,32 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                                     if (channel is null)
                                         throw new InvalidOperationException("The configured Discord notification channel is unavailable.");
                                     var content = FormatNotification(notification.NotificationType, notification.Payload);
+                                    var components = notification.NotificationType switch
+                                    {
+                                        "BulletinItem" => BuildBulletinComponents(notification.Payload),
+                                        "BulletinClaimCreated" => BuildBulletinClaimComponents(notification.Payload),
+                                        _ => null
+                                    };
                                     if (notification.Action == "update" && notification.DiscordMessageId is ulong messageId)
                                     {
                                         var existing = await channel.GetMessageAsync(messageId);
                                         if (existing is IUserMessage existingUserMessage)
                                         {
-                                            await existingUserMessage.ModifyAsync(properties => properties.Content = content);
+                                            await existingUserMessage.ModifyAsync(properties =>
+                                            {
+                                                properties.Content = content;
+                                                properties.Components = components;
+                                            });
                                             message = existingUserMessage;
                                         }
                                         else
                                         {
-                                            message = await channel.SendMessageAsync(content, allowedMentions: AllowedMentions.None);
+                                            message = await channel.SendMessageAsync(content, components: components, allowedMentions: AllowedMentions.None);
                                         }
                                     }
                                     else
                                     {
-                                        message = await channel.SendMessageAsync(content, allowedMentions: AllowedMentions.None);
+                                        message = await channel.SendMessageAsync(content, components: components, allowedMentions: AllowedMentions.None);
                                     }
                                 }
                                 await api.MarkNotificationSentAsync(notification.Id, message.Id, cancellationToken);
@@ -120,7 +136,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         }
     }
 
-    private static string FormatNotification(string notificationType, string payload)
+    private string FormatNotification(string notificationType, string payload)
     {
         try
         {
@@ -134,10 +150,13 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                 var remaining = root.TryGetProperty("RemainingQuantity", out var remainingElement) ? remainingElement.GetInt32() : 0;
                 var pending = root.TryGetProperty("PendingQuantity", out var pendingElement) ? pendingElement.GetInt32() : 0;
                 var max = root.TryGetProperty("MaxCompletions", out var maxElement) ? maxElement.GetInt32() : 0;
-                var bulletinMessage = $"**{title}**\n{description}\nDKP: {dkp}\nRemaining: {remaining}/{max}";
+                var bulletinMessage = $"📌 **BULLETIN BOARD ITEM**\n\n**{title}**\n{description}\n\nDKP reward: {dkp}\nAvailable quantity: {remaining}/{max}";
                 if (pending > 0) bulletinMessage += $"\nPending claims: {pending}";
                 if (root.TryGetProperty("DeadlineUtc", out var deadline) && deadline.ValueKind != JsonValueKind.Null && deadline.TryGetDateTime(out var deadlineUtc))
                     bulletinMessage += $"\nDeadline: {deadlineUtc:u}";
+                bulletinMessage += bulletinCommandId is ulong commandId
+                    ? $"\n\nUse </bulletin claim:{commandId}> or press **Claim Bulletin Item**."
+                    : "\n\nUse `/bulletin claim` or press **Claim Bulletin Item**.";
                 return bulletinMessage.Trim();
             }
             if (notificationType == "DkpSourceCreated")
@@ -153,6 +172,18 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                 if (!string.IsNullOrWhiteSpace(createdBy)) sourceMessage += $"\nCreated by: {createdBy}";
                 if (root.TryGetProperty("CreatedAtUtc", out var createdAtElement) && createdAtElement.TryGetDateTime(out var createdAt)) sourceMessage += $"\nTime: {createdAt:u}";
                 return string.IsNullOrWhiteSpace(description) ? sourceMessage : $"{sourceMessage}\nDescription: {description}";
+            }
+            if (notificationType == "BulletinClaimCreated")
+            {
+                var title = Safe(GetString(root, "Title") ?? "Bulletin item");
+                var claimUser = Safe(GetString(root, "UserName") ?? "Unknown member");
+                var claimQuantity = root.TryGetProperty("Quantity", out var claimQuantityElement) ? claimQuantityElement.GetInt32() : 1;
+                var dkp = root.TryGetProperty("DkpAmount", out var dkpElement) ? dkpElement.GetInt32() : 0;
+                var claimMessage = $"🛡️ **NEW BULLETIN CLAIM**\n\nPlayer: **{claimUser}**\nItem: **{title}**\nQuantity: **{claimQuantity}**\nDKP reward: **{dkp}**";
+                claimMessage += bulletinCommandId is ulong commandId
+                    ? $"\n\nApprove with </bulletin approve:{commandId}> or press **Approve Bulletin Claim**."
+                    : "\n\nApprove with `/bulletin approve` or press **Approve Bulletin Claim**.";
+                return claimMessage;
             }
             var kind = Safe(GetString(root, "Kind") ?? "DKP");
             var user = Safe(GetString(root, "UserName") ?? "Unknown user");
@@ -171,10 +202,38 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
 
     private IMessageChannel? GetNotificationChannel(string notificationType)
     {
-        var channelId = notificationType == "DkpSourceCreated"
+        var channelId = notificationType is "DkpSourceCreated" or "BulletinItem"
             ? settings.MemberNotificationChannelId
             : settings.NotificationChannelId;
         return channelId is ulong id ? client?.GetChannel(id) as IMessageChannel : null;
+    }
+
+    private static MessageComponent? BuildBulletinComponents(string payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("BulletinItemId", out var id) || !Guid.TryParse(id.GetString(), out var itemId)) return null;
+            return new ComponentBuilder()
+                .WithButton("Claim Bulletin Item", $"bulletin:claim:{itemId:D}", ButtonStyle.Primary)
+                .Build();
+        }
+        catch (JsonException) { return null; }
+    }
+
+    private static MessageComponent? BuildBulletinClaimComponents(string payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("ClaimId", out var id) || !Guid.TryParse(id.GetString(), out var claimId)) return null;
+            return new ComponentBuilder()
+                .WithButton("Review Bulletin Claim", $"bulletin:review:{claimId:D}", ButtonStyle.Primary)
+                .Build();
+        }
+        catch (JsonException) { return null; }
     }
 
     private static string FormatPrivateNotification(string payload)
@@ -218,6 +277,11 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                 try
                 {
                     await interactions.RegisterCommandsToGuildAsync(settings.GuildId, true);
+                    if (client.GetGuild(settings.GuildId) is { } guild)
+                    {
+                        var registered = await guild.GetApplicationCommandsAsync();
+                        bulletinCommandId = registered.FirstOrDefault(x => x.Name.Equals("bulletin", StringComparison.OrdinalIgnoreCase))?.Id;
+                    }
                     logger.LogInformation("Registered Discord commands for guild {GuildId}.", settings.GuildId);
                     return;
                 }

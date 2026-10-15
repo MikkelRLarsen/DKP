@@ -114,6 +114,8 @@ public static class DependencyInjection
 		services.AddScoped<IBulletinRepository, BulletinRepository>();
 		services.AddScoped<IBulletinCommands, BulletinCommandService>();
 		services.AddScoped<IBulletinQueries, BulletinQueries>();
+		services.AddScoped<IBotBulletinQueries, BotBulletinQueries>();
+		services.AddScoped<IBotBulletinCommands, BotBulletinCommandService>();
 		services.AddHostedService<BulletinExpirationWorker>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));

@@ -52,11 +52,13 @@ Der bruges stabil notification identity og message metadata, så beskeden kan re
 
 ## Slice 3 – Discord interaction PoC
 
-Status: Planlagt.
+Status: Implementeret.
 
-Lav en PoC, hvor begge Discord-modeller kan testes på et bulletin item.
+Lav en PoC, hvor begge Discord-modeller kan testes på et bulletin item. Begge flows bruger de samme bot-API-contracts og den eksisterende serverside claim-validering.
 
 ### 3.a Klikbar slash-command mention
+
+Bulletin-opslag indeholder en Discord command mention til `/bulletin claim`, når botten har registreret commandens guild-ID. Commanden viser item-autocomplete og quantity-parameter.
 
 Bulletin-beskeden viser en klikbar command mention:
 
@@ -74,15 +76,7 @@ PoC’en skal dokumentere, at command mention ikke nødvendigvis kan pre-udfylde
 
 ### 3.b Button-flow
 
-Bulletin-beskeden viser en `Claim`-knap med et kort `custom_id`:
-
-```text
-bulletin:claim:<bulletin-id>
-```
-
-Knappen skal identificere det konkrete item automatisk. Quantity testes via modal eller select menu; fallback er quantity `1`.
-
-Begge PoC-flows kalder samme API/Application-command og har ingen egen business logic i botten. Tests dækker quantity, stale items, concurrency, `UniquePerUser`, deferred responses og neutral fejlfeedback.
+Bulletin-opslag kan vise en `Claim`-knap. Knappen henter den aktuelle resterende quantity for den bruger, viser et ephemeral quantity-dropdown og kalder derefter samme `/api/bot/bulletin/claims`-flow som slash-commanden. Unique-per-user items viser kun quantity `1`. Der anvendes ikke modal.
 
 ## Slice 4 – Bulletin templates
 
