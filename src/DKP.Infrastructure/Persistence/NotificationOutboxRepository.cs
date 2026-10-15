@@ -75,4 +75,25 @@ public sealed class NotificationOutboxRepository(CommandUnitOfWork session) : IN
 
         notification.QueueUpdate(payload, nowUtc);
     }
+
+    public async Task SyncShopItemAsync(Guid shopItemId, string itemName, string payload, bool delete, DateTime nowUtc, CancellationToken ct = default)
+    {
+        var notification = await session.Db.DiscordNotificationOutbox
+            .SingleOrDefaultAsync(x => x.RequestId == shopItemId && x.NotificationType == "ShopItem", ct);
+
+        if (notification is null)
+        {
+            if (!delete)
+                session.Db.DiscordNotificationOutbox.Add(new DiscordNotificationOutbox("ShopItem", payload, nowUtc, shopItemId));
+            return;
+        }
+
+        if (delete)
+        {
+            notification.RequestDeletion(nowUtc);
+            return;
+        }
+
+        notification.QueueUpdate(payload, nowUtc);
+    }
 }

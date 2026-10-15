@@ -35,7 +35,10 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
                 null, string.IsNullOrWhiteSpace(input.PurchaseLimitKey) ? null : input.PurchaseLimitKey.Trim(), input.MaxActivePerUser, input.MaxPerDay, input.MaxPerWeek, input.MaxPerMonth);
             item.SetPurchaseLimit(input.PurchaseLimitId, time.GetUtcNow().UtcDateTime);
             await catalog.AddItemAsync(item, ct);
-            await ReplaceRequirementsAsync(item, input.AchievementIds, ct); return await Dto(item, ct);
+            await ReplaceRequirementsAsync(item, input.AchievementIds, ct);
+            var inherited = item.PurchaseLimitId is Guid inheritedLimitId ? await purchaseLimits.FindAsync(inheritedLimitId, ct) : null;
+            await outbox.AddAsync(ShopNotificationFactory.CreateCatalog(item, inherited, time.GetUtcNow().UtcDateTime), ct);
+            return await Dto(item, ct);
         }, ct);
     public Task<ShopItemDto> UpdateItemAsync(Guid itemId, ShopItemInput input, CancellationToken ct = default)
         => context.ExecuteAsync([], true, async _ =>
@@ -48,13 +51,16 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
             item.Update(input.Name.Trim(), input.Description.Trim(), input.Price, input.MaxPerUser, time.GetUtcNow().UtcDateTime,
                 string.IsNullOrWhiteSpace(input.PurchaseLimitKey) ? null : input.PurchaseLimitKey.Trim(), input.MaxActivePerUser, input.MaxPerDay, input.MaxPerWeek, input.MaxPerMonth);
             item.SetPurchaseLimit(input.PurchaseLimitId, time.GetUtcNow().UtcDateTime);
-            await ReplaceRequirementsAsync(item, input.AchievementIds, ct); return await Dto(item, ct);
+            await ReplaceRequirementsAsync(item, input.AchievementIds, ct);
+            await SyncCatalogNotificationAsync(item, ct);
+            return await Dto(item, ct);
         }, ct);
     public Task SetActiveAsync(Guid itemId, bool active, CancellationToken ct = default)
         => context.ExecuteAsync([], true, async _ =>
         {
             var item = await catalog.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Item not found.");
             item.SetActive(active, time.GetUtcNow().UtcDateTime);
+            await SyncCatalogNotificationAsync(item, ct);
             return true;
         }, ct);
 
@@ -63,8 +69,16 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
         {
             var item = await catalog.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Item not found.");
             item.SetHidden(hidden, time.GetUtcNow().UtcDateTime);
+            await SyncCatalogNotificationAsync(item, ct);
             return true;
         }, ct);
+
+    private async Task SyncCatalogNotificationAsync(ShopItem item, CancellationToken ct)
+    {
+        var now = time.GetUtcNow().UtcDateTime;
+        var inherited = item.PurchaseLimitId is Guid limitId ? await purchaseLimits.FindAsync(limitId, ct) : null;
+        await outbox.SyncShopItemAsync(item.Id, item.Name, ShopNotificationFactory.CatalogPayload(item, inherited, now), !item.IsActive || item.IsHidden, now, ct);
+    }
 
     public Task<IReadOnlyList<ShopPurchaseDto>> PurchaseAsync(ShopPurchaseRequest request, CancellationToken ct = default)
         => context.ExecuteAsync<IReadOnlyList<ShopPurchaseDto>>([], false,

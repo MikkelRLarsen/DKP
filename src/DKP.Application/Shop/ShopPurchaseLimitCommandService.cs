@@ -6,7 +6,7 @@ using DKP.Application.Authentication;
 
 namespace DKP.Application.Shop;
 
-public sealed class ShopPurchaseLimitCommandService(CommandContext context, IShopPurchaseLimitRepository repository, TimeProvider time) : IShopPurchaseLimitCommands
+public sealed class ShopPurchaseLimitCommandService(CommandContext context, IShopPurchaseLimitRepository repository, IShopRepository catalog, INotificationOutboxRepository outbox, TimeProvider time) : IShopPurchaseLimitCommands
 {
     private static void Validate(ShopPurchaseLimitInput input)
     {
@@ -32,6 +32,7 @@ public sealed class ShopPurchaseLimitCommandService(CommandContext context, ISho
             Validate(input);
             var limit = await repository.FindAsync(id, ct) ?? throw new KeyNotFoundException("Purchase limit not found.");
             limit.Update(input.SharedKey.Trim(), input.MaxPerUser, input.MaxActivePerUser, input.MaxPerDay, input.MaxPerWeek, input.MaxPerMonth, time.GetUtcNow().UtcDateTime);
+            await SyncLinkedItemsAsync(limit.Id, ct);
             return Dto(limit);
         }, ct);
 
@@ -40,6 +41,17 @@ public sealed class ShopPurchaseLimitCommandService(CommandContext context, ISho
         {
             var limit = await repository.FindAsync(id, ct) ?? throw new KeyNotFoundException("Purchase limit not found.");
             limit.SetActive(active, time.GetUtcNow().UtcDateTime);
+            await SyncLinkedItemsAsync(limit.Id, ct);
             return true;
         }, ct);
+
+    private async Task SyncLinkedItemsAsync(Guid limitId, CancellationToken ct)
+    {
+        var now = time.GetUtcNow().UtcDateTime;
+        var limit = await repository.FindAsync(limitId, ct) ?? throw new KeyNotFoundException("Purchase limit not found.");
+        foreach (var item in (await catalog.GetItemsAsync(ct)).Where(x => x.PurchaseLimitId == limitId))
+        {
+            await outbox.SyncShopItemAsync(item.Id, item.Name, ShopNotificationFactory.CatalogPayload(item, limit, now), !item.IsActive || item.IsHidden, now, ct);
+        }
+    }
 }

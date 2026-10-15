@@ -98,7 +98,7 @@ Implementeret i `Slice4BulletinTemplates`-migrationen. Templates er officer-besk
 
 ## Slice 5 – Discord approve/deny af requests
 
-Status: Planlagt.
+Status: Implementeret.
 
 Lad Officers behandle DKP requests, achievement requests og bulletin claims direkte fra Discord.
 
@@ -157,6 +157,23 @@ Tilføj et gennemgående dark mode i Blazor/Radzen:
 Der kræves ingen migration. Tests og manuel verifikation dækker reload, system preference, login/logout, mobile layout og kontrast.
 
 Implementeret med global theme-toggle i layoutet, `light`/`dark`-valg, localStorage persistence, tidlig theme-applikation via `theme.js` og dark-mode styling for Radzen-layout, cards, grids, navigation og formularfelter. Der er ingen databaseændringer.
+
+## Slice 8 – Discord Shop integration
+
+Status: Implementeret.
+
+Synkronisér aktive shop-items til `DISCORD_MEDLEM_CHANNEL_ID` via den eksisterende database-backed Discord notification outbox.
+
+- Nye shop-items opretter et Discord-opslag med navn, beskrivelse, pris og maksimum.
+- Ændringer i shop-itemets navn, beskrivelse, pris eller købsgrænser opdaterer opslaget.
+- Deaktiverede eller skjulte shop-items får opslaget slettet.
+- Opslaget viser en `Buy shop item`-knap.
+- Knappen henter brugerens aktuelle availability via API’et og viser et ephemeral quantity-dropdown.
+- Quantity begrænses til brugerens faktiske remaining quantity, og achievement-krav, DKP-saldo og purchase limits genvalideres af det eksisterende Application-flow.
+- Et køb fra Discord går gennem samme `/api/bot/shop/purchases`-endpoint som øvrige bot-køb og sender ingen officer-notifikation.
+- Medlemsopslag bruger `AllowedMentions.None`; Discord-fejl påvirker ikke shop-operationens database-transaktion.
+
+Implementeret med `ShopItem`-outbox-synkronisering, `ShopItem`-notification rendering i botten samt `shop:buy`/`shop:quantity` component-flow. Der er ingen ny migration.
 
 ## Teststrategi for V2
 

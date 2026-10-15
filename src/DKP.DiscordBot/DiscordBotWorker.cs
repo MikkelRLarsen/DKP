@@ -93,6 +93,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                                         "BulletinClaimCreated" => BuildBulletinClaimComponents(notification.Payload),
                                         "DkpAwardRequestCreated" => BuildAwardRequestComponents(notification.Payload),
                                         "DkpSourceCreated" => BuildSourceComponents(notification.Payload),
+                                        "ShopItem" => BuildShopComponents(notification.Payload),
                                         _ => null
                                     };
                                     if (notification.Action == "update" && notification.DiscordMessageId is ulong messageId)
@@ -179,6 +180,23 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                     : $"💰 {sourceMessage}\n\nUse `/dkp request` or press **Request DKP**.";
                 return string.IsNullOrWhiteSpace(description) ? sourceMessage : $"{sourceMessage}\nDescription: {description}";
             }
+            if (notificationType == "ShopItem")
+            {
+                var name = Safe(GetString(root, "Name") ?? "Shop item");
+                var description = Safe(GetString(root, "Description"));
+                var price = root.TryGetProperty("Price", out var priceElement) ? priceElement.GetInt32() : 0;
+                var limits = new List<string>();
+                AddLimit(root, limits, "MaxPerUser", "Maximum per user");
+                AddLimit(root, limits, "MaxActivePerUser", "Maximum active per user");
+                AddLimit(root, limits, "MaxPerDay", "Maximum per day");
+                AddLimit(root, limits, "MaxPerWeek", "Maximum per week");
+                AddLimit(root, limits, "MaxPerMonth", "Maximum per month");
+                var sharedKey = Safe(GetString(root, "PurchaseLimitKey"));
+                if (!string.IsNullOrWhiteSpace(sharedKey)) limits.Add($"Shared limit group: **{sharedKey}**");
+                var limitText = limits.Count == 0 ? string.Empty : $"\n\n📏 **Limits**\n• {string.Join("\n• ", limits)}";
+                var shopMessage = $"🛒 **NEW DKP SHOP ITEM**\n\n**{name}**\n{description}\n\n💰 Price: **{price} DKP each**{limitText}\n\nUse `/shop buy` or press **Buy shop item** to check your personal availability and purchase it.";
+                return shopMessage.Trim();
+            }
             if (notificationType == "BulletinClaimCreated")
             {
                 var title = Safe(GetString(root, "Title") ?? "Bulletin item");
@@ -223,7 +241,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
 
     private IMessageChannel? GetNotificationChannel(string notificationType)
     {
-        var channelId = notificationType is "DkpSourceCreated" or "BulletinItem"
+        var channelId = notificationType is "DkpSourceCreated" or "BulletinItem" or "ShopItem"
             ? settings.MemberNotificationChannelId
             : settings.NotificationChannelId;
         return channelId is ulong id ? client?.GetChannel(id) as IMessageChannel : null;
@@ -285,6 +303,20 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         catch (JsonException) { return null; }
     }
 
+    private static MessageComponent? BuildShopComponents(string payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("ShopItemId", out var id) || !Guid.TryParse(id.GetString(), out var itemId)) return null;
+            return new ComponentBuilder()
+                .WithButton("Buy shop item", $"shop:buy:{itemId:D}", ButtonStyle.Primary)
+                .Build();
+        }
+        catch (JsonException) { return null; }
+    }
+
     private static string FormatPrivateNotification(string payload)
     {
         try
@@ -311,6 +343,12 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
 
     private static string? GetString(JsonElement root, string property)
         => root.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static void AddLimit(JsonElement root, List<string> limits, string property, string label)
+    {
+        if (root.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var amount) && amount > 0)
+            limits.Add($"{label}: **{amount}**");
+    }
 
     private static string Safe(string? value)
         => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Replace("@", "@\u200b", StringComparison.Ordinal);
