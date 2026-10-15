@@ -68,6 +68,7 @@ public static class DependencyInjection
 		services.AddScoped<IUserRepository, UserRepository>();
 		services.AddScoped<ICharacterRepository, CharacterRepository>();
 		services.AddScoped<IShopRepository, ShopRepository>();
+		services.AddScoped<IShopPurchaseLimitRepository, ShopPurchaseLimitRepository>();
 		services.AddScoped<IPresetRepository, PresetRepository>();
 		services.AddScoped<IDkpAwardRequestRepository, DkpAwardRequestRepository>();
 		services.AddScoped<IEventLedgerRepository, EventLedgerRepository>();
@@ -99,6 +100,8 @@ public static class DependencyInjection
 		services.AddScoped<IShopQueries, ShopQueries>();
 		services.AddScoped<IShopPurchaseQueries, ShopPurchaseQueries>();
 		services.AddScoped<IShopCommands, ShopCommandService>();
+		services.AddScoped<IShopPurchaseLimitCommands, ShopPurchaseLimitCommandService>();
+		services.AddScoped<IShopPurchaseLimitQueries, ShopPurchaseLimitQueries>();
 		services.AddScoped<IDkpPresetQueries, DkpPresetQueries>();
 		services.AddScoped<IDkpPresetCommands, DkpPresetCommandService>();
 		services.AddScoped<IDkpAwardRequestQueries, DkpAwardRequestQueries>();

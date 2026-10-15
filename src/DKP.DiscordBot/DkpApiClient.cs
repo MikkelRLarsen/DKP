@@ -260,7 +260,7 @@ public sealed record BotShopItemDto(Guid Id, string Key, string Name, string Des
 public sealed record BotBulletinItemDto(Guid Id, string Title, string Description, int DkpAmount, int RemainingQuantity, bool UniquePerUser, DateTime? DeadlineUtc);
 public sealed record BotBulletinClaimInput(Guid BulletinItemId, int Quantity);
 public sealed record BulletinClaimDto(Guid Id, Guid BulletinItemId, Guid UserId, string DiscordName, string? MainCharacter, string BulletinTitle, int Quantity, string? Comment, JsonElement Status, DateTime CreatedAtUtc);
-public sealed record BotShopAvailabilityDto(Guid ShopItemId, string Key, string Name, string Description, int Price, int MaxPerUser, int? RollBonusValue, int ActiveQuantity, int UsedQuantity, int CountedQuantity, int RemainingQuantity, bool IsAvailable, IReadOnlyList<BotShopRequirementDto> AchievementRequirements)
+public sealed record BotShopAvailabilityDto(Guid ShopItemId, string Key, string Name, string Description, int Price, int MaxPerUser, int? RollBonusValue, int ActiveQuantity, int UsedQuantity, int CountedQuantity, int RemainingQuantity, bool IsAvailable, IReadOnlyList<BotShopRequirementDto> AchievementRequirements, string? PurchaseLimitKey = null, int? MaxActivePerUser = null, int? MaxPerDay = null, int? MaxPerWeek = null, int? MaxPerMonth = null, int? DailyRemaining = null, int? WeeklyRemaining = null, int? MonthlyRemaining = null)
 {
     public bool IsRollBonus => RollBonusValue is not null;
 }

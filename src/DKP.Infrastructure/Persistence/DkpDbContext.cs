@@ -7,6 +7,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<User> Users => Set<User>();
     public DbSet<Character> Characters => Set<Character>();
     public DbSet<ShopItem> ShopItems => Set<ShopItem>();
+    public DbSet<ShopPurchaseLimit> ShopPurchaseLimits => Set<ShopPurchaseLimit>();
     public DbSet<DkpAwardPreset> DkpAwardPresets => Set<DkpAwardPreset>();
     public DbSet<DkpAwardRequest> DkpAwardRequests => Set<DkpAwardRequest>();
     public DbSet<DkpEvent> DkpEvents => Set<DkpEvent>();
@@ -53,8 +54,16 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.Key).IsUnique();
             e.Property(x => x.Key).HasMaxLength(64);
+            e.Property(x => x.PurchaseLimitKey).HasMaxLength(64);
             e.Property(x => x.Name).HasMaxLength(128);
             e.Property(x => x.Description).HasMaxLength(500);
+            e.HasOne<ShopPurchaseLimit>().WithMany().HasForeignKey(x => x.PurchaseLimitId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<ShopPurchaseLimit>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.SharedKey).IsUnique();
+            e.Property(x => x.SharedKey).HasMaxLength(64);
         });
         model.Entity<ShopItemAchievementRequirement>(e =>
         {
@@ -157,8 +166,8 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.Restrict);
         });
         var seedTime = new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Utc);
-        model.Entity<ShopItem>().HasData(new { Id = Guid.Parse("00000000-0000-0000-0000-000000000008"), Key = "soft-reserve", Name = "Soft Reserve", Description = "Additional Soft Reserve", Price = 10, MaxPerUser = 2, IsActive = true, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)null });
+        model.Entity<ShopItem>().HasData(new { Id = Guid.Parse("00000000-0000-0000-0000-000000000008"), Key = "soft-reserve", Name = "Soft Reserve", Description = "Additional Soft Reserve", Price = 10, MaxPerUser = 2, IsActive = true, IsHidden = false, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)null });
         foreach (var (bonus, price) in new[] { (10, 10), (20, 30), (30, 60), (40, 120) })
-            model.Entity<ShopItem>().HasData(new { Id = Guid.Parse($"00000000-0000-0000-0000-{bonus:D12}"), Key = $"roll-bonus-{bonus}", Name = $"RollBonus {bonus}", Description = $"Roll bonus +{bonus}", Price = price, MaxPerUser = 1, IsActive = true, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)bonus });
+            model.Entity<ShopItem>().HasData(new { Id = Guid.Parse($"00000000-0000-0000-0000-{bonus:D12}"), Key = $"roll-bonus-{bonus}", Name = $"RollBonus {bonus}", Description = $"Roll bonus +{bonus}", Price = price, MaxPerUser = 1, IsActive = true, IsHidden = false, CreatedAtUtc = seedTime, UpdatedAtUtc = seedTime, RollBonusValue = (int?)bonus });
     }
 }

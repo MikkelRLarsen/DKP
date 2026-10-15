@@ -5,22 +5,35 @@ using DKP.Facade.Commands;
 using DKP.Facade.Contracts;
 namespace DKP.Application.Shop;
 
-public sealed class ShopCommandService(CommandContext context, IShopRepository catalog, IAchievementRepository achievementRepository, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IShopCommands
+public sealed class ShopCommandService(CommandContext context, IShopRepository catalog, IShopPurchaseLimitRepository purchaseLimits, IAchievementRepository achievementRepository, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IShopCommands
 {
-    private async Task<ShopItemDto> Dto(ShopItem i, CancellationToken ct) { var ids = await catalog.GetAchievementRequirementIdsAsync(i.Id, ct); return new(i.Id, i.Key, i.Name, i.Description, i.Price, i.MaxPerUser, i.IsActive, ids.Select(x => new ShopItemAchievementRequirementDto(x, "")).ToArray()); }
+    private async Task<ShopItemDto> Dto(ShopItem i, CancellationToken ct)
+    {
+        var ids = await catalog.GetAchievementRequirementIdsAsync(i.Id, ct);
+        var inherited = i.PurchaseLimitId is Guid limitId ? await purchaseLimits.FindAsync(limitId, ct) : null;
+        return new(i.Id, i.Key, i.Name, i.Description, i.Price, inherited?.MaxPerUser ?? i.MaxPerUser, i.IsActive,
+            ids.Select(x => new ShopItemAchievementRequirementDto(x, "")).ToArray(), i.PurchaseLimitKey,
+            inherited?.MaxActivePerUser ?? i.MaxActivePerUser, inherited?.MaxPerDay ?? i.MaxPerDay,
+            inherited?.MaxPerWeek ?? i.MaxPerWeek, inherited?.MaxPerMonth ?? i.MaxPerMonth,
+            i.PurchaseLimitId, inherited?.SharedKey, i.IsHidden);
+    }
     private static void Validate(ShopItemInput input)
     {
         if (string.IsNullOrWhiteSpace(input.Key) || input.Key.Trim().Length > 64 ||
             string.IsNullOrWhiteSpace(input.Name) || input.Name.Trim().Length > 128 ||
             input.Description is null || input.Description.Trim().Length > 500 ||
-            input.Price < 0 || input.MaxPerUser <= 0)
+            input.Price < 0 || (input.PurchaseLimitId is null && input.MaxPerUser <= 0) || input.MaxActivePerUser is <= 0 || input.MaxPerDay is <= 0 || input.MaxPerWeek is <= 0 || input.MaxPerMonth is <= 0 ||
+            input.PurchaseLimitKey?.Trim().Length > 64)
             throw new ArgumentException("Invalid item: key/name, nonnegative price and positive maximum are required.");
     }
     public Task<ShopItemDto> CreateItemAsync(ShopItemInput input, CancellationToken ct = default)
         => context.ExecuteAsync([], true, async _ =>
         {
             Validate(input);
-            var item = new ShopItem(input.Key.Trim(), input.Name.Trim(), input.Description.Trim(), input.Price, input.MaxPerUser, time.GetUtcNow().UtcDateTime);
+            if (input.PurchaseLimitId is Guid limitId && (await purchaseLimits.FindAsync(limitId, ct)) is not { IsActive: true }) throw new InvalidOperationException("The selected purchase limit is not active.");
+            var item = new ShopItem(input.Key.Trim(), input.Name.Trim(), input.Description.Trim(), input.Price, input.MaxPerUser, time.GetUtcNow().UtcDateTime,
+                null, string.IsNullOrWhiteSpace(input.PurchaseLimitKey) ? null : input.PurchaseLimitKey.Trim(), input.MaxActivePerUser, input.MaxPerDay, input.MaxPerWeek, input.MaxPerMonth);
+            item.SetPurchaseLimit(input.PurchaseLimitId, time.GetUtcNow().UtcDateTime);
             await catalog.AddItemAsync(item, ct);
             await ReplaceRequirementsAsync(item, input.AchievementIds, ct); return await Dto(item, ct);
         }, ct);
@@ -29,9 +42,12 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
         {
             Validate(input);
             var item = await catalog.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Item not found.");
+            if (input.PurchaseLimitId is Guid limitId && (await purchaseLimits.FindAsync(limitId, ct)) is not { IsActive: true }) throw new InvalidOperationException("The selected purchase limit is not active.");
             if (item.Key != input.Key.Trim()) throw new ArgumentException("Item key is immutable.");
             if (item.RollBonusValue != null && input.MaxPerUser != 1) throw new ArgumentException("RollBonus permits only one active unit across all tiers.");
-            item.Update(input.Name.Trim(), input.Description.Trim(), input.Price, input.MaxPerUser, time.GetUtcNow().UtcDateTime);
+            item.Update(input.Name.Trim(), input.Description.Trim(), input.Price, input.MaxPerUser, time.GetUtcNow().UtcDateTime,
+                string.IsNullOrWhiteSpace(input.PurchaseLimitKey) ? null : input.PurchaseLimitKey.Trim(), input.MaxActivePerUser, input.MaxPerDay, input.MaxPerWeek, input.MaxPerMonth);
+            item.SetPurchaseLimit(input.PurchaseLimitId, time.GetUtcNow().UtcDateTime);
             await ReplaceRequirementsAsync(item, input.AchievementIds, ct); return await Dto(item, ct);
         }, ct);
     public Task SetActiveAsync(Guid itemId, bool active, CancellationToken ct = default)
@@ -39,6 +55,14 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
         {
             var item = await catalog.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Item not found.");
             item.SetActive(active, time.GetUtcNow().UtcDateTime);
+            return true;
+        }, ct);
+
+    public Task SetHiddenAsync(Guid itemId, bool hidden, CancellationToken ct = default)
+        => context.ExecuteAsync([], true, async _ =>
+        {
+            var item = await catalog.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Item not found.");
+            item.SetHidden(hidden, time.GetUtcNow().UtcDateTime);
             return true;
         }, ct);
 
@@ -57,7 +81,10 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
     {
         if (quantity <= 0) throw new ArgumentException("Quantity must be positive.");
         var item = await catalog.FindItemAsync(itemId, ct) ?? throw new KeyNotFoundException("Item not found.");
+        var allItems = await catalog.GetItemsAsync(ct);
+        var configuredLimits = await purchaseLimits.GetAllAsync(false, ct);
         if (!item.IsActive) throw new InvalidOperationException("Item is inactive.");
+        if (!ShopPurchaseLimitRules.IsEnabled(item, configuredLimits)) throw new InvalidOperationException("The purchase limit for this item is inactive.");
         if (item.RollBonusValue != null && quantity != 1) throw new ArgumentException("Only one RollBonus unit can be purchased.");
         var cost = checked(item.Price * quantity);
         var users = new List<User>();
@@ -73,9 +100,9 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
             var state = await ledger.GetStateAsync(id, ct);
             if (state.Balance < cost)
                 throw new InvalidOperationException($"{target.DiscordName}: insufficient DKP ({cost} required).");
-            var owned = ShopPurchaseLimitRules.OwnedQuantity(state, item);
-            if ((long)owned + quantity > item.MaxPerUser)
-                throw new InvalidOperationException($"{target.DiscordName}: maximum {item.MaxPerUser} for {item.Name} (already owns {owned}).");
+            var limits = ShopPurchaseLimitRules.Evaluate(state, item, allItems, configuredLimits, time.GetUtcNow().UtcDateTime);
+            if (quantity > limits.RemainingQuantity)
+                throw new InvalidOperationException($"{target.DiscordName}: purchase limit reached for {item.Name} (remaining {limits.RemainingQuantity}).");
             if (item.RollBonusValue != null && state.HasActiveRollBonus())
                 throw new InvalidOperationException($"{target.DiscordName}: already has an active RollBonus.");
             users.Add(target);

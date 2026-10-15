@@ -121,7 +121,7 @@ Tests dækker Member-afvisning, ukendt/blokeret bruger, korrekt actor, ét DKP-e
 
 ## Slice 6 – Udvidede shop-grænser og delte item-regler
 
-Status: Planlagt.
+Status: Implementeret.
 
 Udvid shop-items med valgfri:
 
@@ -137,6 +137,8 @@ Udvid shop-items med valgfri:
 Indfør én fælles PurchaseLimitRules-service for webshop, My Purchases, admin-køb og Discord-bot. Availability og counters beregnes fra event-store replay. Daily/weekly/monthly beregnes i UTC. Cancelled tæller ikke. Soft Reserve og RollBonus bevarer deres særlige active-regler.
 
 Alle commands genvaliderer regler under samme command-lock. Multi-user køb er atomiske. Der skal genereres EF-migration for katalogfelterne og tests for perioder, UTC-boundaries, shared groups, used/active, cancellation, concurrency og ens web/bot-resultater.
+
+Implementeret i migrationerne `20261015124425_Slice6ShopPurchaseLimits` og `20261015134551_ShopPurchaseLimits`: kataloget understøtter nu genbrugelige `ShopPurchaseLimit`-konfigurationer, som shop-items valgfrit kan arve via en foreign key. Uden valgt konfiguration bruges itemets egne regler. Den fælles `ShopPurchaseLimitRules` anvendes af web- og bot-flowet, og DKP Shop administration kan oprette, redigere, aktivere/deaktivere og vælge limits. Concurrency- og PostgreSQL-integrationstests er fortsat en kendt begrænsning.
 
 ## Slice 7 – Dark Mode
 

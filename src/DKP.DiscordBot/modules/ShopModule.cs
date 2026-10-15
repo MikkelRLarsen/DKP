@@ -17,7 +17,12 @@ public sealed class ShopModule(DkpApiClient api) : InteractionModuleBase<SocketI
         foreach (var item in items)
         {
             var requirements = item.AchievementRequirements is { Count: > 0 } ? $" | Requires: {string.Join(", ", item.AchievementRequirements.Select(x => x.AchievementName))}" : string.Empty;
-            output.AppendLine($"**{item.Name}**: {item.Price} DKP each, {item.RemainingQuantity} available of {item.MaxPerUser}{(item.IsAvailable ? string.Empty : " (unavailable)")}{requirements}");
+            var limits = new List<string> { $"{item.RemainingQuantity} available of {item.MaxPerUser}" };
+            if (item.MaxActivePerUser is int active) limits.Add($"active max {active}");
+            if (item.MaxPerDay is int daily) limits.Add($"daily max {daily}");
+            if (item.MaxPerWeek is int weekly) limits.Add($"weekly max {weekly}");
+            if (item.MaxPerMonth is int monthly) limits.Add($"monthly max {monthly}");
+            output.AppendLine($"**{item.Name}**: {item.Price} DKP each, {string.Join(", ", limits)}{(item.IsAvailable ? string.Empty : " (unavailable)")}{requirements}");
             if (!string.IsNullOrWhiteSpace(item.Description)) output.AppendLine($"  {item.Description}");
         }
         output.AppendLine("\nUse `/shop buy` and select an item from the dropdown, then enter the quantity.");
