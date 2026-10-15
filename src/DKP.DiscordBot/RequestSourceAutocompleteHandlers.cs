@@ -192,3 +192,22 @@ public sealed class DkpRequestAutocompleteHandler : AutocompleteHandler
 
     private static string Shorten(string value) => value.Length <= 100 ? value : value[..97] + "...";
 }
+
+public sealed class BotAwardRequestAutocompleteHandler : AutocompleteHandler
+{
+    public override async Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction interaction, IParameterInfo parameter, IServiceProvider services)
+    {
+        var api = services.GetRequiredService<DkpApiClient>();
+        var requests = await api.GetPendingAwardRequestsAsync(context.User.Id.ToString(), CancellationToken.None);
+        if (requests is null) return AutocompletionResult.FromSuccess([]);
+        var input = interaction.Data.Current.Value?.ToString() ?? string.Empty;
+        var suggestions = requests
+            .Where(x => string.IsNullOrWhiteSpace(input) || x.PresetName.Contains(input, StringComparison.OrdinalIgnoreCase) || x.DiscordName.Contains(input, StringComparison.OrdinalIgnoreCase) || (x.MainCharacter?.Contains(input, StringComparison.OrdinalIgnoreCase) ?? false))
+            .Take(25)
+            .Select(x => new AutocompleteResult(Shorten($"{x.DiscordName} - {x.PresetName} x{x.Quantity}"), x.Id.ToString("D")))
+            .ToArray();
+        return AutocompletionResult.FromSuccess(suggestions);
+    }
+
+    private static string Shorten(string value) => value.Length <= 100 ? value : value[..97] + "...";
+}

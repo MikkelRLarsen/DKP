@@ -39,4 +39,40 @@ public sealed class NotificationOutboxRepository(CommandUnitOfWork session) : IN
 
         notification.QueueUpdate(payload, nowUtc);
     }
+
+    public async Task SyncSourceAsync(Guid sourceId, string sourceName, string payload, bool delete, DateTime nowUtc, CancellationToken ct = default)
+    {
+        var notifications = await session.Db.DiscordNotificationOutbox
+            .Where(x => x.NotificationType == "DkpSourceCreated" && (x.RequestId == sourceId || x.RequestId == null))
+            .ToArrayAsync(ct);
+        var notification = notifications.FirstOrDefault(x => x.RequestId == sourceId);
+        if (notification is null)
+        {
+            notification = notifications.FirstOrDefault(x =>
+            {
+                try
+                {
+                    using var document = System.Text.Json.JsonDocument.Parse(x.Payload);
+                    var root = document.RootElement;
+                    return root.TryGetProperty("Name", out var name) && name.GetString() == sourceName;
+                }
+                catch (System.Text.Json.JsonException) { return false; }
+            });
+        }
+
+        if (notification is null)
+        {
+            if (!delete)
+                session.Db.DiscordNotificationOutbox.Add(new DiscordNotificationOutbox("DkpSourceCreated", payload, nowUtc, sourceId));
+            return;
+        }
+
+        if (delete)
+        {
+            notification.RequestDeletion(nowUtc);
+            return;
+        }
+
+        notification.QueueUpdate(payload, nowUtc);
+    }
 }

@@ -47,6 +47,15 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public async Task<bool> CancelDkpRequestAsync(string discordUserId, Guid requestId, CancellationToken cancellationToken)
         => await SendShopAsync<object>(HttpMethod.Delete, $"/api/bot/dkp/requests/{requestId:D}", discordUserId, null, cancellationToken) is not null;
 
+    public Task<IReadOnlyList<BotAwardRequestDto>?> GetPendingAwardRequestsAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<IReadOnlyList<BotAwardRequestDto>>(HttpMethod.Get, "/api/bot/requests/pending", discordUserId, null, cancellationToken);
+
+    public async Task<bool> ApproveAwardRequestAsync(string discordUserId, Guid requestId, string? comment, CancellationToken cancellationToken)
+        => await SendShopAsync<object>(HttpMethod.Post, $"/api/bot/requests/{requestId:D}/approve", discordUserId, new ReviewInput(comment), cancellationToken) is not null;
+
+    public async Task<bool> RejectAwardRequestAsync(string discordUserId, Guid requestId, string? comment, CancellationToken cancellationToken)
+        => await SendShopAsync<object>(HttpMethod.Post, $"/api/bot/requests/{requestId:D}/reject", discordUserId, new ReviewInput(comment), cancellationToken) is not null;
+
     public async Task<IReadOnlyList<BotCharacterDto>?> GetCharactersAsync(string discordUserId, CancellationToken cancellationToken)
         => await SendCharactersAsync(HttpMethod.Get, "/api/bot/characters", discordUserId, null, cancellationToken) as IReadOnlyList<BotCharacterDto>;
 
@@ -243,6 +252,7 @@ public sealed record BalanceDto(int Amount);
 public sealed record DkpTransactionDto(Guid Id, int Amount, string Reason, DateTime CreatedAtUtc, string CreatedByDiscordName);
 public sealed record BotDkpSourceDto(Guid PresetId, string Name, int Amount, string Reason, int Applications, int MaxApplications, int Remaining);
 public sealed record BotDkpRequestInput(Guid PresetId, int Quantity, IReadOnlyList<string>? TargetDiscordIds, string? Comment);
+public sealed record ReviewInput(string? Comment);
 public sealed record CharacterInputDto(string FirstName, string LastName);
 public sealed record BotCharacterDto(Guid Id, string FirstName, string LastName, bool IsMain);
 public sealed record ShopPurchaseInput(Guid ShopItemId, int Quantity);

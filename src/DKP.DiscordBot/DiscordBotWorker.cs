@@ -13,6 +13,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
     private InteractionService? interactions;
     private ServiceProvider? services;
     private ulong? bulletinCommandId;
+    private ulong? dkpCommandId;
     private CancellationTokenSource? notificationCts;
     private Task? notificationTask;
 
@@ -90,6 +91,8 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                                     {
                                         "BulletinItem" => BuildBulletinComponents(notification.Payload),
                                         "BulletinClaimCreated" => BuildBulletinClaimComponents(notification.Payload),
+                                        "DkpAwardRequestCreated" => BuildAwardRequestComponents(notification.Payload),
+                                        "DkpSourceCreated" => BuildSourceComponents(notification.Payload),
                                         _ => null
                                     };
                                     if (notification.Action == "update" && notification.DiscordMessageId is ulong messageId)
@@ -171,6 +174,9 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                 var createdBy = Safe(GetString(root, "CreatedBy"));
                 if (!string.IsNullOrWhiteSpace(createdBy)) sourceMessage += $"\nCreated by: {createdBy}";
                 if (root.TryGetProperty("CreatedAtUtc", out var createdAtElement) && createdAtElement.TryGetDateTime(out var createdAt)) sourceMessage += $"\nTime: {createdAt:u}";
+                sourceMessage = sourceKind.Equals("Achievement", StringComparison.OrdinalIgnoreCase)
+                    ? $"🏆 {sourceMessage}\n\nUse `/achievement request` or press **Request Achievement**."
+                    : $"💰 {sourceMessage}\n\nUse `/dkp request` or press **Request DKP**.";
                 return string.IsNullOrWhiteSpace(description) ? sourceMessage : $"{sourceMessage}\nDescription: {description}";
             }
             if (notificationType == "BulletinClaimCreated")
@@ -185,13 +191,28 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                     : "\n\nApprove with `/bulletin approve` or press **Approve Bulletin Claim**.";
                 return claimMessage;
             }
+            if (notificationType == "DkpAwardRequestCreated")
+            {
+                var requestKind = Safe(GetString(root, "Kind") ?? "DKP");
+                var icon = requestKind.Equals("Achievement", StringComparison.OrdinalIgnoreCase) ? "🏆" : "💰";
+                var requestUser = Safe(GetString(root, "UserName") ?? "Unknown user");
+                var requestSource = Safe(GetString(root, "SourceName") ?? "Unknown source");
+                var requestAmount = root.TryGetProperty("Amount", out var requestAmountElement) ? requestAmountElement.GetInt32() : 0;
+                var requestQuantity = root.TryGetProperty("Quantity", out var requestQuantityElement) ? requestQuantityElement.GetInt32() : 1;
+                var requestComment = Safe(GetString(root, "Comment"));
+                var requestMessage = $"{icon} **NEW {requestKind.ToUpperInvariant()} REQUEST**\n\nPlayer: **{requestUser}**\nSource: **{requestSource}**\nAmount: **{requestAmount} DKP**\nQuantity: **{requestQuantity}**";
+                requestMessage += dkpCommandId is ulong commandId
+                    ? $"\n\nReview with </dkp review:{commandId}> or press **Review DKP Request**."
+                    : "\n\nReview with `/dkp review` or press **Review DKP Request**.";
+                return string.IsNullOrWhiteSpace(requestComment) ? requestMessage : $"{requestMessage}\nComment: {requestComment}";
+            }
             var kind = Safe(GetString(root, "Kind") ?? "DKP");
             var user = Safe(GetString(root, "UserName") ?? "Unknown user");
             var source = Safe(GetString(root, "SourceName") ?? "Unknown source");
             var amount = root.TryGetProperty("Amount", out var amountElement) ? amountElement.GetInt32() : 0;
             var quantity = root.TryGetProperty("Quantity", out var quantityElement) ? quantityElement.GetInt32() : 1;
             var comment = Safe(GetString(root, "Comment"));
-            var message = $"**New {kind} DKP request**\nPlayer: {user}\nSource: {source}\nAmount: {amount}\nQuantity: {quantity}";
+            var message = $"💰 **NEW {kind.ToUpperInvariant()} REQUEST**\nPlayer: {user}\nSource: {source}\nAmount: {amount}\nQuantity: {quantity}";
             return string.IsNullOrWhiteSpace(comment) ? message : $"{message}\nComment: {comment}";
         }
         catch (JsonException)
@@ -232,6 +253,34 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             return new ComponentBuilder()
                 .WithButton("Review Bulletin Claim", $"bulletin:review:{claimId:D}", ButtonStyle.Primary)
                 .Build();
+        }
+        catch (JsonException) { return null; }
+    }
+
+    private static MessageComponent? BuildAwardRequestComponents(string payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("RequestId", out var id) || !Guid.TryParse(id.GetString(), out var requestId)) return null;
+            return new ComponentBuilder()
+                .WithButton("Review DKP Request", $"award:review:{requestId:D}", ButtonStyle.Primary)
+                .Build();
+        }
+        catch (JsonException) { return null; }
+    }
+
+    private static MessageComponent? BuildSourceComponents(string payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("SourceId", out var id) || !Guid.TryParse(id.GetString(), out var sourceId)) return null;
+            var kind = GetString(root, "Kind")?.Equals("Achievement", StringComparison.OrdinalIgnoreCase) == true ? "achievement" : "dkp";
+            var label = kind == "achievement" ? "Request Achievement" : "Request DKP";
+            return new ComponentBuilder().WithButton(label, $"source:request:{kind}:{sourceId:D}", ButtonStyle.Primary).Build();
         }
         catch (JsonException) { return null; }
     }
@@ -281,6 +330,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                     {
                         var registered = await guild.GetApplicationCommandsAsync();
                         bulletinCommandId = registered.FirstOrDefault(x => x.Name.Equals("bulletin", StringComparison.OrdinalIgnoreCase))?.Id;
+                        dkpCommandId = registered.FirstOrDefault(x => x.Name.Equals("dkp", StringComparison.OrdinalIgnoreCase))?.Id;
                     }
                     logger.LogInformation("Registered Discord commands for guild {GuildId}.", settings.GuildId);
                     return;

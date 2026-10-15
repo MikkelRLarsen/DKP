@@ -103,6 +103,8 @@ public static class DependencyInjection
 		services.AddScoped<IDkpPresetCommands, DkpPresetCommandService>();
 		services.AddScoped<IDkpAwardRequestQueries, DkpAwardRequestQueries>();
 		services.AddScoped<IDkpAwardRequestCommands, DkpAwardRequestCommandService>();
+		services.AddScoped<IBotAwardRequestReviewCommands, DkpAwardRequestCommandService>();
+		services.AddScoped<IBotAwardRequestQueries, BotAwardRequestQueries>();
 		services.AddScoped<ILootReserveQueries, LootReserveQueries>();
 		services.AddScoped<ILootReserveConsumptionCommands, LootReserveConsumptionCommandService>();
 		services.AddScoped<ILootReserveConsumptionQueries, LootReserveConsumptionQueries>();

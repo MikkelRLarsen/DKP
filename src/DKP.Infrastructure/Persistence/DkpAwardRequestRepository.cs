@@ -8,5 +8,6 @@ public sealed class DkpAwardRequestRepository(CommandUnitOfWork session) : IDkpA
 {
     public Task<DkpAwardRequest?> FindAsync(Guid id, CancellationToken ct = default) => session.Db.DkpAwardRequests.SingleOrDefaultAsync(x => x.Id == id, ct);
     public Task<bool> HasPendingAsync(Guid userId, Guid? presetId, Guid? achievementId, CancellationToken ct = default) => session.Db.DkpAwardRequests.AnyAsync(x => x.UserId == userId && x.PresetId == presetId && x.AchievementId == achievementId && x.Status == DkpAwardRequestStatus.Pending, ct);
+    public Task<int> GetPendingQuantityAsync(Guid userId, Guid presetId, CancellationToken ct = default) => session.Db.DkpAwardRequests.Where(x => x.UserId == userId && x.PresetId == presetId && x.Status == DkpAwardRequestStatus.Pending).SumAsync(x => x.Quantity, ct);
     public Task AddAsync(DkpAwardRequest request, CancellationToken ct = default) { session.Db.DkpAwardRequests.Add(request); return Task.CompletedTask; }
 }
