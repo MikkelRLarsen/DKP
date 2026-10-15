@@ -16,6 +16,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<DiscordNotificationOutbox> DiscordNotificationOutbox => Set<DiscordNotificationOutbox>();
     public DbSet<BulletinItem> BulletinItems => Set<BulletinItem>();
     public DbSet<BulletinClaim> BulletinClaims => Set<BulletinClaim>();
+    public DbSet<BulletinTemplate> BulletinTemplates => Set<BulletinTemplate>();
 
     private void GuardEvents()
     {
@@ -133,6 +134,15 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.HasOne<BulletinItem>().WithMany().HasForeignKey(x => x.BulletinItemId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<BulletinTemplate>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.Name).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(128);
+            e.Property(x => x.Title).HasMaxLength(128);
+            e.Property(x => x.Description).HasMaxLength(2000);
+            e.Property(x => x.DefaultDeadlineOffset).HasConversion<long?>();
         });
         model.Entity<DkpEvent>(e =>
         {

@@ -114,8 +114,11 @@ public static class DependencyInjection
 		services.AddScoped<IAchievementQueries, AchievementQueries>();
 		services.AddScoped<IAchievementRepository, AchievementRepository>();
 		services.AddScoped<IBulletinRepository, BulletinRepository>();
+		services.AddScoped<IBulletinTemplateRepository, BulletinTemplateRepository>();
 		services.AddScoped<IBulletinCommands, BulletinCommandService>();
+		services.AddScoped<IBulletinTemplateCommands, BulletinTemplateCommandService>();
 		services.AddScoped<IBulletinQueries, BulletinQueries>();
+		services.AddScoped<IBulletinTemplateQueries, BulletinTemplateQueries>();
 		services.AddScoped<IBotBulletinQueries, BotBulletinQueries>();
 		services.AddScoped<IBotBulletinCommands, BotBulletinCommandService>();
 		services.AddHostedService<BulletinExpirationWorker>();

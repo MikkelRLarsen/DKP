@@ -7,10 +7,15 @@ using System.Text.Json;
 
 namespace DKP.Application.Bulletins;
 
-public sealed class BulletinCommandService(CommandContext context, IBulletinRepository repository, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IBulletinCommands
+public sealed class BulletinCommandService(CommandContext context, IBulletinRepository repository, IBulletinTemplateRepository templates, IEventLedgerRepository ledger, INotificationOutboxRepository outbox, TimeProvider time) : IBulletinCommands
 {
     public Task<BulletinItemDto> CreateItemAsync(CreateBulletinItemRequest input, CancellationToken ct = default) => context.ExecuteAsync([], true, async actor =>
     {
+        if (input.TemplateId is Guid templateId)
+        {
+            var template = await templates.FindAsync(templateId, ct) ?? throw new KeyNotFoundException("Bulletin template not found.");
+            if (!template.IsActive) throw new InvalidOperationException("Inactive bulletin templates cannot be used.");
+        }
         var now = time.GetUtcNow().UtcDateTime;
         var item = new BulletinItem(input.Title, input.Description, input.DkpAmount, input.MaxCompletions, input.UniquePerUser, input.DeadlineUtc, now);
         await repository.AddItemAsync(item, ct);

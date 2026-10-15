@@ -1,8 +1,11 @@
 namespace DKP.Facade.Contracts;
 
 public enum BulletinClaimStatus { Pending, Approved, Rejected, Cancelled, Reverted }
-public sealed record CreateBulletinItemRequest(string Title, string Description, int DkpAmount, int MaxCompletions, bool UniquePerUser, DateTime? DeadlineUtc);
+public sealed record CreateBulletinItemRequest(string Title, string Description, int DkpAmount, int MaxCompletions, bool UniquePerUser, DateTime? DeadlineUtc, Guid? TemplateId = null);
 public sealed record UpdateBulletinItemRequest(string Title, string Description, int DkpAmount, int MaxCompletions, bool UniquePerUser, DateTime? DeadlineUtc);
+public sealed record BulletinTemplateDto(Guid Id, string Name, string Title, string Description, int DkpAmount, int MaxCompletions, bool UniquePerUser, TimeSpan? DefaultDeadlineOffset, bool IsActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record CreateBulletinTemplateRequest(string Name, string Title, string Description, int DkpAmount, int MaxCompletions, bool UniquePerUser, TimeSpan? DefaultDeadlineOffset);
+public sealed record UpdateBulletinTemplateRequest(string Name, string Title, string Description, int DkpAmount, int MaxCompletions, bool UniquePerUser, TimeSpan? DefaultDeadlineOffset);
 public sealed record CreateBulletinClaimRequest(Guid BulletinItemId, int Quantity, string? Comment);
 public sealed record ReviewBulletinClaimRequest(string? Comment);
 public sealed record BulletinItemDto(Guid Id, string Title, string Description, int DkpAmount, int MaxCompletions, int PendingQuantity, int ApprovedQuantity, int RemainingQuantity, bool UniquePerUser, DateTime? DeadlineUtc, bool IsActive, bool IsEffectivelyActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc, bool IsHidden, bool HasActiveClaim);

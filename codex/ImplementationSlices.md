@@ -80,7 +80,7 @@ Bulletin-opslag kan vise en `Claim`-knap. Knappen henter den aktuelle resterende
 
 ## Slice 4 – Bulletin templates
 
-Status: Planlagt.
+Status: Implementeret.
 
 Giv Officers mulighed for at genbruge standardopslag.
 
@@ -93,6 +93,8 @@ Giv Officers mulighed for at genbruge standardopslag.
 Officer kan oprette, redigere, aktivere, deaktivere og arkivere templates. Ved oprettelse af et bulletin item kan en template vælges som startværdier. Alle værdier kan ændres før publicering. Template-ændringer påvirker ikke allerede publicerede items, og templates publicerer aldrig automatisk et item.
 
 Der skal være tydelig forskel på `Save template`, `Create draft` og `Publish bulletin item`. Tests dækker CRUD, kopiering, isolation og authorization. Der skal genereres EF-migration.
+
+Implementeret i `Slice4BulletinTemplates`-migrationen. Templates er officer-beskyttede almindelige entities uden relation til bulletin items. Ved oprettelse valideres en valgt template som aktiv, mens de endelige formularværdier sendes og gemmes på det nye item. Template CRUD/statusændringer sender ingen Discord-notifikationer; kun det publicerede item bruger det eksisterende bulletin-outbox-flow.
 
 ## Slice 5 – Discord approve/deny af requests
 
