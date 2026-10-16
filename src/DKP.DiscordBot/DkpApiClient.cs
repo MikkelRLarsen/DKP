@@ -116,6 +116,13 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public Task<IReadOnlyList<BotNotificationDto>?> GetPendingNotificationsAsync(CancellationToken cancellationToken, string? target = null)
         => SendBotAsync<IReadOnlyList<BotNotificationDto>>(HttpMethod.Get, $"/api/bot/notifications/pending?limit=10{(target is null ? string.Empty : $"&target={Uri.EscapeDataString(target)}")}", null, cancellationToken);
 
+    public Task<IReadOnlyList<BotForumSectionDto>?> GetForumSectionsAsync(CancellationToken cancellationToken)
+        => SendBotAsync<IReadOnlyList<BotForumSectionDto>>(HttpMethod.Get, "/api/bot/forum-sections", null, cancellationToken);
+
+    public Task<BotForumSectionDto?> RegisterForumSectionAsync(string sectionKey, ulong forumChannelId, ulong threadId, ulong initialMessageId, CancellationToken cancellationToken)
+        => SendBotAsync<BotForumSectionDto>(HttpMethod.Post, "/api/bot/forum-sections/register",
+            new RegisterForumSectionInput(settings.GuildId.ToString(), sectionKey, forumChannelId, threadId, initialMessageId), cancellationToken);
+
     public async Task<bool> MarkNotificationSentAsync(Guid id, ulong messageId, CancellationToken cancellationToken)
         => await SendBotAsync<object>(HttpMethod.Post, $"/api/bot/notifications/{id:D}/sent", new NotificationSentInput(messageId), cancellationToken) is not null;
 
@@ -275,6 +282,8 @@ public sealed record MultiAchievementRequestInput(Guid AchievementId, IReadOnlyL
 public sealed record BotAccountInput(string DiscordName, string? AvatarUrl);
 public sealed record BotAccountDto(Guid Id, string DiscordId, string DiscordName, int Role, bool Created);
 public sealed record BotNotificationDto(Guid Id, string NotificationType, string Payload, int Attempts, string Action, ulong? DiscordMessageId, string? RecipientDiscordUserId);
+public sealed record BotForumSectionDto(Guid Id, string GuildId, string SectionKey, ulong? ForumChannelId, ulong? ThreadId, ulong? InitialMessageId, string InitialMessageContent, bool IsActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record RegisterForumSectionInput(string GuildId, string SectionKey, ulong ForumChannelId, ulong ThreadId, ulong InitialMessageId);
 public sealed record NotificationFailureInput(string? Error);
 public sealed record NotificationSentInput(ulong MessageId);
 public sealed record BotAchievementOverviewDto(IReadOnlyList<BotAchievementDefinitionDto> Definitions, IReadOnlyList<BotUserAchievementDto> UserAchievements, IReadOnlyList<BotAwardRequestDto> Requests);

@@ -92,6 +92,7 @@ services:
       DISCORD_OFFICER_CHANNEL_ID: ${DISCORD_OFFICER_CHANNEL_ID:-}
       DISCORD_MEDLEM_CHANNEL_ID: ${DISCORD_MEDLEM_CHANNEL_ID:-}
       DISCORD_MEMBER_NOTIFICATION_MODE: ${DISCORD_MEMBER_NOTIFICATION_MODE:-text}
+      DISCORD_MEMBER_FORUM_CHANNEL_ID: ${DISCORD_MEMBER_FORUM_CHANNEL_ID:-}
       DISCORD_BULLETIN_THREAD_ID: ${DISCORD_BULLETIN_THREAD_ID:-}
       DISCORD_ACHIEVEMENTS_THREAD_ID: ${DISCORD_ACHIEVEMENTS_THREAD_ID:-}
       DISCORD_DKP_SOURCES_THREAD_ID: ${DISCORD_DKP_SOURCES_THREAD_ID:-}
@@ -102,7 +103,7 @@ services:
       - dkp-network
 
   traefik:
-    image: traefik:v3.3
+    image: traefik:v3.7.14
     restart: unless-stopped
     command:
       - "--providers.docker=true"
@@ -150,4 +151,5 @@ volumes:
 
 networks:
   dkp-network:
+    name: dkp-network
     driver: bridge

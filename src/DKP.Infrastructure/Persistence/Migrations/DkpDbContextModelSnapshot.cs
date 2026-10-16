@@ -252,6 +252,53 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.ToTable("Characters");
                 });
 
+            modelBuilder.Entity("DKP.Domain.DiscordForumSection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("ForumChannelId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<string>("GuildId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("InitialMessageContent")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<decimal?>("InitialMessageId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SectionKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<decimal?>("ThreadId")
+                        .HasColumnType("numeric(20,0)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuildId", "SectionKey")
+                        .IsUnique();
+
+                    b.ToTable("DiscordForumSections");
+                });
+
             modelBuilder.Entity("DKP.Domain.DiscordNotificationOutbox", b =>
                 {
                     b.Property<Guid>("Id")

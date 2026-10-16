@@ -183,7 +183,7 @@ Medlemsnotifikationer routes nu automatisk til stabile Discord public threads un
 
 - `Bulletin Board`
 - `Achievements`
-- `DKP Sources`
+- `Repeatable DKP`
 - `Shop`
 
 Medlemsrouting kan konfigureres med `DISCORD_MEMBER_NOTIFICATION_MODE=text` eller `forum`.
@@ -193,6 +193,136 @@ Medlemsrouting kan konfigureres med `DISCORD_MEMBER_NOTIFICATION_MODE=text` elle
 - Eksisterende outbox-flow bruges fortsat til create, update og delete, så beskeder opdateres eller fjernes i korrekt kanal/thread.
 - Officer-notifikationer forbliver i `DISCORD_OFFICER_CHANNEL_ID`, og der sendes ingen pings.
 - Der er ingen databaseændringer.
+
+## Slice 10 – Automatisk Discord forum-sektioner og redigerbare initialbeskeder
+
+Status: Implementeret.
+
+Erstat den manuelle forum-thread-konfiguration med automatisk oprettelse og persistent registrering af medlemssektioner i ét Discord Forum Channel.
+
+Forum-kanalen konfigureres med:
+
+```env
+DISCORD_MEMBER_NOTIFICATION_MODE=forum
+DISCORD_MEMBER_FORUM_CHANNEL_ID=<forum-channel-id>
+```
+
+Botten opretter og vedligeholder følgende forum-opslag:
+
+- `Bulletin Board` (`bulletin-board`).
+- `Achievements` (`achievements`).
+- `Repeatable DKP` (`dkp-sources`).
+- `Shop` (`shop`).
+- `Bot Help / Introduction` (`bot-help`).
+
+### Startup og lifecycle
+
+Ved gateway-start skal botten:
+
+1. Validere, at den konfigurerede kanal er en Discord Forum Channel.
+2. Hente de registrerede sektioner via DKP API’et.
+3. Kontrollere, om hver registreret `ThreadId` stadig findes og tilhører det korrekte forum.
+4. Oprette et manglende forum-opslag.
+5. Sende eller opdatere den initiale besked.
+6. Forsøge at fastgøre den initiale besked.
+7. Gemme eller opdatere `ThreadId` og `InitialMessageId`.
+
+Startup-synkronisering skal være idempotent og beskyttet mod dubletter ved samtidige bot-instanser. Hvis en thread eller initialbesked slettes manuelt, skal den opdages ved næste synkronisering og erstattes.
+
+Alle eksisterende Bulletin-, Achievement-, DKP Source- og Shop-notifikationer routes derefter til den relevante registrerede section-thread. `Bot Help / Introduction` bruges som et stabilt, fastgjort opslag og modtager ikke item-notifikationer.
+
+### Database og arkitektur
+
+Tilføj en almindelig entity til persistent Discord-mapping:
+
+```text
+DiscordForumSection
+- Id
+- GuildId
+- SectionKey
+- ForumChannelId
+- ThreadId
+- InitialMessageId
+- InitialMessageContent
+- IsActive
+- CreatedAtUtc
+- UpdatedAtUtc
+```
+
+Botten må ikke læse databasen direkte. Den bruger API’et og Facade/Application-kontrakter til at hente og gemme mappingen. Discord-API-kald udføres fortsat i `DKP.DiscordBot`, mens section-state gemmes gennem den eksisterende backend-arkitektur.
+
+Der skal genereres en EF-migration med unik constraint på eksempelvis `(GuildId, SectionKey)`.
+
+### Bot Help / Introduction
+
+Der oprettes en standardbesked, eksempelvis med:
+
+- Hvad DKP-botten bruges til.
+- Tilgængelige medlemscommands.
+- Hvordan man køber shop-items.
+- Hvordan man anmoder om DKP eller achievements.
+- Hvordan man håndterer characters.
+- Hvordan man kontakter en Officer.
+
+Teksten gemmes som section-content og publiceres ikke automatisk som en almindelig notification. Den kan redigeres fra Blazor og gendannes til standardteksten.
+
+### Blazor administration
+
+Tilføj en Officer-only sektion til administrationen, hvor Officers kan:
+
+- Se alle forum-sektioner og deres status.
+- Redigere initialbeskeden for hver sektion.
+- Se `ThreadId` og `InitialMessageId` som diagnostiske oplysninger.
+- Gemme og straks synkronisere beskeden til Discord.
+- Gendanne standardteksten for `Bot Help / Introduction`.
+- Udløse manuel resynkronisering af alle sektioner.
+- Se fejl, hvis forum-kanalen eller Discord-rettighederne mangler.
+
+En ændring af initialbeskeden påvirker kun den registrerede Discord-besked og ændrer ikke de underliggende bulletin-, shop-, achievement- eller DKP-data.
+
+### Discord-rettigheder
+
+Botten skal mindst have følgende rettigheder på forum-kanalen:
+
+- View Channel.
+- Send Messages / Create Posts.
+- Send Messages in Threads.
+- Read Message History.
+- Pin Messages.
+- Manage Threads.
+- Embed Links, hvis initialbeskederne bruger embeds.
+
+`Manage Channels`, `Manage Server` og `Administrator` er ikke nødvendige.
+
+Implementeret:
+
+- `DiscordForumSection` med unik guild/section-mapping og migration `Slice10DiscordForumSections`.
+- Bot API til registrering og læsning af section mappings.
+- Idempotent bot-synkronisering af de fem forum-opslag, inklusive Bot Help, initialbesked og pin-forsøg.
+- Periodisk synkronisering, så ændringer fra Blazor kan slå igennem efter kort tid, og slettede opslag kan genskabes.
+- Officer-side på `/admin/discord-forum` til redigering af initialbeskeder.
+- `DISCORD_MEMBER_FORUM_CHANNEL_ID` i compose og `.env.example`.
+
+Kendt begrænsning: den første besked synkroniseres af botten via polling med cirka 30 sekunders interval efter startup. Den eksisterende manuelle thread-ID-konfiguration fungerer fortsat som fallback.
+
+### Tests og acceptkriterier
+
+Tests skal dække:
+
+- Forum-kanalen valideres korrekt.
+- Alle fem sektioner oprettes ved første startup.
+- Restart genbruger eksisterende threads uden dubletter.
+- `ThreadId` og `InitialMessageId` gemmes korrekt.
+- Initialbeskeder sendes og fastgøres.
+- En slettet thread genskabes og mappingen opdateres.
+- Initialbeskeder kan redigeres fra Blazor.
+- `Bot Help / Introduction` kan gendannes til standardtekst.
+- Officer authorization håndhæves på UI og API.
+- Manglende Discord-rettigheder giver en kontrolleret fejl.
+- En fejl i én sektion stopper ikke synkronisering af de øvrige sektioner.
+- Eksisterende notification outbox-flows fortsætter korrekt.
+
+Der skal gennemføres build, tests og manuel smoke-test med tom mapping, restart, manuel sletning af thread og redigering af Bot Help-beskeden.
 
 ## Teststrategi for V2
 

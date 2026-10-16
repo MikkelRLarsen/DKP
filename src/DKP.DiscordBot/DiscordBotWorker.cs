@@ -9,6 +9,7 @@ namespace DKP.DiscordBot;
 public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient api, ILogger<DiscordBotWorker> logger) : IHostedService, IDisposable
 {
     private readonly SemaphoreSlim registrationLock = new(1, 1);
+    private readonly SemaphoreSlim forumSyncLock = new(1, 1);
     private DiscordSocketClient? client;
     private InteractionService? interactions;
     private ServiceProvider? services;
@@ -16,6 +17,9 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
     private ulong? dkpCommandId;
     private CancellationTokenSource? notificationCts;
     private Task? notificationTask;
+    private Task? forumSyncTask;
+    private readonly Dictionary<string, ulong> forumThreads = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ulong> forumMessages = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -41,6 +45,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         await client.StartAsync();
         notificationCts = new CancellationTokenSource();
         notificationTask = NotificationLoopAsync(notificationCts.Token);
+        forumSyncTask = ForumSyncLoopAsync(notificationCts.Token);
         logger.LogInformation("Discord notification delivery enabled. Officer channel: {OfficerChannelId}; member mode: {MemberNotificationMode}; member channel: {MemberChannelId}.", settings.NotificationChannelId, settings.MemberNotificationMode, settings.MemberNotificationChannelId);
         logger.LogInformation("Discord bot startup initiated for guild {GuildId}.", settings.GuildId);
     }
@@ -139,6 +144,177 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
         }
     }
+
+    private async Task ForumSyncLoopAsync(CancellationToken cancellationToken)
+    {
+        if (settings.MemberNotificationMode != "forum" || settings.MemberForumChannelId is null) return;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try { await EnsureForumSectionsAsync(cancellationToken); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
+            catch (Exception exception) { logger.LogWarning(exception, "Discord forum section synchronization failed."); }
+            try { await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
+        }
+    }
+
+    private async Task EnsureForumSectionsAsync(CancellationToken cancellationToken)
+    {
+        await forumSyncLock.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureForumSectionsCoreAsync(cancellationToken);
+        }
+        finally
+        {
+            forumSyncLock.Release();
+        }
+    }
+
+    private async Task EnsureForumSectionsCoreAsync(CancellationToken cancellationToken)
+    {
+        if (client is null || settings.MemberForumChannelId is not ulong forumId) return;
+        var channel = client.GetChannel(forumId) as IForumChannel ?? await client.Rest.GetChannelAsync(forumId) as IForumChannel;
+        if (channel is not IForumChannel forum)
+        {
+            logger.LogWarning("Configured member forum channel {ForumChannelId} is not a Discord forum channel.", forumId);
+            return;
+        }
+
+        var configured = await api.GetForumSectionsAsync(cancellationToken) ?? Array.Empty<BotForumSectionDto>();
+        foreach (var key in new[] { "bulletin-board", "achievements", "dkp-sources", "shop", "bot-help" })
+        {
+            var section = configured.FirstOrDefault(x => x.SectionKey.Equals(key, StringComparison.OrdinalIgnoreCase));
+            IThreadChannel? thread = null;
+            if (section?.ThreadId is ulong savedThreadId)
+            {
+                try { thread = await client.Rest.GetChannelAsync(savedThreadId) as IThreadChannel; }
+                catch (Exception exception) { logger.LogWarning(exception, "Unable to resolve saved forum section {SectionKey}.", key); }
+            }
+
+            ulong messageId;
+            if (thread is null)
+            {
+                thread = await forum.CreatePostAsync(SectionTitle(key), ThreadArchiveDuration.OneWeek,
+                    text: section?.InitialMessageContent ?? DefaultForumContent(key), allowedMentions: AllowedMentions.None);
+                messageId = thread.Id;
+                try
+                {
+                    if (await thread.GetMessageAsync(thread.Id) is IUserMessage starter) { messageId = starter.Id; await starter.PinAsync(); }
+                }
+                catch (Exception exception) { logger.LogWarning(exception, "Forum section {SectionKey} was created but could not be pinned.", key); }
+                await api.RegisterForumSectionAsync(key, forum.Id, thread.Id, messageId, cancellationToken);
+            }
+            else
+            {
+                messageId = section?.InitialMessageId ?? thread.Id;
+                try
+                {
+                    await thread.ModifyAsync(properties => properties.Name = SectionTitle(key));
+                    if (await thread.GetMessageAsync(messageId) is IUserMessage message && section is not null && message.Content != section.InitialMessageContent)
+                        await message.ModifyAsync(properties => properties.Content = section.InitialMessageContent);
+                }
+                catch (Exception exception) { logger.LogWarning(exception, "Unable to synchronize initial message for forum section {SectionKey}.", key); }
+                if (section is null || section.ForumChannelId != forum.Id || section.ThreadId != thread.Id || section.InitialMessageId != messageId)
+                    await api.RegisterForumSectionAsync(key, forum.Id, thread.Id, messageId, cancellationToken);
+            }
+            forumThreads[key] = thread.Id;
+            forumMessages[key] = messageId;
+        }
+    }
+
+    private static string SectionTitle(string key) => key switch
+    {
+        "bulletin-board" => "Bulletin Board",
+        "achievements" => "Achievements",
+        "dkp-sources" => "Repeatable DKP",
+        "shop" => "Shop",
+        _ => "DKP Bot Help"
+    };
+
+    private static string DefaultForumContent(string key) => key switch
+    {
+        "bulletin-board" => """
+            📌 **BULLETIN BOARD**
+
+            This channel contains temporary guild tasks and offers. Each post explains the reward, available quantity and deadline.
+
+            To claim an item, use the button on the post or `/bulletin claim`. Your claim is reviewed by an Officer before the DKP is awarded.
+
+            Website: <https://wowforever.coffeecottage.dk/bulletin>
+
+            **First time here?** Create your account on the website first, or use `/account create`, then create your characters and choose a main character. If you have questions, write in **DKP Bot Help** or contact <@333676904768864268>.
+
+            Suggestions for improvements, new achievements, shop items or repeatable DKP sources are welcome in **DKP Bot Help** or via <@333676904768864268>.
+
+            You can use `/dkp balance` to see your current DKP balance. Slash commands work in all Discord chats where the bot has access.
+            """,
+        "achievements" => """
+            🏆 **ACHIEVEMENTS**
+
+            This channel shows achievements that can be earned for DKP. Read the requirement before requesting one. A request is reviewed by an Officer; it is not granted automatically.
+
+            Use the button on an achievement post or `/achievement request` to submit a request. You can also review your achievements with `/achievements`.
+
+            Website: <https://wowforever.coffeecottage.dk/my-dkp/sources>
+
+            **First time here?** Create your account on the website first, or use `/account create`, then create your characters and choose a main character. If you have questions, write in **DKP Bot Help** or contact <@333676904768864268>.
+
+            Suggestions for improvements, new achievements, shop items or repeatable DKP sources are welcome in **DKP Bot Help** or via <@333676904768864268>.
+
+            You can use `/dkp balance` to see your current DKP balance. Slash commands work in all Discord chats where the bot has access.
+            """,
+        "dkp-sources" => """
+            💰 **REPEATABLE DKP**
+
+            This channel contains repeatable ways to earn DKP, such as approved dungeon or guild activities. Each post shows the amount and any lifetime limit.
+
+            Use the button on a post or `/dkp request` to request DKP. An Officer must approve the request before your balance changes. `/dkp sources` shows your remaining opportunities.
+
+            Website: <https://wowforever.coffeecottage.dk/my-dkp/sources>
+
+            **First time here?** Create your account on the website first, or use `/account create`, then create your characters and choose a main character. If you have questions, write in **DKP Bot Help** or contact <@333676904768864268>.
+
+            Suggestions for improvements, new achievements, shop items or repeatable DKP sources are welcome in **DKP Bot Help** or via <@333676904768864268>.
+
+            You can use `/dkp balance` to see your current DKP balance. Slash commands work in all Discord chats where the bot has access.
+            """,
+        "shop" => """
+            🛒 **DKP SHOP**
+
+            This channel announces available shop items and their prices and purchase limits. Requirements and remaining availability are shown on each post.
+
+            Use the button on an item or `/shop buy` to purchase it. Your personal limits, achievement requirements and DKP balance are checked before the purchase is completed. Use `/purchases` to see your purchases.
+
+            Website: <https://wowforever.coffeecottage.dk/dkp-shop>
+
+            **First time here?** Create your account on the website first, or use `/account create`, then create your characters and choose a main character. If you have questions, write in **DKP Bot Help** or contact <@333676904768864268>.
+
+            Suggestions for improvements, new achievements, shop items or repeatable DKP sources are welcome in **DKP Bot Help** or via <@333676904768864268>.
+
+            You can use `/dkp balance` to see your current DKP balance. Slash commands work in all Discord chats where the bot has access.
+            """,
+        _ => """
+            🤖 **DKP BOT HELP**
+
+            The DKP Bot gives guild members access to common DKP features directly in Discord. You can manage characters, view DKP, request repeatable DKP and achievements, claim Bulletin Board items, buy shop items and view your purchases.
+
+            **Getting started**
+            1. Open <https://wowforever.coffeecottage.dk/> and log in with Discord, or run `/account create`.
+            2. Create your characters with `/characters create`.
+            3. Choose your main with `/characters main`.
+            4. Use `/help` whenever you need an overview of the commands.
+
+            Requests and claims are reviewed by Officers. A request does not change your DKP until it is approved. Shop purchases and limits are checked automatically.
+
+            **Questions and suggestions**
+            Use this DKP Bot Help post for general questions and suggestions, or contact <@333676904768864268> if you need Officer assistance. Suggestions for new achievements, shop items and repeatable DKP sources are especially welcome. Please keep questions about a specific request in the relevant channel.
+
+            Website: <https://wowforever.coffeecottage.dk/>
+
+            You can use `/dkp balance` to see your current DKP balance. Slash commands work in all Discord chats where the bot has access.
+            """
+    };
 
     private string FormatNotification(string notificationType, string payload)
     {
@@ -286,9 +462,9 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                 using var document = JsonDocument.Parse(payload);
                 return GetString(document.RootElement, "Kind")?.Equals("Achievement", StringComparison.OrdinalIgnoreCase) == true
                     ? "Achievements"
-                    : "DKP Sources";
+                    : "Repeatable DKP";
             }
-            catch (JsonException) { return "DKP Sources"; }
+            catch (JsonException) { return "Repeatable DKP"; }
         }
 
         return null;
@@ -297,11 +473,23 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
     private ulong? MemberThreadId(string notificationType, string payload)
     {
         var threadName = ThreadName(notificationType, payload);
+        if (settings.MemberForumChannelId is not null)
+        {
+            var key = threadName switch
+            {
+                "Bulletin Board" => "bulletin-board",
+                "Achievements" => "achievements",
+                "Repeatable DKP" => "dkp-sources",
+                "Shop" => "shop",
+                _ => null
+            };
+            if (key is not null && forumThreads.TryGetValue(key, out var resolvedThreadId)) return resolvedThreadId;
+        }
         return threadName switch
         {
             "Bulletin Board" => settings.BulletinThreadId,
             "Achievements" => settings.AchievementsThreadId,
-            "DKP Sources" => settings.DkpSourcesThreadId,
+            "Repeatable DKP" => settings.DkpSourcesThreadId,
             "Shop" => settings.ShopThreadId,
             _ => null
         };
@@ -431,6 +619,11 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                         dkpCommandId = registered.FirstOrDefault(x => x.Name.Equals("dkp", StringComparison.OrdinalIgnoreCase))?.Id;
                     }
                     logger.LogInformation("Registered Discord commands for guild {GuildId}.", settings.GuildId);
+                    if (settings.MemberNotificationMode == "forum")
+                    {
+                        try { await EnsureForumSectionsAsync(CancellationToken.None); }
+                        catch (Exception exception) { logger.LogWarning(exception, "Initial Discord forum section synchronization failed."); }
+                    }
                     return;
                 }
                 catch (Exception exception)
@@ -478,6 +671,12 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             notificationCts = null;
             notificationTask = null;
         }
+        if (forumSyncTask is not null)
+        {
+            try { await forumSyncTask; }
+            catch (OperationCanceledException) { }
+            forumSyncTask = null;
+        }
         if (client is not null)
         {
             await client.StopAsync();
@@ -490,5 +689,6 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         services?.Dispose();
         client?.Dispose();
         registrationLock.Dispose();
+        forumSyncLock.Dispose();
     }
 }

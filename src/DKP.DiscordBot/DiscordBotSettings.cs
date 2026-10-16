@@ -9,6 +9,7 @@ public sealed record DiscordBotSettings(
     ulong? NotificationChannelId,
     ulong? MemberNotificationChannelId,
     string MemberNotificationMode,
+    ulong? MemberForumChannelId,
     ulong? BulletinThreadId,
     ulong? AchievementsThreadId,
     ulong? DkpSourcesThreadId,
@@ -29,15 +30,17 @@ public sealed record DiscordBotSettings(
         var memberNotificationMode = configuration["DISCORD_MEMBER_NOTIFICATION_MODE"]?.Trim().ToLowerInvariant() ?? "text";
         if (memberNotificationMode is not ("text" or "forum"))
             throw new InvalidOperationException("DISCORD_MEMBER_NOTIFICATION_MODE must be 'text' or 'forum'.");
+        var memberForumChannelId = ParseOptionalSnowflake(configuration, "DISCORD_MEMBER_FORUM_CHANNEL_ID");
 
         var bulletinThreadId = ParseOptionalSnowflake(configuration, "DISCORD_BULLETIN_THREAD_ID");
         var achievementsThreadId = ParseOptionalSnowflake(configuration, "DISCORD_ACHIEVEMENTS_THREAD_ID");
         var dkpSourcesThreadId = ParseOptionalSnowflake(configuration, "DISCORD_DKP_SOURCES_THREAD_ID");
         var shopThreadId = ParseOptionalSnowflake(configuration, "DISCORD_SHOP_THREAD_ID");
-        if (memberNotificationMode == "forum" && (bulletinThreadId is null || achievementsThreadId is null || dkpSourcesThreadId is null || shopThreadId is null))
-            throw new InvalidOperationException("Forum member notifications require DISCORD_BULLETIN_THREAD_ID, DISCORD_ACHIEVEMENTS_THREAD_ID, DISCORD_DKP_SOURCES_THREAD_ID and DISCORD_SHOP_THREAD_ID.");
+        if (memberNotificationMode == "forum" && memberForumChannelId is null &&
+            (bulletinThreadId is null || achievementsThreadId is null || dkpSourcesThreadId is null || shopThreadId is null))
+            throw new InvalidOperationException("Forum member notifications require DISCORD_MEMBER_FORUM_CHANNEL_ID (or the legacy section thread IDs).");
 
-        return new(token, applicationId, guildId, baseUrl, apiSecret, channelId, memberChannelId, memberNotificationMode,
+        return new(token, applicationId, guildId, baseUrl, apiSecret, channelId, memberChannelId, memberNotificationMode, memberForumChannelId,
             bulletinThreadId, achievementsThreadId, dkpSourcesThreadId, shopThreadId);
     }
 
