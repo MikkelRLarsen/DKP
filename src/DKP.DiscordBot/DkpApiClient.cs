@@ -113,6 +113,9 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public Task<BotAccountDto?> CreateAccountAsync(string discordUserId, BotAccountInput input, CancellationToken cancellationToken)
         => SendShopAsync<BotAccountDto>(HttpMethod.Post, "/api/bot/account", discordUserId, input, cancellationToken);
 
+    public Task<BotReviewNotificationPreferenceDto?> ToggleReviewNotificationsAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<BotReviewNotificationPreferenceDto>(HttpMethod.Post, "/api/bot/notifications/preferences/review-toggle", discordUserId, null, cancellationToken);
+
     public Task<IReadOnlyList<BotNotificationDto>?> GetPendingNotificationsAsync(CancellationToken cancellationToken, string? target = null)
         => SendBotAsync<IReadOnlyList<BotNotificationDto>>(HttpMethod.Get, $"/api/bot/notifications/pending?limit=10{(target is null ? string.Empty : $"&target={Uri.EscapeDataString(target)}")}", null, cancellationToken);
 
@@ -281,6 +284,7 @@ public sealed record AchievementRequestInput(Guid AchievementId, string? Comment
 public sealed record MultiAchievementRequestInput(Guid AchievementId, IReadOnlyList<string> TargetDiscordIds, string? Comment);
 public sealed record BotAccountInput(string DiscordName, string? AvatarUrl);
 public sealed record BotAccountDto(Guid Id, string DiscordId, string DiscordName, int Role, bool Created);
+public sealed record BotReviewNotificationPreferenceDto(bool Enabled);
 public sealed record BotNotificationDto(Guid Id, string NotificationType, string Payload, int Attempts, string Action, ulong? DiscordMessageId, string? RecipientDiscordUserId);
 public sealed record BotForumSectionDto(Guid Id, string GuildId, string SectionKey, ulong? ForumChannelId, ulong? ThreadId, ulong? InitialMessageId, string InitialMessageContent, bool IsActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 public sealed record RegisterForumSectionInput(string GuildId, string SectionKey, ulong ForumChannelId, ulong ThreadId, ulong InitialMessageId);

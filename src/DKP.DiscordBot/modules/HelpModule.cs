@@ -29,6 +29,9 @@ public sealed class HelpModule : InteractionModuleBase<SocketInteractionContext>
         `/dkp request` – Request DKP from a source.
         `/dkp requests` – See your DKP requests.
 
+        **Notifications**
+        `/notifications toggle` – Toggle private review notifications on or off.
+
         **Shop, Bulletin Board and Achievements**
         `/shop list` – See available shop items.
         `/shop buy` – Buy an available shop item.

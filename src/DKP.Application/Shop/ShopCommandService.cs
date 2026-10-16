@@ -37,7 +37,7 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
             await catalog.AddItemAsync(item, ct);
             await ReplaceRequirementsAsync(item, input.AchievementIds, ct);
             var inherited = item.PurchaseLimitId is Guid inheritedLimitId ? await purchaseLimits.FindAsync(inheritedLimitId, ct) : null;
-            await outbox.AddAsync(ShopNotificationFactory.CreateCatalog(item, inherited, time.GetUtcNow().UtcDateTime), ct);
+            await outbox.AddAsync(ShopNotificationFactory.CreateCatalog(item, inherited, await AchievementNamesAsync(item, ct), time.GetUtcNow().UtcDateTime), ct);
             return await Dto(item, ct);
         }, ct);
     public Task<ShopItemDto> UpdateItemAsync(Guid itemId, ShopItemInput input, CancellationToken ct = default)
@@ -77,7 +77,19 @@ public sealed class ShopCommandService(CommandContext context, IShopRepository c
     {
         var now = time.GetUtcNow().UtcDateTime;
         var inherited = item.PurchaseLimitId is Guid limitId ? await purchaseLimits.FindAsync(limitId, ct) : null;
-        await outbox.SyncShopItemAsync(item.Id, item.Name, ShopNotificationFactory.CatalogPayload(item, inherited, now), !item.IsActive || item.IsHidden, now, ct);
+        await outbox.SyncShopItemAsync(item.Id, item.Name, ShopNotificationFactory.CatalogPayload(item, inherited, await AchievementNamesAsync(item, ct), now), !item.IsActive || item.IsHidden, now, ct);
+    }
+
+    private async Task<IReadOnlyList<string>> AchievementNamesAsync(ShopItem item, CancellationToken ct)
+    {
+        var ids = await catalog.GetAchievementRequirementIdsAsync(item.Id, ct);
+        var names = new List<string>(ids.Count);
+        foreach (var id in ids)
+        {
+            var achievement = await achievementRepository.FindAsync(id, ct);
+            if (achievement is not null) names.Add(achievement.Name);
+        }
+        return names;
     }
 
     public Task<IReadOnlyList<ShopPurchaseDto>> PurchaseAsync(ShopPurchaseRequest request, CancellationToken ct = default)

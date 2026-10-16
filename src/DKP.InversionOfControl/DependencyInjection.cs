@@ -13,6 +13,7 @@ using DKP.Application.DkpAwardRequests;
 using DKP.Application.LootReserve;
 using DKP.Application.Achievements;
 using DKP.Application.Bulletins;
+using DKP.Application.Notifications;
 
 using DKP.Facade.Commands;
 using DKP.Facade.Queries;
@@ -93,6 +94,8 @@ public static class DependencyInjection
 		services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
 		services.AddScoped<IBotNotificationQueries, BotNotificationQueries>();
 		services.AddScoped<IBotNotificationCommands, BotNotificationCommands>();
+		services.AddScoped<IBotNotificationPreferenceCommands, BotNotificationPreferenceCommandService>();
+		services.AddScoped<IBotNotificationPreferenceCommands, BotNotificationPreferenceCommandService>();
 		services.AddScoped<IDkpTransactionCommands, DkpTransactionCommandService>();
 		services.AddScoped<IUserRoleCommands, UserRoleCommandService>();
 		services.AddScoped<IUserBlockCommands, UserBlockCommandService>();

@@ -27,6 +27,7 @@ public sealed class User
 	public DateTime? BlockedAtUtc { get; private set; }
 	public Guid? BlockedByUserId { get; private set; }
 	public string? BlockReason { get; private set; }
+	public bool ReviewNotificationsEnabled { get; private set; } = true;
 	public ICollection<Character> Characters { get; private set; } = new List<Character>();
 
 	public void UpdateProfile(string discordName, string? avatarUrl, UserRole role)
@@ -39,4 +40,5 @@ public sealed class User
 	public void SetRole(UserRole role) => Role = role;
 	public void Block(Guid blockedByUserId, string? reason, DateTime now) { IsBlocked = true; BlockedByUserId = blockedByUserId; BlockedAtUtc = now; BlockReason = reason; }
 	public void Unblock() { IsBlocked = false; BlockedByUserId = null; BlockedAtUtc = null; BlockReason = null; }
+	public void SetReviewNotificationsEnabled(bool enabled) => ReviewNotificationsEnabled = enabled;
 }

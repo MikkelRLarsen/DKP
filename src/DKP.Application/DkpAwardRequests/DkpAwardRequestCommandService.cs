@@ -82,17 +82,17 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
         if (!approve)
         {
             request.Reject(officer.Id, reviewComment, now);
-            await outbox.AddAsync(RequestNotificationFactory.CreateReview(request, target.DiscordId, target.DiscordName, sourceName, sourceAmount, sourceKind, false, reviewComment, officer.DiscordName, now), ct);
+            await outbox.AddAsync(RequestNotificationFactory.CreateReview(request, target.DiscordId, target.DiscordName, sourceName, sourceAmount, sourceKind, false, null, reviewComment, officer.DiscordName, now), ct);
             await outbox.RequestDeletionAsync(request.Id, now, ct);
             return true;
         }
+        var balanceBefore = await ledger.GetStateAsync(target.Id, ct);
         var operationId = Guid.NewGuid(); var eventIds = new List<Guid>(request.Quantity);
         if (request.PresetId is Guid presetId)
         {
             var preset = await presets.FindAsync(presetId, ct) ?? throw new KeyNotFoundException("Preset not found.");
             if (!preset.IsActive) throw new InvalidOperationException("Preset is inactive.");
-            var state = await ledger.GetStateAsync(target.Id, ct);
-            if (preset.MaxApplicationsPerUser is int maximum && state.PresetUsage.GetValueOrDefault(preset.Id) + request.Quantity > maximum) throw new InvalidOperationException($"{target.DiscordName}: requested quantity exceeds the preset lifetime limit.");
+            if (preset.MaxApplicationsPerUser is int maximum && balanceBefore.PresetUsage.GetValueOrDefault(preset.Id) + request.Quantity > maximum) throw new InvalidOperationException($"{target.DiscordName}: requested quantity exceeds the preset lifetime limit.");
             for (var i = 0; i < request.Quantity; i++) eventIds.Add((await ledger.PostAsync(target.Id, officer.Id, operationId, now, new DkpPosted(preset.Amount, preset.Reason, preset.Id), ct)).Id);
         }
         else if (request.AchievementId is Guid achievementId)
@@ -104,8 +104,9 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
             eventIds.Add(entry.Id); await achievements.AddUserAchievementAsync(new UserAchievement(target.Id, achievement.Id, officer.Id, entry.Id, now), ct);
         }
         else throw new InvalidOperationException("The request has no valid source.");
+        var newBalance = checked(balanceBefore.Balance + (sourceAmount * request.Quantity));
         request.Approve(officer.Id, eventIds, reviewComment, now);
-        await outbox.AddAsync(RequestNotificationFactory.CreateReview(request, target.DiscordId, target.DiscordName, sourceName, sourceAmount, sourceKind, true, reviewComment, officer.DiscordName, now), ct);
+        await outbox.AddAsync(RequestNotificationFactory.CreateReview(request, target.DiscordId, target.DiscordName, sourceName, sourceAmount, sourceKind, true, newBalance, reviewComment, officer.DiscordName, now), ct);
         await outbox.RequestDeletionAsync(request.Id, now, ct);
         return true;
     };

@@ -319,6 +319,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             2. Create your characters with `/characters create`.
             3. Choose your main with `/characters main`.
             4. Use `/help` whenever you need an overview of the commands.
+            5. Use `/notifications toggle` to turn private review notifications on or off.
 
             Requests and claims are reviewed by Officers. A request does not change your DKP until it is approved. Shop purchases and limits are checked automatically.
 
@@ -384,8 +385,12 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                 AddLimit(root, limits, "MaxPerMonth", "Maximum per month");
                 var sharedKey = Safe(GetString(root, "PurchaseLimitKey"));
                 if (!string.IsNullOrWhiteSpace(sharedKey)) limits.Add($"Shared limit group: **{sharedKey}**");
-                var limitText = limits.Count == 0 ? string.Empty : $"\n\n📏 **Limits**\n• {string.Join("\n• ", limits)}";
-                var shopMessage = $"🛒 **NEW DKP SHOP ITEM**\n\n**{name}**\n{description}\n\n💰 Price: **{price} DKP each**{limitText}\n\nUse `/shop buy` or press **Buy shop item** to check your personal availability and purchase it.";
+                var limitText = limits.Count == 0 ? string.Empty : $"\n📏 **Limits**\n• {string.Join("\n• ", limits)}";
+                var requirementText = root.TryGetProperty("AchievementRequirements", out var requirementElement) && requirementElement.ValueKind == JsonValueKind.Array
+                    ? string.Join(", ", requirementElement.EnumerateArray().Select(x => Safe(x.GetString())))
+                    : string.Empty;
+                var requirementLine = string.IsNullOrWhiteSpace(requirementText) ? string.Empty : $"\n🏆 **Achievement requirements**\n• {requirementText}";
+                var shopMessage = $"🛒 **NEW DKP SHOP ITEM**\n**{name}**\n{description}{requirementLine}\n💰 Price: **{price} DKP each**{limitText}\nUse `/shop buy` or press **Buy shop item** to check your personal availability and purchase it.";
                 return shopMessage.Trim();
             }
             if (notificationType == "BulletinClaimCreated")
@@ -591,10 +596,14 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             var source = Safe(GetString(root, "SourceName") ?? GetString(root, "ItemName") ?? "item");
             var amount = root.TryGetProperty("Amount", out var amountElement) ? amountElement.GetInt32() : 0;
             var quantity = root.TryGetProperty("Quantity", out var quantityElement) ? quantityElement.GetInt32() : 1;
+            var newBalance = 0;
+            var hasNewBalance = root.TryGetProperty("NewBalance", out var balanceElement) && balanceElement.ValueKind == JsonValueKind.Number && balanceElement.TryGetInt32(out newBalance);
             var comment = Safe(GetString(root, "ReviewComment"));
             var reviewer = Safe(GetString(root, "ReviewerName") ?? GetString(root, "OfficerName"));
-            var message = $"Your {kind.ToLowerInvariant()} request was **{action}**.\nSource: {source}\nAmount: {amount} DKP\nQuantity: {quantity}";
-            if (!string.IsNullOrWhiteSpace(reviewer)) message += $"\nProcessed by: {reviewer}";
+            var icon = action.Equals("approved", StringComparison.OrdinalIgnoreCase) ? "✅" : "❌";
+            var message = $"{icon} **{kind} request {action}**\nSource: **{source}**\nAmount: **{amount} DKP**\nQuantity: **{quantity}**";
+            if (action.Equals("approved", StringComparison.OrdinalIgnoreCase) && hasNewBalance) message += $"\nNew balance: **{newBalance} DKP**";
+            if (!string.IsNullOrWhiteSpace(reviewer)) message += $"\nProcessed by: **{reviewer}**";
             if (!string.IsNullOrWhiteSpace(comment)) message += $"\nComment: {comment}";
             return message;
         }

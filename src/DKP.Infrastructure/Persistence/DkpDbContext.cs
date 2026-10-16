@@ -40,6 +40,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.Property(x => x.AvatarUrl).HasMaxLength(512);
             e.Property(x => x.Role).HasConversion<string>().HasMaxLength(32);
             e.Property(x => x.BlockReason).HasMaxLength(500);
+            e.Property(x => x.ReviewNotificationsEnabled).HasDefaultValue(true);
             e.HasMany(x => x.Characters).WithOne(x => x.User).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         model.Entity<Character>(e =>

@@ -6,7 +6,7 @@ using DKP.Application.Authentication;
 
 namespace DKP.Application.Shop;
 
-public sealed class ShopPurchaseLimitCommandService(CommandContext context, IShopPurchaseLimitRepository repository, IShopRepository catalog, INotificationOutboxRepository outbox, TimeProvider time) : IShopPurchaseLimitCommands
+public sealed class ShopPurchaseLimitCommandService(CommandContext context, IShopPurchaseLimitRepository repository, IShopRepository catalog, IAchievementRepository achievementRepository, INotificationOutboxRepository outbox, TimeProvider time) : IShopPurchaseLimitCommands
 {
     private static void Validate(ShopPurchaseLimitInput input)
     {
@@ -51,7 +51,21 @@ public sealed class ShopPurchaseLimitCommandService(CommandContext context, ISho
         var limit = await repository.FindAsync(limitId, ct) ?? throw new KeyNotFoundException("Purchase limit not found.");
         foreach (var item in (await catalog.GetItemsAsync(ct)).Where(x => x.PurchaseLimitId == limitId))
         {
-            await outbox.SyncShopItemAsync(item.Id, item.Name, ShopNotificationFactory.CatalogPayload(item, limit, now), !item.IsActive || item.IsHidden, now, ct);
+            await outbox.SyncShopItemAsync(item.Id, item.Name, ShopNotificationFactory.CatalogPayload(item, limit, await AchievementNamesAsync(item, ct), now), !item.IsActive || item.IsHidden, now, ct);
         }
+    }
+
+    private async Task<IReadOnlyList<string>> AchievementNamesAsync(ShopItem item, CancellationToken ct)
+    {
+        var ids = await catalog.GetAchievementRequirementIdsAsync(item.Id, ct);
+        var names = new List<string>(ids.Count);
+        foreach (var id in ids)
+        {
+            var achievement = await achievementRepository.FindAsync(id, ct);
+            if (achievement is not null)
+                names.Add(achievement.Name);
+        }
+
+        return names;
     }
 }
