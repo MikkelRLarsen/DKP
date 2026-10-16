@@ -373,7 +373,7 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("MaxApplicationsPerUser")
+                    b.Property<int?>("MaxApplicationsPerUser")
                         .HasColumnType("integer");
 
                     b.Property<string>("Name")

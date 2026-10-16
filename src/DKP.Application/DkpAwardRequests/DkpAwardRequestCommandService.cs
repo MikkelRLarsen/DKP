@@ -22,7 +22,7 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
             var state = await ledger.GetStateAsync(actor.Id, ct);
             var approved = state.PresetUsage.GetValueOrDefault(preset.Id);
             var pending = await requests.GetPendingQuantityAsync(actor.Id, preset.Id, ct);
-            if (approved + pending + input.Quantity > preset.MaxApplicationsPerUser) throw new InvalidOperationException($"The requested quantity exceeds your remaining lifetime limit. You have {Math.Max(0, preset.MaxApplicationsPerUser - approved - pending)} remaining after pending requests.");
+            if (preset.MaxApplicationsPerUser is int maximum && approved + pending + input.Quantity > maximum) throw new InvalidOperationException($"The requested quantity exceeds your remaining lifetime limit. You have {Math.Max(0, maximum - approved - pending)} remaining after pending requests.");
             var request = new DkpAwardRequest(actor.Id, preset.Id, null, input.Quantity, comment, time.GetUtcNow().UtcDateTime);
             await requests.AddAsync(request, ct);
             await outbox.AddAsync(RequestNotificationFactory.Create(request, actor.DiscordName, preset.Name, preset.Amount, "DKP", request.CreatedAtUtc), ct);
@@ -92,7 +92,7 @@ public sealed class DkpAwardRequestCommandService(CommandContext context, IDkpAw
             var preset = await presets.FindAsync(presetId, ct) ?? throw new KeyNotFoundException("Preset not found.");
             if (!preset.IsActive) throw new InvalidOperationException("Preset is inactive.");
             var state = await ledger.GetStateAsync(target.Id, ct);
-            if (state.PresetUsage.GetValueOrDefault(preset.Id) + request.Quantity > preset.MaxApplicationsPerUser) throw new InvalidOperationException($"{target.DiscordName}: requested quantity exceeds the preset lifetime limit.");
+            if (preset.MaxApplicationsPerUser is int maximum && state.PresetUsage.GetValueOrDefault(preset.Id) + request.Quantity > maximum) throw new InvalidOperationException($"{target.DiscordName}: requested quantity exceeds the preset lifetime limit.");
             for (var i = 0; i < request.Quantity; i++) eventIds.Add((await ledger.PostAsync(target.Id, officer.Id, operationId, now, new DkpPosted(preset.Amount, preset.Reason, preset.Id), ct)).Id);
         }
         else if (request.AchievementId is Guid achievementId)

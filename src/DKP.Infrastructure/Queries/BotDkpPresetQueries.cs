@@ -24,10 +24,10 @@ public sealed class BotDkpPresetQueries(IDbContextFactory<DkpDbContext> factory)
             {
                 var used = state.PresetUsage.GetValueOrDefault(x.Id);
                 var pending = pendingByPreset.GetValueOrDefault(x.Id);
-                var remaining = Math.Max(0, x.MaxApplicationsPerUser - used - pending);
+                int? remaining = x.MaxApplicationsPerUser is int maximum ? Math.Max(0, maximum - used - pending) : null;
                 return new DkpAcquisitionSourceDto(x.Id, x.Name, x.Amount, x.Reason, used + pending, x.MaxApplicationsPerUser, remaining);
             })
-            .Where(x => x.Remaining > 0)
+            .Where(x => x.Remaining is null or > 0)
             .ToArray();
     }
 }

@@ -5,7 +5,8 @@
     <RadzenText Text="@Source.Name" TextStyle="TextStyle.H5" />
     <RadzenText Text="@($"{Source.Amount} DKP")" />
     <RadzenText Text="@Source.Reason" />
-    <RadzenFormField Text="Quantity" Style="width:100%;"><ChildContent><RadzenNumeric @bind-Value="quantity" Min="1" Max="@Source.Remaining" ShowUpDown="false" Style="width:100%;" /></ChildContent></RadzenFormField>
+    <RadzenText Text="@(Source.Remaining is int remaining ? $"Remaining after pending requests: {remaining}" : "No per-user limit")" TextStyle="TextStyle.Caption" />
+    <RadzenFormField Text="Quantity" Style="width:100%;"><ChildContent><RadzenNumeric TValue="int" @bind-Value="quantity" Min="1" Max="@(Source.Remaining ?? 999999)" ShowUpDown="false" Style="width:100%;" /></ChildContent></RadzenFormField>
     <RadzenFormField Text="Comment (optional)" Style="width:100%;">
         <ChildContent>
             <RadzenTextArea @bind-Value="comment" MaxLength="500" Rows="4" Style="width:100%;" Placeholder="Tell an Officer why you are requesting this award..." />
@@ -24,7 +25,7 @@
 
     private void Submit()
     {
-        if (quantity < 1 || quantity > Source.Remaining || (!string.IsNullOrWhiteSpace(comment) && comment.Trim().Length > 500)) return;
+        if (quantity < 1 || (Source.Remaining is int remaining && quantity > remaining) || (!string.IsNullOrWhiteSpace(comment) && comment.Trim().Length > 500)) return;
         DialogService.Close(new DkpAwardRequestDialogResult(quantity, comment?.Trim()));
     }
 

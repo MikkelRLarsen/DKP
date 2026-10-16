@@ -30,8 +30,8 @@ public sealed class BotDkpRequestCommandService(
                 var state = await ledger.GetStateAsync(target.Id, ct);
                 var approved = state.PresetUsage.GetValueOrDefault(preset.Id);
                 var pending = await requests.GetPendingQuantityAsync(target.Id, preset.Id, ct);
-                var remaining = Math.Max(0, preset.MaxApplicationsPerUser - approved - pending);
-                if (quantity > remaining)
+				var remaining = preset.MaxApplicationsPerUser is int maximum ? Math.Max(0, maximum - approved - pending) : int.MaxValue;
+				if (quantity > remaining)
                     throw new InvalidOperationException($"{target.DiscordName} has only {remaining} remaining application(s) after pending requests.");
             }
             var now = time.GetUtcNow().UtcDateTime;

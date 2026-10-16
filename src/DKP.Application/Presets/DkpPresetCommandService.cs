@@ -12,10 +12,10 @@ public sealed class DkpPresetCommandService(CommandContext context, IPresetRepos
     {
         if (string.IsNullOrWhiteSpace(input.Name) || input.Name.Trim().Length > 128 ||
             string.IsNullOrWhiteSpace(input.Reason) || input.Reason.Trim().Length > 500 ||
-            input.Amount <= 0 || input.MaxApplicationsPerUser <= 0)
+			input.Amount <= 0 || input.MaxApplicationsPerUser is <= 0)
             throw new ArgumentException("Name (max 128), reason (max 500), positive amount and lifetime limit are required.");
     }
-    private static DkpAwardPresetDto Dto(DkpAwardPreset p) => new(p.Id, p.Name, p.Amount, p.Reason, p.MaxApplicationsPerUser, p.IsActive);
+	private static DkpAwardPresetDto Dto(DkpAwardPreset p) => new(p.Id, p.Name, p.Amount, p.Reason, p.MaxApplicationsPerUser, p.IsActive);
 
     public Task<DkpAwardPresetDto> CreateAsync(DkpAwardPresetInput input, CancellationToken ct = default)
         => context.ExecuteAsync([], true, async officer =>
@@ -68,7 +68,7 @@ public sealed class DkpPresetCommandService(CommandContext context, IPresetRepos
             {
                 var target = await context.TargetAsync(id, ct);
                 var state = await ledger.GetStateAsync(id, ct);
-                if (state.PresetUsage.GetValueOrDefault(presetId) >= preset.MaxApplicationsPerUser)
+				if (preset.MaxApplicationsPerUser is int maximum && state.PresetUsage.GetValueOrDefault(presetId) >= maximum)
                     throw new InvalidOperationException($"{target.DiscordName}: preset lifetime limit reached.");
             }
             var operationId = Guid.NewGuid();

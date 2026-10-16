@@ -257,7 +257,7 @@ public sealed record BotHealthResponse(string Status, string Service, string Cor
 public sealed record DkpHistoryDto(BalanceDto Balance, IReadOnlyList<DkpTransactionDto> Transactions);
 public sealed record BalanceDto(int Amount);
 public sealed record DkpTransactionDto(Guid Id, int Amount, string Reason, DateTime CreatedAtUtc, string CreatedByDiscordName);
-public sealed record BotDkpSourceDto(Guid PresetId, string Name, int Amount, string Reason, int Applications, int MaxApplications, int Remaining);
+public sealed record BotDkpSourceDto(Guid PresetId, string Name, int Amount, string Reason, int Applications, int? MaxApplications, int? Remaining);
 public sealed record BotDkpRequestInput(Guid PresetId, int Quantity, IReadOnlyList<string>? TargetDiscordIds, string? Comment);
 public sealed record ReviewInput(string? Comment);
 public sealed record CharacterInputDto(string FirstName, string LastName);

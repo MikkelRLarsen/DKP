@@ -181,7 +181,15 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             return;
         }
 
-        var configured = await api.GetForumSectionsAsync(cancellationToken) ?? Array.Empty<BotForumSectionDto>();
+        var configured = await api.GetForumSectionsAsync(cancellationToken);
+        if (configured is null)
+        {
+            // An unavailable API is not the same as an empty database. Creating
+            // posts here would create duplicates on every restart before the API
+            // has finished starting.
+            logger.LogWarning("Forum section mappings could not be loaded from the DKP API; skipping forum post creation until the next synchronization attempt.");
+            return;
+        }
         foreach (var key in new[] { "bulletin-board", "achievements", "dkp-sources", "shop", "bot-help" })
         {
             var section = configured.FirstOrDefault(x => x.SectionKey.Equals(key, StringComparison.OrdinalIgnoreCase));
@@ -190,6 +198,11 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             {
                 try { thread = await client.Rest.GetChannelAsync(savedThreadId) as IThreadChannel; }
                 catch (Exception exception) { logger.LogWarning(exception, "Unable to resolve saved forum section {SectionKey}.", key); }
+            }
+            else if (section is null && forumThreads.TryGetValue(key, out var processThreadId))
+            {
+                try { thread = await client.Rest.GetChannelAsync(processThreadId) as IThreadChannel; }
+                catch (Exception exception) { logger.LogWarning(exception, "Unable to resolve the forum section {SectionKey} created earlier in this process.", key); }
             }
 
             ulong messageId;
@@ -203,7 +216,9 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                     if (await thread.GetMessageAsync(thread.Id) is IUserMessage starter) { messageId = starter.Id; await starter.PinAsync(); }
                 }
                 catch (Exception exception) { logger.LogWarning(exception, "Forum section {SectionKey} was created but could not be pinned.", key); }
-                await api.RegisterForumSectionAsync(key, forum.Id, thread.Id, messageId, cancellationToken);
+                var registered = await api.RegisterForumSectionAsync(key, forum.Id, thread.Id, messageId, cancellationToken);
+                if (registered is null)
+                    logger.LogWarning("Forum section {SectionKey} was created, but its mapping could not be saved. The bot will retry synchronization without creating another post while this process remains running.", key);
             }
             else
             {
