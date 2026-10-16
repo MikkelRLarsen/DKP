@@ -113,8 +113,18 @@ public sealed class DkpApiClient(HttpClient httpClient, DiscordBotSettings setti
     public Task<BotAccountDto?> CreateAccountAsync(string discordUserId, BotAccountInput input, CancellationToken cancellationToken)
         => SendShopAsync<BotAccountDto>(HttpMethod.Post, "/api/bot/account", discordUserId, input, cancellationToken);
 
+    public Task<BotReviewNotificationPreferenceDto?> ToggleReviewNotificationsAsync(string discordUserId, CancellationToken cancellationToken)
+        => SendShopAsync<BotReviewNotificationPreferenceDto>(HttpMethod.Post, "/api/bot/notifications/preferences/review-toggle", discordUserId, null, cancellationToken);
+
     public Task<IReadOnlyList<BotNotificationDto>?> GetPendingNotificationsAsync(CancellationToken cancellationToken, string? target = null)
         => SendBotAsync<IReadOnlyList<BotNotificationDto>>(HttpMethod.Get, $"/api/bot/notifications/pending?limit=10{(target is null ? string.Empty : $"&target={Uri.EscapeDataString(target)}")}", null, cancellationToken);
+
+    public Task<IReadOnlyList<BotForumSectionDto>?> GetForumSectionsAsync(CancellationToken cancellationToken)
+        => SendBotAsync<IReadOnlyList<BotForumSectionDto>>(HttpMethod.Get, "/api/bot/forum-sections", null, cancellationToken);
+
+    public Task<BotForumSectionDto?> RegisterForumSectionAsync(string sectionKey, ulong forumChannelId, ulong threadId, ulong initialMessageId, CancellationToken cancellationToken)
+        => SendBotAsync<BotForumSectionDto>(HttpMethod.Post, "/api/bot/forum-sections/register",
+            new RegisterForumSectionInput(settings.GuildId.ToString(), sectionKey, forumChannelId, threadId, initialMessageId), cancellationToken);
 
     public async Task<bool> MarkNotificationSentAsync(Guid id, ulong messageId, CancellationToken cancellationToken)
         => await SendBotAsync<object>(HttpMethod.Post, $"/api/bot/notifications/{id:D}/sent", new NotificationSentInput(messageId), cancellationToken) is not null;
@@ -250,7 +260,7 @@ public sealed record BotHealthResponse(string Status, string Service, string Cor
 public sealed record DkpHistoryDto(BalanceDto Balance, IReadOnlyList<DkpTransactionDto> Transactions);
 public sealed record BalanceDto(int Amount);
 public sealed record DkpTransactionDto(Guid Id, int Amount, string Reason, DateTime CreatedAtUtc, string CreatedByDiscordName);
-public sealed record BotDkpSourceDto(Guid PresetId, string Name, int Amount, string Reason, int Applications, int MaxApplications, int Remaining);
+public sealed record BotDkpSourceDto(Guid PresetId, string Name, int Amount, string Reason, int Applications, int? MaxApplications, int? Remaining);
 public sealed record BotDkpRequestInput(Guid PresetId, int Quantity, IReadOnlyList<string>? TargetDiscordIds, string? Comment);
 public sealed record ReviewInput(string? Comment);
 public sealed record CharacterInputDto(string FirstName, string LastName);
@@ -274,7 +284,10 @@ public sealed record AchievementRequestInput(Guid AchievementId, string? Comment
 public sealed record MultiAchievementRequestInput(Guid AchievementId, IReadOnlyList<string> TargetDiscordIds, string? Comment);
 public sealed record BotAccountInput(string DiscordName, string? AvatarUrl);
 public sealed record BotAccountDto(Guid Id, string DiscordId, string DiscordName, int Role, bool Created);
+public sealed record BotReviewNotificationPreferenceDto(bool Enabled);
 public sealed record BotNotificationDto(Guid Id, string NotificationType, string Payload, int Attempts, string Action, ulong? DiscordMessageId, string? RecipientDiscordUserId);
+public sealed record BotForumSectionDto(Guid Id, string GuildId, string SectionKey, ulong? ForumChannelId, ulong? ThreadId, ulong? InitialMessageId, string InitialMessageContent, bool IsActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record RegisterForumSectionInput(string GuildId, string SectionKey, ulong ForumChannelId, ulong ThreadId, ulong InitialMessageId);
 public sealed record NotificationFailureInput(string? Error);
 public sealed record NotificationSentInput(ulong MessageId);
 public sealed record BotAchievementOverviewDto(IReadOnlyList<BotAchievementDefinitionDto> Definitions, IReadOnlyList<BotUserAchievementDto> UserAchievements, IReadOnlyList<BotAwardRequestDto> Requests);

@@ -18,6 +18,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<BulletinItem> BulletinItems => Set<BulletinItem>();
     public DbSet<BulletinClaim> BulletinClaims => Set<BulletinClaim>();
     public DbSet<BulletinTemplate> BulletinTemplates => Set<BulletinTemplate>();
+    public DbSet<DiscordForumSection> DiscordForumSections => Set<DiscordForumSection>();
 
     private void GuardEvents()
     {
@@ -39,6 +40,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.Property(x => x.AvatarUrl).HasMaxLength(512);
             e.Property(x => x.Role).HasConversion<string>().HasMaxLength(32);
             e.Property(x => x.BlockReason).HasMaxLength(500);
+            e.Property(x => x.ReviewNotificationsEnabled).HasDefaultValue(true);
             e.HasMany(x => x.Characters).WithOne(x => x.User).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         model.Entity<Character>(e =>
@@ -152,6 +154,14 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.Property(x => x.Title).HasMaxLength(128);
             e.Property(x => x.Description).HasMaxLength(2000);
             e.Property(x => x.DefaultDeadlineOffset).HasConversion<long?>();
+        });
+        model.Entity<DiscordForumSection>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.GuildId, x.SectionKey }).IsUnique();
+            e.Property(x => x.GuildId).HasMaxLength(32).IsRequired();
+            e.Property(x => x.SectionKey).HasMaxLength(64).IsRequired();
+            e.Property(x => x.InitialMessageContent).HasMaxLength(4000).IsRequired();
         });
         model.Entity<DkpEvent>(e =>
         {

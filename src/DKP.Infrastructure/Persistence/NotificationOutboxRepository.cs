@@ -12,6 +12,18 @@ public sealed class NotificationOutboxRepository(CommandUnitOfWork session) : IN
         return Task.CompletedTask;
     }
 
+    public async Task SuppressPendingReviewNotificationsAsync(string recipientDiscordId, DateTime nowUtc, CancellationToken ct = default)
+    {
+        var notifications = await session.Db.DiscordNotificationOutbox
+            .Where(x => x.NotificationType == "DkpAwardRequestReviewed" &&
+                        x.RecipientDiscordUserId == recipientDiscordId &&
+                        x.SentAtUtc == null &&
+                        x.DeleteRequestedAtUtc == null)
+            .ToArrayAsync(ct);
+        foreach (var notification in notifications)
+            notification.RequestDeletion(nowUtc);
+    }
+
     public async Task RequestDeletionAsync(Guid requestId, DateTime nowUtc, CancellationToken ct = default, string notificationType = "DkpAwardRequestCreated")
     {
         var notification = await session.Db.DiscordNotificationOutbox

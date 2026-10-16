@@ -52,7 +52,7 @@ else
                         <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Property="MaxApplications" Title="Maximum" />
                         <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Property="Remaining" Title="Remaining">
                             <Template Context="source">
-                                <RadzenBadge Text="@source.Remaining.ToString()" BadgeStyle="BadgeStyle.Info" />
+                                <RadzenBadge Text="@(source.Remaining?.ToString() ?? "Unlimited")" BadgeStyle="BadgeStyle.Info" />
                             </Template>
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn TItem="DkpAcquisitionSourceDto" Title="Request" Sortable="false" Filterable="false">

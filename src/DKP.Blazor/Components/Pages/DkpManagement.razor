@@ -59,8 +59,8 @@
                 @foreach (var entry in presetUsages)
                 {
                     <RadzenAlert @key="entry.UserId" AlertStyle="@(entry.Usage.IsAvailable ? AlertStyle.Info : AlertStyle.Warning)">
-                        @entry.PlayerName: @entry.Usage.Applications / @entry.Usage.MaxApplications preset uses.
-                        @(entry.Usage.IsAvailable ? $"{entry.Usage.Remaining} remaining." : "The lifetime limit has been reached.")
+                        @entry.PlayerName: @entry.Usage.Applications / @(entry.Usage.MaxApplications?.ToString() ?? "unlimited") preset uses.
+                        @(entry.Usage.IsAvailable ? (entry.Usage.Remaining is int remaining ? $"{remaining} remaining." : "Unlimited remaining.") : "The lifetime limit has been reached.")
                     </RadzenAlert>
                 }
                 <RadzenFormField Text="Amount" Style="width: 100%;">

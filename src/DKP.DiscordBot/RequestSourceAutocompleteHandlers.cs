@@ -20,7 +20,7 @@ public sealed class DkpPresetAutocompleteHandler : AutocompleteHandler
         var suggestions = sources
             .Where(x => string.IsNullOrWhiteSpace(input) || x.Name.Contains(input, StringComparison.OrdinalIgnoreCase) || x.Reason.Contains(input, StringComparison.OrdinalIgnoreCase))
             .Take(25)
-            .Select(x => new AutocompleteResult(Shorten($"{x.Name} (+{x.Amount} DKP, {x.Remaining} left)"), x.PresetId.ToString("D")))
+            .Select(x => new AutocompleteResult(Shorten($"{x.Name} (+{x.Amount} DKP, {(x.Remaining?.ToString() ?? "unlimited")} left)"), x.PresetId.ToString("D")))
             .ToArray();
         return AutocompletionResult.FromSuccess(suggestions);
     }

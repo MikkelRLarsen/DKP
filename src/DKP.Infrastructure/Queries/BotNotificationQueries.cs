@@ -15,6 +15,7 @@ public sealed class BotNotificationQueries(IDbContextFactory<Persistence.DkpDbCo
         var until = now.AddMinutes(2);
         var rows = await db.DiscordNotificationOutbox.Where(x => x.NextAttemptAtUtc <= now && (x.ClaimedUntilUtc == null || x.ClaimedUntilUtc < now) &&
                 (target == "dm" ? x.RecipientDiscordUserId != null : target == "channel" ? x.RecipientDiscordUserId == null : true) &&
+                (x.NotificationType != "DkpAwardRequestReviewed" || x.RecipientDiscordUserId == null || db.Users.Any(user => user.DiscordId == x.RecipientDiscordUserId && user.ReviewNotificationsEnabled)) &&
                 ((x.SentAtUtc == null && x.DeleteRequestedAtUtc == null) || (x.SentAtUtc != null && x.DeleteRequestedAtUtc != null && x.DeletedAtUtc == null && x.DiscordMessageId != null)))
             .OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id).Take(limit).ToArrayAsync(ct);
         foreach (var row in rows) row.Claim(now, until);

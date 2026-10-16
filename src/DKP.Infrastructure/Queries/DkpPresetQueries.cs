@@ -11,7 +11,8 @@ public sealed class DkpPresetQueries(QuerySession session) : IDkpPresetQueries
         if (!await db.Users.AnyAsync(u => u.Id == targetUserId, ct)) throw new KeyNotFoundException("Player not found.");
         var state = await ReadModels.StateAsync(db, targetUserId, ct);
         var count = state.PresetUsage.GetValueOrDefault(presetId);
-        return new DkpPresetUsageDto(presetId, count, preset.MaxApplicationsPerUser, Math.Max(0, preset.MaxApplicationsPerUser - count));
+        int? remaining = preset.MaxApplicationsPerUser is int maximum ? Math.Max(0, maximum - count) : null;
+        return new DkpPresetUsageDto(presetId, count, preset.MaxApplicationsPerUser, remaining);
     }, ct);
     public Task<IReadOnlyList<DkpAcquisitionSourceDto>> GetAvailableSourcesAsync(CancellationToken ct = default) => session.ReadAsync<IReadOnlyList<DkpAcquisitionSourceDto>>(false, async (db, actor) =>
     {
@@ -26,8 +27,8 @@ public sealed class DkpPresetQueries(QuerySession session) : IDkpPresetQueries
         {
             var approved = state.PresetUsage.GetValueOrDefault(p.Id);
             var pending = pendingByPreset.GetValueOrDefault(p.Id);
-            var remaining = Math.Max(0, p.MaxApplicationsPerUser - approved - pending);
+            int? remaining = p.MaxApplicationsPerUser is int maximum ? Math.Max(0, maximum - approved - pending) : null;
             return new DkpAcquisitionSourceDto(p.Id, p.Name, p.Amount, p.Reason, approved + pending, p.MaxApplicationsPerUser, remaining);
-        }).Where(x => x.Remaining > 0).ToArray();
+        }).Where(x => x.Remaining is null or > 0).ToArray();
     }, ct);
 }

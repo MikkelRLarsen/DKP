@@ -40,7 +40,7 @@ public sealed class DkpModule(DkpApiClient api) : InteractionModuleBase<SocketIn
         if (sources is null) { await ModifyOriginalResponseAsync(p => p.Content = "Your DKP sources could not be loaded."); return; }
         if (sources.Count == 0) { await ModifyOriginalResponseAsync(p => p.Content = "You have no remaining DKP sources."); return; }
         var output = new StringBuilder("**Available DKP sources**\n");
-        foreach (var source in sources) output.AppendLine($"`{source.Name}` — **+{source.Amount} DKP**, {source.Remaining} remaining — {source.Reason}");
+        foreach (var source in sources) output.AppendLine($"`{source.Name}` — **+{source.Amount} DKP**, {(source.Remaining?.ToString() ?? "unlimited")} remaining — {source.Reason}");
         output.AppendLine("\nUse `/dkp request` and select a preset from the dropdown.");
         await ModifyOriginalResponseAsync(p => p.Content = output.ToString());
     }
@@ -170,22 +170,27 @@ public sealed class DkpModule(DkpApiClient api) : InteractionModuleBase<SocketIn
         {
             var sources = await api.GetDkpSourcesAsync(Context.User.Id.ToString(), CancellationToken.None);
             var source = sources?.SingleOrDefault(x => x.PresetId == id);
-            if (source is null || source.Remaining <= 0)
+            // The quantity menu is only a convenience UI. The final request is
+            // validated atomically by the API, so a transient availability read
+            // must not prevent the user from opening the menu.
+            var sourceName = source?.Name ?? "this DKP source";
+            var maximum = source?.MaxApplications is null
+                ? 10
+                : Math.Min(source.Remaining ?? 0, 25);
+            if (maximum <= 0)
             {
-                await RespondAsync("This DKP source has no remaining applications.", ephemeral: true);
+                await RespondAsync("This DKP source is currently unavailable. Please try again.", ephemeral: true);
                 return;
             }
-
-            var maximum = Math.Min(source.Remaining, 25);
             var menu = new SelectMenuBuilder()
                 .WithCustomId($"source:dkp-quantity:{id:D}")
                 .WithPlaceholder("Select quantity")
                 .WithMinValues(1)
                 .WithMaxValues(1);
             for (var quantity = 1; quantity <= maximum; quantity++)
-                menu.AddOption(quantity.ToString(), quantity.ToString(), $"Request {quantity} × {source.Name}");
+                menu.AddOption(quantity.ToString(), quantity.ToString(), $"Request {quantity} × {sourceName}");
 
-            await RespondAsync($"Select how many applications to request for **{source.Name}** (up to {source.Remaining}).", components: new ComponentBuilder().WithSelectMenu(menu).Build(), ephemeral: true);
+            await RespondAsync($"Select how many applications to request for **{sourceName}** (up to {(source?.Remaining?.ToString() ?? "unlimited")}).", components: new ComponentBuilder().WithSelectMenu(menu).Build(), ephemeral: true);
         }
         catch (Exception)
         {
@@ -207,18 +212,10 @@ public sealed class DkpModule(DkpApiClient api) : InteractionModuleBase<SocketIn
         await DeferAsync(ephemeral: true);
         try
         {
-            var sources = await api.GetDkpSourcesAsync(Context.User.Id.ToString(), CancellationToken.None);
-            var source = sources?.SingleOrDefault(x => x.PresetId == id);
-            if (source is null || quantity > source.Remaining)
-            {
-                await ModifyOriginalResponseAsync(p => p.Content = "The selected quantity is no longer available. Please open the source again.");
-                return;
-            }
-
             var result = await api.RequestDkpAsync(Context.User.Id.ToString(), id, quantity, [], null, CancellationToken.None);
             await ModifyOriginalResponseAsync(p => p.Content = result is null
-                ? "The DKP request could not be created. Please try again."
-                : $"Created **{quantity}** pending DKP request(s) for **{source.Name}**. An Officer must approve them.");
+                ? "The selected quantity is no longer available, or the DKP source could not be loaded. Please open the source again."
+                : $"Created **{quantity}** pending DKP request(s). An Officer must approve them.");
         }
         catch (Exception)
         {
