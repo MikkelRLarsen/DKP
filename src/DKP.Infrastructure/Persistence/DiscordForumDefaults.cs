@@ -1,0 +1,13 @@
+namespace DKP.Infrastructure.Persistence;
+
+internal static class DiscordForumDefaults
+{
+    public static string Content(string key) => key switch
+    {
+        "bulletin-board" => "📌 **BULLETIN BOARD**\n\nTemporary guild tasks and offers are posted here. Read the reward, quantity and deadline before claiming. Use the button on a post or `/bulletin claim`.\n\nWebsite: <https://wowforever.coffeecottage.dk/bulletin>\n\nFirst time? Create your account with `/account create`, then create a character and choose a main character. Questions and suggestions belong in **DKP Bot Help** or with <@333676904768864268>. Use `/dkp balance` to see your balance.",
+        "achievements" => "🏆 **ACHIEVEMENTS**\n\nAvailable achievements and their DKP rewards are posted here. Use the button or `/achievement request`; an Officer reviews requests.\n\nWebsite: <https://wowforever.coffeecottage.dk/my-dkp/sources>\n\nFirst time? Create your account with `/account create`, then create a character and choose a main character. Questions and suggestions belong in **DKP Bot Help** or with <@333676904768864268>. Use `/dkp balance` to see your balance.",
+        "dkp-sources" => "💰 **REPEATABLE DKP**\n\nRepeatable ways to earn DKP are posted here. Use the button or `/dkp request`; an Officer reviews requests before DKP is awarded.\n\nWebsite: <https://wowforever.coffeecottage.dk/my-dkp/sources>\n\nFirst time? Create your account with `/account create`, then create a character and choose a main character. Questions and suggestions belong in **DKP Bot Help** or with <@333676904768864268>. Use `/dkp balance` to see your balance.",
+        "shop" => "🛒 **DKP SHOP**\n\nNew shop items, prices, requirements and limits are posted here. Use the button or `/shop buy` to purchase an item. Use `/purchases` to review your purchases.\n\nWebsite: <https://wowforever.coffeecottage.dk/dkp-shop>\n\nFirst time? Create your account with `/account create`, then create a character and choose a main character. Questions and suggestions belong in **DKP Bot Help** or with <@333676904768864268>. Use `/dkp balance` to see your balance.",
+        _ => "🤖 **DKP BOT HELP**\n\nUse this bot to manage characters, view DKP, request DKP and achievements, claim bulletin items, buy shop items and view purchases. Start with `/account create`, then use `/characters create` and `/characters main`. Use `/dkp balance` for your current balance.\n\nQuestions and suggestions about achievements, shop items or repeatable DKP belong here or with <@333676904768864268>. Slash commands work in all chats where the bot has access. Website: <https://wowforever.coffeecottage.dk/>"
+    };
+}

@@ -9,7 +9,6 @@ namespace DKP.DiscordBot;
 public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient api, ILogger<DiscordBotWorker> logger) : IHostedService, IDisposable
 {
     private readonly SemaphoreSlim registrationLock = new(1, 1);
-    private readonly SemaphoreSlim forumSyncLock = new(1, 1);
     private DiscordSocketClient? client;
     private InteractionService? interactions;
     private ServiceProvider? services;
@@ -17,7 +16,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
     private ulong? dkpCommandId;
     private CancellationTokenSource? notificationCts;
     private Task? notificationTask;
-    private Task? forumSyncTask;
+    private Task? forumProvisionTask;
     private readonly Dictionary<string, ulong> forumThreads = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ulong> forumMessages = new(StringComparer.OrdinalIgnoreCase);
 
@@ -45,7 +44,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         await client.StartAsync();
         notificationCts = new CancellationTokenSource();
         notificationTask = NotificationLoopAsync(notificationCts.Token);
-        forumSyncTask = ForumSyncLoopAsync(notificationCts.Token);
+        forumProvisionTask = ForumProvisionLoopAsync(notificationCts.Token);
         logger.LogInformation("Discord notification delivery enabled. Officer channel: {OfficerChannelId}; member mode: {MemberNotificationMode}; member channel: {MemberChannelId}.", settings.NotificationChannelId, settings.MemberNotificationMode, settings.MemberNotificationChannelId);
         logger.LogInformation("Discord bot startup initiated for guild {GuildId}.", settings.GuildId);
     }
@@ -145,19 +144,86 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         }
     }
 
-    private async Task ForumSyncLoopAsync(CancellationToken cancellationToken)
+    private async Task ForumProvisionLoopAsync(CancellationToken cancellationToken)
     {
-        if (settings.MemberNotificationMode != "forum" || settings.MemberForumChannelId is null) return;
+        if (settings.MemberNotificationMode != "forum") return;
+        await ValidateForumSectionsAsync(cancellationToken);
         while (!cancellationToken.IsCancellationRequested)
         {
-            try { await EnsureForumSectionsAsync(cancellationToken); }
+            try { await ProcessForumProvisionRequestsAsync(cancellationToken); }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
-            catch (Exception exception) { logger.LogWarning(exception, "Discord forum section synchronization failed."); }
-            try { await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken); }
+            catch (Exception exception) { logger.LogWarning(exception, "Discord forum provisioning polling failed."); }
+            try { await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken); }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
         }
     }
 
+    private async Task ValidateForumSectionsAsync(CancellationToken cancellationToken)
+    {
+        if (client is null || settings.MemberForumChannelId is not ulong) return;
+        var configured = await api.GetForumSectionsAsync(cancellationToken);
+        if (configured is null) { logger.LogWarning("Forum mappings could not be loaded at startup; no threads will be created automatically."); return; }
+        foreach (var section in configured)
+        {
+            if (section.ThreadId is not ulong threadId) { logger.LogWarning("Forum section {SectionKey} has no saved thread mapping.", section.SectionKey); continue; }
+            try
+            {
+                if (await client.Rest.GetChannelAsync(threadId) is IThreadChannel thread)
+                {
+                    forumThreads[section.SectionKey] = thread.Id;
+                    forumMessages[section.SectionKey] = section.InitialMessageId ?? thread.Id;
+                }
+                else logger.LogWarning("Saved forum thread {ThreadId} for {SectionKey} is unavailable.", threadId, section.SectionKey);
+            }
+            catch (Exception exception) { logger.LogWarning(exception, "Unable to validate saved forum thread {ThreadId} for {SectionKey}; no replacement will be created automatically.", threadId, section.SectionKey); }
+        }
+    }
+
+    private async Task ProcessForumProvisionRequestsAsync(CancellationToken cancellationToken)
+    {
+        if (client is null || settings.MemberForumChannelId is not ulong forumId) return;
+        var requests = await api.GetPendingForumProvisionRequestsAsync(cancellationToken);
+        if (requests is null) return;
+        var forum = client.GetChannel(forumId) as IForumChannel ?? await client.Rest.GetChannelAsync(forumId) as IForumChannel;
+        if (forum is null) { logger.LogWarning("Configured member forum channel {ForumChannelId} is unavailable or is not a forum.", forumId); return; }
+        var configured = await api.GetForumSectionsAsync(cancellationToken);
+        foreach (var request in requests)
+        {
+            try
+            {
+                var section = configured?.FirstOrDefault(x => x.SectionKey.Equals(request.SectionKey, StringComparison.OrdinalIgnoreCase));
+                IThreadChannel? oldThreadToArchive = null;
+                if (section?.ThreadId is ulong oldThreadId)
+                {
+                    try { oldThreadToArchive = await client.Rest.GetChannelAsync(oldThreadId) as IThreadChannel; }
+                    catch (Exception exception) { logger.LogWarning(exception, "Could not archive old forum thread {ThreadId} for {SectionKey}; continuing with manual replacement.", oldThreadId, request.SectionKey); }
+                }
+                var thread = await forum.CreatePostAsync(SectionTitle(request.SectionKey), ThreadArchiveDuration.OneWeek, text: section?.InitialMessageContent ?? DefaultForumContent(request.SectionKey), allowedMentions: AllowedMentions.None);
+                var messageId = thread.Id;
+                if (await thread.GetMessageAsync(thread.Id) is IUserMessage starter)
+                {
+                    messageId = starter.Id;
+                    await starter.PinAsync();
+                }
+                if (oldThreadToArchive is not null)
+                {
+                    try { await oldThreadToArchive.ModifyAsync(p => { p.Archived = true; p.Locked = true; }); }
+                    catch (Exception exception) { logger.LogWarning(exception, "Could not archive old forum thread after creating replacement."); }
+                }
+                await api.CompleteForumProvisionAsync(request.Id, forum.Id, thread.Id, messageId, cancellationToken);
+                forumThreads[request.SectionKey] = thread.Id; forumMessages[request.SectionKey] = messageId;
+                logger.LogInformation("Provisioned Discord forum section {SectionKey} with thread {ThreadId}.", request.SectionKey, thread.Id);
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Manual provisioning failed for forum section {SectionKey}.", request.SectionKey);
+                try { await api.FailForumProvisionAsync(request.Id, exception.Message, cancellationToken); } catch (Exception failure) { logger.LogWarning(failure, "Could not save failed forum provisioning request {RequestId}.", request.Id); }
+            }
+        }
+    }
+
+    // Retained only as a historical reference; manual provisioning is the only active flow.
+#if LEGACY_FORUM_RECONCILIATION
     private async Task EnsureForumSectionsAsync(CancellationToken cancellationToken)
     {
         await forumSyncLock.WaitAsync(cancellationToken);
@@ -237,6 +303,8 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             forumMessages[key] = messageId;
         }
     }
+
+    #endif
 
     private static string SectionTitle(string key) => key switch
     {
@@ -645,8 +713,6 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
                     logger.LogInformation("Registered Discord commands for guild {GuildId}.", settings.GuildId);
                     if (settings.MemberNotificationMode == "forum")
                     {
-                        try { await EnsureForumSectionsAsync(CancellationToken.None); }
-                        catch (Exception exception) { logger.LogWarning(exception, "Initial Discord forum section synchronization failed."); }
                     }
                     return;
                 }
@@ -695,11 +761,11 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             notificationCts = null;
             notificationTask = null;
         }
-        if (forumSyncTask is not null)
+        if (forumProvisionTask is not null)
         {
-            try { await forumSyncTask; }
+            try { await forumProvisionTask; }
             catch (OperationCanceledException) { }
-            forumSyncTask = null;
+            forumProvisionTask = null;
         }
         if (client is not null)
         {
@@ -713,6 +779,5 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         services?.Dispose();
         client?.Dispose();
         registrationLock.Dispose();
-        forumSyncLock.Dispose();
     }
 }

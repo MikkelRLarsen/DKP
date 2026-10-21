@@ -341,3 +341,15 @@ Hver slice skal som minimum have:
 - `ImplementationSlices.V1.md` er historisk roadmap og papirspor.
 - Denne fil er V2-roadmapen og starter fra Slice 1.
 - V2-slices genbruger eksisterende baseline-funktionalitet og skal ikke genimplementere V1-features.
+
+## Slice 10a – Manuel Discord Forum-provisioning
+
+Status: Implementeret.
+
+Den tidligere periodiske forum-synkronisering er erstattet af manuel provisioning. Botten validerer kun gemte mappings ved opstart og opretter ikke længere nye threads automatisk ved restart, manglende mapping eller Discord-fejl.
+
+Officer-siden `/admin/discord-forum` viser altid Bulletin Board, Achievements, Repeatable DKP, Shop og DKP Bot Help. Her kan initialbeskeder redigeres, Thread ID/Message ID ses, og en Officer kan oprette en ny thread efter confirmation. Anmodningen gemmes i `DiscordForumProvisionRequests`, hvorefter botten poller queue’en, opretter og pinner den nye besked, forsøger at arkivere/låse den gamle thread og gemmer den nye mapping.
+
+Der er tilføjet API-kontrakter til pending, completed og failed provisioning requests samt EF-migrationen `ManualDiscordForumProvisioning`. Dobbeltklik beskyttes af én aktiv pending/processing request pr. guild og section. Hvis Discord ikke kan læse den gamle thread, fortsætter den manuelle oprettelse med en warning; hvis selve oprettelsen fejler, bevares den gamle mapping.
+
+Den gamle automatisk genskabelse ved periodisk sync er bevaret i historikken ovenfor som erstattet V2-løsning og må ikke bruges som aktuel adfærd.

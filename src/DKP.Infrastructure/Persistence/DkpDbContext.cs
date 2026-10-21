@@ -19,6 +19,7 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
     public DbSet<BulletinClaim> BulletinClaims => Set<BulletinClaim>();
     public DbSet<BulletinTemplate> BulletinTemplates => Set<BulletinTemplate>();
     public DbSet<DiscordForumSection> DiscordForumSections => Set<DiscordForumSection>();
+    public DbSet<DiscordForumProvisionRequest> DiscordForumProvisionRequests => Set<DiscordForumProvisionRequest>();
 
     private void GuardEvents()
     {
@@ -162,6 +163,17 @@ public sealed class DkpDbContext(DbContextOptions<DkpDbContext> options) : DbCon
             e.Property(x => x.GuildId).HasMaxLength(32).IsRequired();
             e.Property(x => x.SectionKey).HasMaxLength(64).IsRequired();
             e.Property(x => x.InitialMessageContent).HasMaxLength(4000).IsRequired();
+        });
+        model.Entity<DiscordForumProvisionRequest>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.GuildId).HasMaxLength(32).IsRequired();
+            e.Property(x => x.SectionKey).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.ErrorMessage).HasMaxLength(1000);
+            e.HasIndex(x => new { x.GuildId, x.SectionKey })
+                .IsUnique()
+                .HasFilter("\"Status\" IN ('Pending', 'Processing')");
         });
         model.Entity<DkpEvent>(e =>
         {
