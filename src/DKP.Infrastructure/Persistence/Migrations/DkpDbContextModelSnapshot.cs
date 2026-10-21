@@ -299,6 +299,24 @@ namespace DKP.Infrastructure.Persistence.Migrations
                     b.ToTable("DiscordForumSections");
                 });
 
+            modelBuilder.Entity("DKP.Domain.DiscordForumProvisionRequest", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<string>("GuildId").IsRequired().HasMaxLength(32).HasColumnType("character varying(32)");
+                    b.Property<string>("SectionKey").IsRequired().HasMaxLength(64).HasColumnType("character varying(64)");
+                    b.Property<string>("Status").IsRequired().HasMaxLength(32).HasColumnType("character varying(32)");
+                    b.Property<DateTime>("RequestedAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<DateTime?>("ProcessedAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<decimal?>("NewThreadId").HasColumnType("numeric(20,0)");
+                    b.Property<decimal?>("NewMessageId").HasColumnType("numeric(20,0)");
+                    b.Property<string>("ErrorMessage").HasMaxLength(1000).HasColumnType("character varying(1000)");
+                    b.HasKey("Id");
+                    b.HasIndex("GuildId", "SectionKey")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN ('Pending', 'Processing')");
+                    b.ToTable("DiscordForumProvisionRequests");
+                });
+
             modelBuilder.Entity("DKP.Domain.DiscordNotificationOutbox", b =>
                 {
                     b.Property<Guid>("Id")

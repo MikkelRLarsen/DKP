@@ -5,15 +5,14 @@
 @using DKP.Facade.Queries
 @inject IDiscordForumSectionQueries Queries
 @inject IDiscordForumSectionCommands Commands
+@inject IDiscordForumProvisionCommands ProvisionCommands
+@inject IDiscordForumProvisionQueries ProvisionQueries
+@inject DialogService DialogService
 @inject NotificationService NotificationService
 
 <PageTitle>Discord Forum</PageTitle>
 <RadzenStack Gap="1rem">
-    <div><h1>Discord Forum sections</h1><RadzenText Text="Edit the pinned introduction message for each automatically managed forum post." /></div>
-    @if (sections.Count == 0)
-    {
-        <RadzenAlert AlertStyle="AlertStyle.Info">The bot has not registered the forum sections yet. Start the Discord bot and reload this page.</RadzenAlert>
-    }
+    <div><h1>Discord Forum sections</h1><RadzenText Text="Edit messages and manually provision replacement threads. The bot never creates forum threads automatically." /></div>
     @foreach (var section in sections)
     {
         <RadzenCard>
@@ -25,6 +24,7 @@
                 <RadzenTextArea @bind-Value="drafts[section.SectionKey]" Rows="5" MaxLength="4000" Style="width:100%;" />
                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                     <RadzenButton Text="Save initial message" Icon="save" Click="@(() => SaveAsync(section))" Disabled="@busy" />
+                    <RadzenButton Text="Create new thread" Icon="add_comment" ButtonStyle="ButtonStyle.Warning" Click="@(() => ProvisionAsync(section))" Disabled="@busy" />
                     <RadzenButton Text="Reload" Icon="refresh" ButtonStyle="ButtonStyle.Light" Click="ReloadAsync" Disabled="@busy" />
                 </RadzenStack>
                 <RadzenText Text="@SectionInfo(section)" TextStyle="TextStyle.Caption" />
@@ -36,6 +36,7 @@
 @code {
     private IReadOnlyList<DiscordForumSectionDto> sections = [];
     private readonly Dictionary<string, string> drafts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DiscordForumProvisionDto?> provisionStatus = new(StringComparer.OrdinalIgnoreCase);
     private bool busy;
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
@@ -44,7 +45,12 @@
     {
         sections = await Queries.GetAllAsync();
         drafts.Clear();
-        foreach (var section in sections) drafts[section.SectionKey] = section.InitialMessageContent;
+        provisionStatus.Clear();
+        foreach (var section in sections)
+        {
+            drafts[section.SectionKey] = section.InitialMessageContent;
+            provisionStatus[section.SectionKey] = await ProvisionQueries.GetLatestAsync(section.GuildId, section.SectionKey);
+        }
     }
 
     private async Task SaveAsync(DiscordForumSectionDto section)
@@ -71,6 +77,30 @@
         _ => key
     };
 
-    private static string Status(DiscordForumSectionDto section) => section.ThreadId is null ? "Not created" : "Registered";
-    private static string SectionInfo(DiscordForumSectionDto section) => $"Thread: {section.ThreadId?.ToString() ?? "Not created"} | Message: {section.InitialMessageId?.ToString() ?? "Not registered"}";
+    private string Status(DiscordForumSectionDto section)
+    {
+        var request = provisionStatus.GetValueOrDefault(section.SectionKey);
+        return request?.Status switch
+        {
+            DiscordForumProvisionStatus.Pending => "Pending",
+            DiscordForumProvisionStatus.Processing => "Processing",
+            DiscordForumProvisionStatus.Failed => "Failed",
+            _ => section.ThreadId is null ? "Missing" : "Active"
+        };
+    }
+    private static string SectionInfo(DiscordForumSectionDto section) => $"Thread: {section.ThreadId?.ToString() ?? "Not created"} | Message: {section.InitialMessageId?.ToString() ?? "Not registered"} | Updated: {(section.UpdatedAtUtc == DateTime.MinValue ? "Never" : section.UpdatedAtUtc.ToString("u"))}";
+
+    private async Task ProvisionAsync(DiscordForumSectionDto section)
+    {
+        if (busy || await DialogService.Confirm($"Create a new {SectionTitle(section.SectionKey)} thread and archive the current one if it exists?", "Confirm thread replacement") != true) return;
+        busy = true;
+        try
+        {
+            await ProvisionCommands.RequestAsync(section.SectionKey);
+            await ReloadAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Provision requested", "The bot will create the new thread shortly.");
+        }
+        catch (Exception exception) { NotificationService.Notify(NotificationSeverity.Error, "Unable to request thread", exception.Message); }
+        finally { busy = false; }
+    }
 }

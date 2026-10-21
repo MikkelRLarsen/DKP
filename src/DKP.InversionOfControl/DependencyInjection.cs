@@ -129,6 +129,8 @@ public static class DependencyInjection
 		services.AddScoped<IBotBulletinCommands, BotBulletinCommandService>();
 		services.AddScoped<IDiscordForumSectionQueries, DiscordForumSectionQueries>();
 		services.AddScoped<IDiscordForumSectionCommands, DiscordForumSectionCommands>();
+		services.AddScoped<IDiscordForumProvisionQueries, DiscordForumProvisionQueries>();
+		services.AddScoped<IDiscordForumProvisionCommands, DiscordForumProvisionCommands>();
 		services.AddHostedService<BulletinExpirationWorker>();
 
 		services.AddAuthorization(options => options.AddPolicy("OfficerOnly", policy => policy.RequireRole("Officer")));
