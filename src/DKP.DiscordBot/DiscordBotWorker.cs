@@ -508,7 +508,7 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
         var isMemberNotification = notificationType is "DkpSourceCreated" or "BulletinItem" or "ShopItem";
         if (isMemberNotification && settings.MemberNotificationMode == "forum")
         {
-            var threadId = MemberThreadId(notificationType, payload);
+            var threadId = await ResolveMemberThreadIdAsync(notificationType, payload, CancellationToken.None);
             if (threadId is not ulong configuredThreadId || client is null) return null;
             if (client.GetChannel(configuredThreadId) is IMessageChannel cachedChannel) return cachedChannel;
             try
@@ -581,6 +581,42 @@ public sealed class DiscordBotWorker(DiscordBotSettings settings, DkpApiClient a
             "Shop" => settings.ShopThreadId,
             _ => null
         };
+    }
+
+    private async Task<ulong?> ResolveMemberThreadIdAsync(string notificationType, string payload, CancellationToken cancellationToken)
+    {
+        var cached = MemberThreadId(notificationType, payload);
+        if (cached is not null || settings.MemberForumChannelId is null) return cached;
+
+        var threadName = ThreadName(notificationType, payload);
+        var key = threadName switch
+        {
+            "Bulletin Board" => "bulletin-board",
+            "Achievements" => "achievements",
+            "Repeatable DKP" => "dkp-sources",
+            "Shop" => "shop",
+            _ => null
+        };
+        if (key is null) return null;
+
+        try
+        {
+            var sections = await api.GetForumSectionsAsync(cancellationToken);
+            var section = sections?.FirstOrDefault(x => x.SectionKey.Equals(key, StringComparison.OrdinalIgnoreCase));
+            if (section?.ThreadId is not ulong threadId) return null;
+            if (client?.GetChannel(threadId) is IMessageChannel) { forumThreads[key] = threadId; return threadId; }
+            if (client is not null && await client.Rest.GetChannelAsync(threadId) is IMessageChannel)
+            {
+                forumThreads[key] = threadId;
+                forumMessages[key] = section.InitialMessageId ?? threadId;
+                return threadId;
+            }
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Unable to lazy-load Discord forum mapping for {SectionKey}.", key);
+        }
+        return null;
     }
 
     private static MessageComponent? BuildBulletinComponents(string payload)
